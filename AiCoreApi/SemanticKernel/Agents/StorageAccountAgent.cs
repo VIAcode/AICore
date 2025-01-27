@@ -67,8 +67,8 @@ namespace AiCoreApi.SemanticKernel.Agents
             switch (action)
             {
                 case ("LIST"):
-                {
-                    result = await List(blobServiceClient, containerName);
+                {                 
+                    result = await List(blobServiceClient, containerName, fileName);
                     break;
                 }
                 case ("ADD"):
@@ -101,15 +101,16 @@ namespace AiCoreApi.SemanticKernel.Agents
             return result;
         }
 
-        private async Task<string> List(BlobServiceClient blobServiceClient, string containerName)
+        private async Task<string> List(BlobServiceClient blobServiceClient, string containerName, string prefix = null)
         {
             var containerClient = blobServiceClient.GetBlobContainerClient(containerName);
-            var blobs = containerClient.GetBlobs();
+            var blobs = containerClient.GetBlobs(prefix: prefix);
             var result = blobs.Select(selector: blob => new BlobFile
             {
                 Name = blob.Name,
                 Size = blob.Properties.ContentLength
             }).ToList();
+
             return result.ToJson();
         }
 
