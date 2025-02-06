@@ -40,16 +40,18 @@ namespace AiCoreApi.Models.DbModels
         AzureServiceBus = 19,
         RabbitMq = 20,
         AzureOpenAiLlmCarousel = 21,
+        DeepSeekLlm = 22,
     }
 
     public static class ConnectionTypeExtensions
     {
-        public static bool IsLlmConnection(this ConnectionType connectionType) => 
+        public static bool IsLlmConnection(this ConnectionType connectionType) =>
             connectionType == ConnectionType.AzureOpenAiLlm ||
             connectionType == ConnectionType.OpenAiLlm ||
-            connectionType == ConnectionType.CohereLlm;
-        public static bool IsEmbeddingConnection(this ConnectionType connectionType) => 
-            connectionType == ConnectionType.AzureOpenAiEmbedding || 
+            connectionType == ConnectionType.CohereLlm ||
+            connectionType == ConnectionType.DeepSeekLlm;
+        public static bool IsEmbeddingConnection(this ConnectionType connectionType) =>
+            connectionType == ConnectionType.AzureOpenAiEmbedding ||
             connectionType == ConnectionType.OpenAiEmbedding;
     }
 }

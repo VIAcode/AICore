@@ -33,5 +33,6 @@
         AzureServiceBus = 19,
         RabbitMq = 20,
         AzureOpenAiLlmCarousel = 21,
+        DeepSeekLlm = 22,
     }
 }

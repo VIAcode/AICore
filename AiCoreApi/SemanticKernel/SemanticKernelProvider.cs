@@ -5,7 +5,7 @@ using Microsoft.SemanticKernel;
 
 namespace AiCoreApi.SemanticKernel
 {
-    public class SemanticKernelProvider: ISemanticKernelProvider
+    public class SemanticKernelProvider : ISemanticKernelProvider
     {
         private readonly RequestAccessor _requestAccessor;
         private readonly IConnectionProcessor _connectionProcessor;
@@ -56,6 +56,14 @@ namespace AiCoreApi.SemanticKernel
                     connectionModel.Content["azureOpenAiLlmConnections"],
                     httpClient: httpClient);
             }
+            else if (connectionModel.Type == ConnectionType.DeepSeekLlm)
+            {
+                kernelBuilder = kernelBuilder.AddDeepSeekChatCompletion(
+                    connectionModel.Content["modelName"],
+                    connectionModel.Content["apiKey"],
+                    connectionModel.Content["temperature"],
+                    httpClient: httpClient);
+            }
             return kernelBuilder.Build();
         }
 
@@ -65,13 +73,13 @@ namespace AiCoreApi.SemanticKernel
             var connections = await _connectionProcessor.List();
             var llmConnection = connections.FirstOrDefault(conn =>
                 conn.Type.IsLlmConnection() &&
-                _requestAccessor.DefaultConnectionNames.Contains(conn.Name)) 
+                _requestAccessor.DefaultConnectionNames.Contains(conn.Name))
                     ?? connections.FirstOrDefault(conn => conn.Type.IsLlmConnection());
             if (llmConnection == null)
                 throw new Exception("No any LLM connection found");
 
             return GetKernel(llmConnection);
-            
+
         }
     }
 

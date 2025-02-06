@@ -44,6 +44,7 @@ namespace AiCoreApi.Common
 
             var connection = connections.FirstOrDefault(conn => conn.Type == connectionType.Value &&
                 (conn.Type == ConnectionType.AzureOpenAiLlm && conn.Content["deploymentName"].ToLower() == modelDeploymentName) ||
+                (conn.Type == ConnectionType.DeepSeekLlm && conn.Content["modelName"].ToLower() == modelDeploymentName) ||
                 (conn.Type == ConnectionType.OpenAiLlm && conn.Content["modelName"].ToLower() == modelDeploymentName));
             connection = await ApplyAzureOpenAiLlmCarousel(request, connections, connection, modelDeploymentName);
             if (connection == null)
@@ -122,6 +123,8 @@ namespace AiCoreApi.Common
                 return ConnectionType.OpenAiLlm;
             if (request.Method == HttpMethod.Post && request.RequestUri.AbsoluteUri.Contains("openai.azure.com/openai/deployments"))
                 return ConnectionType.AzureOpenAiLlm;
+            if (request.Method == HttpMethod.Post && request.RequestUri.AbsoluteUri.Contains("api.deepseek.com"))
+                return ConnectionType.DeepSeekLlm;
             return null;
         }
 
@@ -136,7 +139,8 @@ namespace AiCoreApi.Common
                 if (azureOpenAiMatch.Success)
                     return azureOpenAiMatch.Groups[1].Value;
             }
-            if (connectionType == ConnectionType.OpenAiLlm)
+            if (connectionType == ConnectionType.OpenAiLlm || 
+                connectionType == ConnectionType.DeepSeekLlm)
             {
                 var requestText = await request.Content?.ReadAsStringAsync(cancellationToken)!;
                 return requestText.JsonGet<string>("model") ?? string.Empty;
