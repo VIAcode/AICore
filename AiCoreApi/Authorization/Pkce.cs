@@ -1,4 +1,4 @@
-﻿using System.Security.Cryptography;
+using System.Security.Cryptography;
 using Microsoft.IdentityModel.Tokens;
 
 namespace AiCoreApi.Authorization;
@@ -20,20 +20,12 @@ public class Pkce
             size = 128;
         const string unreservedCharacters =
             "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~";
-        var random = new Random();
-        var highEntropyCryptograph = new char[size];
-        for (var i = 0; i < highEntropyCryptograph.Length; i++)
-        {
-            highEntropyCryptograph[i] = unreservedCharacters[random.Next(unreservedCharacters.Length)];
-        }
-
-        return new string(highEntropyCryptograph);
+        return RandomNumberGenerator.GetString(unreservedCharacters, (int) size);
     }
 
     public static string GenerateCodeChallenge(string codeVerifier)
     {
-        using var sha256 = SHA256.Create();
-        var challengeBytes = sha256.ComputeHash(System.Text.Encoding.UTF8.GetBytes(codeVerifier));
+        var challengeBytes = SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(codeVerifier));
         return Base64UrlEncoder.Encode(challengeBytes);
     }
 }
