@@ -7,6 +7,7 @@ namespace AiCoreApi.Models.ViewModels
 {
     public class MessageDialogViewModel
     {
+        public string ConversationId { get; set; }
         public List<Message>? Messages { get; set; }
         public class Message
         {

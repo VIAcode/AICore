@@ -7,10 +7,10 @@ services:
       - ASPNETCORE_URLS=http://+:80
       - AUTOCOMPACTLARGEOBJECTHEAP=true  
       - DBSERVER=host.docker.internal
-      - DBPORT=<database-port>
-      - DBNAME=<database-name>
-      - DBUSER=<database-username>
-      - DBPASSWORD=<database-password>
+      - DBPORT=5439
+      - DBNAME=aicoredb
+      - DBUSER=aicoredbuser@viacode.com
+      - DBPASSWORD=default
       - DBTIMEOUT=30000
       - DBPGPOOLSIZE=30
       - DBCONNECTIONTIMEOUT=300
@@ -30,7 +30,7 @@ services:
       - MAXTOKENSPERUSERPERDAYOTHER=100000
       - AUTHISSUER=ViacodeAiCore
       - AUTHAUDIENCE=ViacodeAiClient
-      - AUTHSECURITYKEY=<auth_security_key>
+      - AUTHSECURITYKEY=F9CD77D5-8D9F-414B-9AD9-6C23D36CCE9D-F9CD77D5-8D9F-414B-9AD9-6C23D36CCE9D
       - CLIENTID=<client_id>
       - CLIENTSECRET=<client_secret>
       - APPURL=http://localhost:7878/api/v1
@@ -62,9 +62,9 @@ services:
     image: postgres:16.1
     restart: always
     environment:
-      - POSTGRES_PASSWORD=<database-user-password>
-      - POSTGRES_USER=<database-username>
-      - POSTGRES_DB=<database-name>
+      - POSTGRES_PASSWORD=default
+      - POSTGRES_USER=aicoredbuser@viacode.com
+      - POSTGRES_DB=aicoredb
       - PGDATA=/data/postgres
     command:
       - -c
