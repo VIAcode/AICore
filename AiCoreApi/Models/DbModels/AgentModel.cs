@@ -63,5 +63,6 @@ namespace AiCoreApi.Models.DbModels
         AudioPromptAgent = 30,
         OcrClassifyDocument = 31,
         WebCrawler = 32,
+        OcrBuildClassifierAgent = 33
     }
 }
