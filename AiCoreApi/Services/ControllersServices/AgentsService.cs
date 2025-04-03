@@ -8,30 +8,37 @@ using AiCoreApi.Common.Extensions;
 using static AiCoreApi.SemanticKernel.Agents.CompositeAgent;
 using Microsoft.Extensions.Caching.Distributed;
 using AiCoreApi.Common;
+using LibGit2Sharp;
 
 namespace AiCoreApi.Services.ControllersServices;
 
 public class AgentsService : IAgentsService
 {
     private readonly IMapper _mapper;
+    private readonly ExtendedConfig _extendedConfig;
     private readonly IAgentsProcessor _agentsProcessor;
     private readonly IDistributedCache _distributedCache;
     private readonly ILoginProcessor _loginProcessor;
     private readonly RequestAccessor _requestAccessor;
 
     public AgentsService(
+        ExtendedConfig extendedConfig,
         IAgentsProcessor agentsProcessor, 
         IMapper mapper,
         IDistributedCache distributedCache,
         ILoginProcessor loginProcessor,
         RequestAccessor requestAccessor)
     {
+        _extendedConfig = extendedConfig;
         _agentsProcessor = agentsProcessor;
         _mapper = mapper;
         _distributedCache = distributedCache;
         _loginProcessor = loginProcessor;
         _requestAccessor = requestAccessor;
     }
+
+    private static readonly SemaphoreSlim GitRepoLock = new(1, 1);
+    private string GetRepoPath() => Path.Combine(Path.GetTempPath(), $"git-cache-{_extendedConfig.GitStoragePath.GetHashCode()}");
 
     public async Task<AgentViewModel> AddAgent(AgentViewModel agentViewModel)
     {
@@ -41,6 +48,7 @@ public class AgentsService : IAgentsService
         var agentModel = _mapper.Map<AgentModel>(agentViewModel);
         var savedModel = await _agentsProcessor.Add(agentModel);
         var result = _mapper.Map<AgentViewModel>(savedModel);
+        await SaveGit();
         return result;
     }
 
@@ -52,6 +60,7 @@ public class AgentsService : IAgentsService
         var agentModel = _mapper.Map<AgentModel>(agentViewModel);
         var savedModel = await _agentsProcessor.Update(agentModel);
         var result = _mapper.Map<AgentViewModel>(savedModel);
+        await SaveGit();
         return result;
     }
 
@@ -65,6 +74,7 @@ public class AgentsService : IAgentsService
     public async Task DeleteAgent(int agentId)
     {
         await _agentsProcessor.Delete(agentId);
+        await SaveGit();
     }
 
     public async Task<List<ParameterModel>?> GetParameters(int agentId)
@@ -93,6 +103,7 @@ public class AgentsService : IAgentsService
         }
         agent.IsEnabled = isEnabled;
         await _agentsProcessor.Update(agent);
+        await SaveGit();
     }
 
     public async Task<bool> IsAgentEnabled(string agentName)
@@ -107,52 +118,63 @@ public class AgentsService : IAgentsService
 
     public async Task<byte[]> ExportAgents(List<int> agentIdsList)
     {
-        var agents = await _agentsProcessor.List();
-        // Add Agents to export list if they are not composite
-        var agentsToExport = agents.Where(agent => 
-                agentIdsList.Contains(agent.AgentId) 
-                && agent.Type != Models.DbModels.AgentType.Composite
-            ).ToList();
-
-        // Handle Composite Agents
-        var compositeAgents = agents.Where(agent => 
-                agentIdsList.Contains(agent.AgentId) 
-                && agent.Type == Models.DbModels.AgentType.Composite
-            ).ToList();
-        await HandleCompositeAgents(agentsToExport, agents, compositeAgents);
-
-        var agentsToExportResult = _mapper.Map<List<AgentExportModel>>(agentsToExport);
+        var fileMap = await PrepareAgentExportFiles(agentIdsList);
         using (var zipStream = new MemoryStream())
         {
             using (var archive = new ZipArchive(zipStream, ZipArchiveMode.Create, true))
             {
-                foreach (var agent in agentsToExportResult)
+                foreach (var kvp in fileMap)
                 {
-                    foreach (var content in agent.Content)
-                    {
-                        if(string.IsNullOrEmpty(content.Value.Extension)) 
-                            continue;
-                        var fileName = $"{agent.Name}-{content.Value.Code}.{content.Value.Extension}";
-                        var contentEntry = archive.CreateEntry(fileName);
-                        using (var entryStream = contentEntry.Open())
-                        using (var streamWriter = new StreamWriter(entryStream))
-                        {
-                            await streamWriter.WriteAsync(content.Value.Value);
-                        }
-                        content.Value.Value = fileName;
-                    }
-                    var entry = archive.CreateEntry($"{agent.Name}.json");
+                    var entry = archive.CreateEntry(kvp.Key);
                     using (var entryStream = entry.Open())
-                    using (var streamWriter = new StreamWriter(entryStream))
                     {
-                        await streamWriter.WriteAsync(agent.ToJson(true));
+                        using (var writer = new StreamWriter(entryStream))
+                        {
+                            await writer.WriteAsync(kvp.Value);
+                        }
                     }
                 }
             }
-            var zipBytes = zipStream.ToArray();
-            return zipBytes;
+            return zipStream.ToArray();
         }
     }
+
+    private async Task<Dictionary<string, string>> PrepareAgentExportFiles(List<int> agentIdsList)
+    {
+        var agents = await _agentsProcessor.List();
+
+        var agentsToExport = agents
+            .Where(agent => agentIdsList.Contains(agent.AgentId) && agent.Type != Models.DbModels.AgentType.Composite)
+            .ToList();
+
+        var compositeAgents = agents
+            .Where(agent => agentIdsList.Contains(agent.AgentId) && agent.Type == Models.DbModels.AgentType.Composite)
+            .ToList();
+
+        await HandleCompositeAgents(agentsToExport, agents, compositeAgents);
+
+        var agentsToExportResult = _mapper.Map<List<AgentExportModel>>(agentsToExport);
+        var fileMap = new Dictionary<string, string>();
+
+        foreach (var agent in agentsToExportResult)
+        {
+            foreach (var content in agent.Content)
+            {
+                if (string.IsNullOrEmpty(content.Value.Extension))
+                    continue;
+
+                var fileName = $"{agent.Name}-{content.Value.Code}.{content.Value.Extension}";
+                fileMap[fileName] = content.Value.Value;
+                content.Value.Value = fileName; // Replace value with file name
+            }
+
+            var jsonName = $"{agent.Name}.json";
+            fileMap[jsonName] = agent.ToJson(true);
+        }
+
+        return fileMap;
+    }
+
 
     private async Task HandleCompositeAgents(List<AgentModel> agentsToExport, List<AgentModel> allAgents, List<AgentModel> compositeAgents)
     {
@@ -312,6 +334,7 @@ public class AgentsService : IAgentsService
                 lastLoopWasNonEmpty = true;
             }
         }
+        await SaveGit();
     }
 
     private async Task ImportAgentConfirmed(AgentExportModel agentExportModel)
@@ -328,6 +351,137 @@ public class AgentsService : IAgentsService
             await _agentsProcessor.Update(agentModel);
         }
     }
+
+    private async Task<string> EnsureClonedGitRepo()
+    {
+        var repoPath = GetRepoPath();
+        await GitRepoLock.WaitAsync();
+        try
+        {
+            if (!Repository.IsValid(repoPath))
+            {
+                if (Directory.Exists(repoPath))
+                    Directory.Delete(repoPath, true); 
+
+                var co = new CloneOptions
+                {
+                    FetchOptions = {
+                        CredentialsProvider = (_, _, _) =>
+                            new UsernamePasswordCredentials
+                            {
+                                Username = _extendedConfig.GitStorageUsername,
+                                Password = _extendedConfig.GitStoragePassword
+                            }
+                    }
+                };
+                Repository.Clone(_extendedConfig.GitStorageUrl, repoPath, co);
+            }
+            else
+            {
+                using var repo = new Repository(repoPath);
+                var remote = repo.Network.Remotes["origin"];
+                var refSpecs = remote.FetchRefSpecs.Select(x => x.Specification);
+                Commands.Fetch(repo, remote.Name, refSpecs, new FetchOptions
+                {
+                    CredentialsProvider = (_, _, _) =>
+                        new UsernamePasswordCredentials
+                        {
+                            Username = _extendedConfig.GitStorageUsername,
+                            Password = _extendedConfig.GitStoragePassword
+                        }
+                }, null);
+            }
+        }
+        finally
+        {
+            GitRepoLock.Release();
+        }
+
+        return repoPath;
+    }
+
+    private async Task SaveGit()
+    {
+        if (!_extendedConfig.UseGitStorage)
+            return;
+        var repoPath = await EnsureClonedGitRepo();
+        var fileMap = await PrepareAgentExportFiles((await _agentsProcessor.List()).Select(a => a.AgentId).ToList());
+        foreach (var kvp in fileMap)
+        {
+            var fullPath = Path.Combine(repoPath, _extendedConfig.GitStoragePath.Trim('/'), kvp.Key);
+            Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
+            await File.WriteAllTextAsync(fullPath, kvp.Value);
+        }
+        using (var repo = new Repository(repoPath))
+        {
+            Commands.Stage(repo, "*");
+            var author = new Signature(_requestAccessor.Login, _requestAccessor.Login, DateTimeOffset.Now);
+            repo.Commit($"Changes from {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss} by {_requestAccessor.Login}", author, author);
+
+            repo.Network.Push(repo.Head, new PushOptions
+            {
+                CredentialsProvider = (_, _, _) => new UsernamePasswordCredentials
+                {
+                    Username = _extendedConfig.GitStorageUsername,
+                    Password = _extendedConfig.GitStoragePassword
+                }
+            });
+        }
+    }
+
+    public async Task<List<string>> GetHistory(int agentId)
+    {
+        var agent = await _agentsProcessor.GetById(agentId);
+        if (agent == null || !_extendedConfig.UseGitStorage)
+            return new();
+
+        var repoPath = await EnsureClonedGitRepo();
+        var content = agent.Content.First();
+        var fileName = $"{agent.Name}-{content.Value.Code}.{content.Value.Extension}";
+        var relativePath = Path.Combine(_extendedConfig.GitStoragePath.Trim('/'), fileName).Replace("\\", "/");
+
+        var history = new List<string>();
+        using (var repo = new Repository(repoPath))
+        {
+            var commits = repo.Commits.QueryBy(new CommitFilter
+            {
+                SortBy = CommitSortStrategies.Time,
+                FirstParentOnly = true
+            });
+            foreach (var commit in commits)
+            {
+                if (commit[relativePath] != null)
+                    history.Add(commit.MessageShort);
+            }
+            return history;
+        }
+    }
+
+    public async Task<string> GetHistoryCode(int agentId, string gitTitle)
+    {
+        var agent = await _agentsProcessor.GetById(agentId);
+        if (agent == null || !_extendedConfig.UseGitStorage)
+            return string.Empty;
+
+        var repoPath = await EnsureClonedGitRepo();
+        var content = agent.Content.First();
+        var fileName = $"{agent.Name}-{content.Value.Code}.{content.Value.Extension}";
+        var relativePath = Path.Combine(_extendedConfig.GitStoragePath.Trim('/'), fileName).Replace("\\", "/");
+
+        using (var repo = new Repository(repoPath))
+        {
+            var commit = repo.Commits
+                .QueryBy(new CommitFilter { SortBy = CommitSortStrategies.Time, FirstParentOnly = true })
+                .FirstOrDefault(c => c.MessageShort == gitTitle);
+
+            if (commit?[relativePath]?.Target is not Blob blob)
+                return string.Empty;
+
+            using (var stream = blob.GetContentStream())
+            using (var reader = new StreamReader(stream))
+                return await reader.ReadToEndAsync();
+        }
+    }
 }
 
 public interface IAgentsService
@@ -342,4 +496,6 @@ public interface IAgentsService
     Task<byte[]> ExportAgents(List<int> agentIdsList);
     Task<ImportAgentsResultModel> ImportAgents(IFormFile file, Dictionary<Models.ViewModels.AgentType, int> agentVersions);
     Task ConfirmImportAgents(string confirmationId);
+    Task<List<string>> GetHistory(int agentId);
+    Task<string> GetHistoryCode(int agentId, string gitTitle);
 }

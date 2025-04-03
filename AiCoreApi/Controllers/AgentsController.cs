@@ -143,4 +143,25 @@ public class AgentsController : ControllerBase
         await _agentsService.ConfirmImportAgents(confirmationId);
         return Ok();
     }
+
+
+    [HttpGet]
+    [Route("{agentId}/history")]
+    [AdminAuthorize]
+    public async Task<IActionResult> GetHistory(int agentId)
+    {
+        var agentHistory = await _agentsService.GetHistory(agentId);
+        return Ok(agentHistory);
+    }
+
+
+    [HttpGet]
+    [Route("{agentId}/history/{title}")]
+    [AdminAuthorize]
+    public async Task<IActionResult> GetHistory(int agentId, string title)
+    {
+        var agentCode = await _agentsService.GetHistoryCode(agentId, title);
+        return Ok(agentCode);
+    }
+
 }

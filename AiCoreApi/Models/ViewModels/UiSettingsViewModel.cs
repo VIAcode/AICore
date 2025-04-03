@@ -21,6 +21,7 @@
         public bool CollapseFilesSection { get; set; } = false;
         public bool AutoRenderImages { get; set; } = false;
         public bool UseKeyVaultAppRegistration { get; set; } = false;
+        public bool UseGitStorage { get; set; } = false;
         public Dictionary<string, bool> FeatureFlags { get; set; } = new ();
     }
 }

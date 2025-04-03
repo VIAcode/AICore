@@ -397,6 +397,36 @@ public class ExtendedConfig
     [Description("Use Key Vault App Registration")]
     [Tooltip("Specifies if the system should use the Key Vault App Registration. When enabled, the system uses the Key Vault App Registration for authentication.")]
     public bool UseKeyVaultAppRegistration => GetValue<bool>("UseKeyVaultAppRegistration", false);
+
+    [Category(CategoryAttribute.ConfigCategoryEnum.GitStorage)]
+    [DataType(DataTypeAttribute.ConfigDataTypeEnum.String)]
+    [Description("Git Storage Url")]
+    [Tooltip("The Git Storage Url is used to specify the URL of the Git Storage. Git Storage is used to store Agents History. This URL is used to connect to the Git Storage. (i.e. https://viacode@dev.azure.com/viacode/ProjectName/_git/RepositoryName)")] 
+    public string GitStorageUrl => GetValue<string>("GitStorageUrl", "");
+
+    [Category(CategoryAttribute.ConfigCategoryEnum.GitStorage)]
+    [DataType(DataTypeAttribute.ConfigDataTypeEnum.String)]
+    [Description("Git Storage Path")]
+    [Tooltip("The Git Storage Path is used to specify the path of the Git Storage. Git Storage is used to store Agents History.")]
+    public string GitStoragePath => GetValue<string>("GitStoragePath", "/");
+
+    [Category(CategoryAttribute.ConfigCategoryEnum.GitStorage)]
+    [DataType(DataTypeAttribute.ConfigDataTypeEnum.String)]
+    [Description("Git Storage Username")]
+    [Tooltip("The Git Storage Username is used to authenticate the application with the Git Storage. This username is used to connect to the Git Storage.")]
+    public string GitStorageUsername => GetValue<string>("GitStorageUsername", "");
+
+    [Category(CategoryAttribute.ConfigCategoryEnum.GitStorage)]
+    [DataType(DataTypeAttribute.ConfigDataTypeEnum.Password)]
+    [Description("Git Storage Password")]
+    [Tooltip("The Git Storage Password is used to authenticate the application with the Git Storage. This password is used to connect to the Git Storage.")]
+    public string GitStoragePassword => GetValue<string>("GitStoragePassword", "");
+
+    [Category(CategoryAttribute.ConfigCategoryEnum.GitStorage)]
+    [DataType(DataTypeAttribute.ConfigDataTypeEnum.Boolean)]
+    [Description("Use Git Storage")]
+    [Tooltip("Specifies if the system should use Git Storage. When enabled, the system uses Git Storage to store Agents History.")]
+    public bool UseGitStorage => GetValue<bool>("UseGitStorage", false);
 }
 
 [AttributeUsage(AttributeTargets.Property)]
@@ -480,5 +510,7 @@ public class CategoryAttribute : Attribute, IAttributeHandler
         Logging,
         [System.ComponentModel.Description("Key Vault Storage")]
         KeyVaultStorage,
+        [System.ComponentModel.Description("Git Storage")]
+        GitStorage,
     }
 }

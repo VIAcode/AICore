@@ -86,6 +86,7 @@ namespace AiCoreApi.Services.ControllersServices
                 CollapseFilesSection = _extendedConfig.CollapseFilesSection,
                 AutoRenderImages = _extendedConfig.AutoRenderImages,
                 UseKeyVaultAppRegistration = _extendedConfig.UseKeyVaultAppRegistration,
+                UseGitStorage = _extendedConfig.UseGitStorage,
                 FeatureFlags = _featureFlags.GetValues()
             };
         }
