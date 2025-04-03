@@ -173,6 +173,11 @@ public class ExtendedConfig
     [Description("Auth security key")]
     [Tooltip("The Auth Security Key serves as a security key for the SHA-256 hashing algorithm during the creation of access tokens to sign-in JWT token.")]
     public string AuthSecurityKey => GetValue<string>("AuthSecurityKey");
+    
+    [Category(CategoryAttribute.ConfigCategoryEnum.Authentication)]
+    [Description("Tenant Id (Microsoft SSO)")]
+    [Tooltip("The Tenant Id is used to specify the tenant for the Microsoft SSO service. This Id is used to authenticate the application with the Microsoft SSO service. If empty, then user`s default Tenant will be used.")]
+    public string TenantId => GetValue<string>("TenantId", "");
 
     [Category(CategoryAttribute.ConfigCategoryEnum.Authentication)]
     [Description("App Registration Client Id (Microsoft SSO)")]
@@ -184,6 +189,12 @@ public class ExtendedConfig
     [Description("App Registration Client Secret (Microsoft SSO)")]
     [Tooltip("The App Registration Client Secret is used to authenticate the application with the Microsoft SSO service.")]
     public string ClientSecret => GetValue<string>("ClientSecret");
+
+    [Category(CategoryAttribute.ConfigCategoryEnum.Authentication)]
+    [DataType(DataTypeAttribute.ConfigDataTypeEnum.String)]
+    [Description("App Registration Scope (Microsoft SSO)")]
+    [Tooltip("The App Registration Scope is used to specify the scope of the application. This scope is used to authenticate the application with the Microsoft SSO service.")]
+    public string ClientScope => GetValue<string>("ClientScope", "Directory.Read.All+GroupMember.Read.All+Group.Read.All");
 
     [Category(CategoryAttribute.ConfigCategoryEnum.Authentication)]
     [Description("Google App Client Id (Google SSO)")]

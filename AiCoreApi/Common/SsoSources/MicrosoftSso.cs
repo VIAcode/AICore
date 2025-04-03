@@ -40,7 +40,11 @@ namespace AiCoreApi.Common.SsoSources
         private string RedirectUrl => $"{_config.AppUrl}/connect/callback";
         private readonly string _defaultTenant = "common";
         // Directory.Read.All,GroupMember.Read.All,Group.Read.All
-        private static string Scope => $"{HttpUtility.UrlEncode("https://graph.microsoft.com/")}Directory.Read.All+GroupMember.Read.All+Group.Read.All+offline_access+openid+profile";
+        private string Scope => $"{HttpUtility.UrlEncode("https://graph.microsoft.com/")}{_extendedConfig.ClientScope}+offline_access+openid+profile";
+        private string Tenant => string.IsNullOrWhiteSpace(_extendedConfig.TenantId) 
+            ? _defaultTenant 
+            : _extendedConfig.TenantId;
+
         public async Task<ExtendedTokenModel> GetAccessTokenByCodeAsync(string code)
         {
             using var httpClient = GetHttpClient();
@@ -51,7 +55,7 @@ namespace AiCoreApi.Common.SsoSources
                + "&grant_type=authorization_code"
                + $"&code_verifier={CodeChallenge}"
                + (string.IsNullOrEmpty(_extendedConfig.ClientSecret) ? "" : $"&client_secret={_extendedConfig.ClientSecret}");
-            var message = new HttpRequestMessage(HttpMethod.Post, $"https://login.microsoftonline.com/{_defaultTenant}/oauth2/v2.0/token")
+            var message = new HttpRequestMessage(HttpMethod.Post, $"https://login.microsoftonline.com/{Tenant}/oauth2/v2.0/token")
             {
                 Content = new StringContent(body, Encoding.UTF8, "application/x-www-form-urlencoded")
             };
@@ -75,7 +79,7 @@ namespace AiCoreApi.Common.SsoSources
 
         public string GetLoginRedirectUrl(string state)
         {
-            var url = $"https://login.microsoftonline.com/{_defaultTenant}/oauth2/v2.0/authorize?";
+            var url = $"https://login.microsoftonline.com/{Tenant}/oauth2/v2.0/authorize?";
             var parameters = $"client_id={_extendedConfig.ClientId}"
                 + "&client_info=1"
                 + "&response_type=code"
@@ -95,9 +99,16 @@ namespace AiCoreApi.Common.SsoSources
         {
             var content = await GetCachedAsync("https://graph.microsoft.com/v1.0/me/transitiveMemberOf", extendedTokenModel.AccessToken);
             var groups = content.JsonGet<List<UserGroup>>("value") ?? new List<UserGroup>();
-            return groups
+            var groupNames = groups
                 .Select(userGroup => userGroup.DisplayName)
                 .Where(userGroupName => !string.IsNullOrEmpty(userGroupName))
+                .ToList();
+            var groupIds = groups
+                .Select(userGroup => userGroup.Id)
+                .Where(userGroupId => !string.IsNullOrEmpty(userGroupId))
+                .ToList();
+            return groupNames
+                .Union(groupIds)
                 .ToList();
         }
 
@@ -147,6 +158,7 @@ namespace AiCoreApi.Common.SsoSources
 
         public class UserGroup
         {
+            public string Id { get; set; } = string.Empty;
             public string DisplayName { get; set; } = string.Empty;
         }
         public class User
