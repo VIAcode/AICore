@@ -24,7 +24,6 @@
     <PackageReference Include="JsonRepairUtils" Version="0.0.2" />
     <PackageReference Include="JsonSchema.Net.Generation" Version="4.6.0" />
     <PackageReference Include="JUST.net" Version="4.4.1" />
-    <PackageReference Include="Azure.AI.DocumentIntelligence" Version="1.0.0-beta.3" />
     <PackageReference Include="LibGit2Sharp" Version="0.31.0" />
     <PackageReference Include="Azure.AI.DocumentIntelligence" Version="1.0.0" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="9.0.0" />
