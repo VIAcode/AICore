@@ -15,6 +15,7 @@ namespace AiCoreApi.Services.ControllersServices;
 public class AgentsService : IAgentsService
 {
     private readonly IMapper _mapper;
+    private readonly ILogger<AgentsService> _logger;
     private readonly ExtendedConfig _extendedConfig;
     private readonly IAgentsProcessor _agentsProcessor;
     private readonly IDistributedCache _distributedCache;
@@ -25,6 +26,7 @@ public class AgentsService : IAgentsService
         ExtendedConfig extendedConfig,
         IAgentsProcessor agentsProcessor, 
         IMapper mapper,
+        ILogger<AgentsService> logger,
         IDistributedCache distributedCache,
         ILoginProcessor loginProcessor,
         RequestAccessor requestAccessor)
@@ -32,6 +34,7 @@ public class AgentsService : IAgentsService
         _extendedConfig = extendedConfig;
         _agentsProcessor = agentsProcessor;
         _mapper = mapper;
+        _logger = logger;
         _distributedCache = distributedCache;
         _loginProcessor = loginProcessor;
         _requestAccessor = requestAccessor;
@@ -404,28 +407,35 @@ public class AgentsService : IAgentsService
     {
         if (!_extendedConfig.UseGitStorage)
             return;
-        var repoPath = await EnsureClonedGitRepo();
-        var fileMap = await PrepareAgentExportFiles((await _agentsProcessor.List()).Select(a => a.AgentId).ToList());
-        foreach (var kvp in fileMap)
+        try
         {
-            var fullPath = Path.Combine(repoPath, _extendedConfig.GitStoragePath.Trim('/'), kvp.Key);
-            Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
-            await File.WriteAllTextAsync(fullPath, kvp.Value);
-        }
-        using (var repo = new Repository(repoPath))
-        {
-            Commands.Stage(repo, "*");
-            var author = new Signature(_requestAccessor.Login, _requestAccessor.Login, DateTimeOffset.Now);
-            repo.Commit($"Changes from {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss} by {_requestAccessor.Login}", author, author);
-
-            repo.Network.Push(repo.Head, new PushOptions
+            var repoPath = await EnsureClonedGitRepo();
+            var fileMap = await PrepareAgentExportFiles((await _agentsProcessor.List()).Select(a => a.AgentId).ToList());
+            foreach (var kvp in fileMap)
             {
-                CredentialsProvider = (_, _, _) => new UsernamePasswordCredentials
+                var fullPath = Path.Combine(repoPath, _extendedConfig.GitStoragePath.Trim('/'), kvp.Key);
+                Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
+                await File.WriteAllTextAsync(fullPath, kvp.Value);
+            }
+            using (var repo = new Repository(repoPath))
+            {
+                Commands.Stage(repo, "*");
+                var author = new Signature(_requestAccessor.Login, _requestAccessor.Login, DateTimeOffset.Now);
+                repo.Commit($"Changes from {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss} by {_requestAccessor.Login}", author, author);
+
+                repo.Network.Push(repo.Head, new PushOptions
                 {
-                    Username = _extendedConfig.GitStorageUsername,
-                    Password = _extendedConfig.GitStoragePassword
-                }
-            });
+                    CredentialsProvider = (_, _, _) => new UsernamePasswordCredentials
+                    {
+                        Username = _extendedConfig.GitStorageUsername,
+                        Password = _extendedConfig.GitStoragePassword
+                    }
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error while saving to git repository");
         }
     }
 
@@ -441,20 +451,29 @@ public class AgentsService : IAgentsService
         var relativePath = Path.Combine(_extendedConfig.GitStoragePath.Trim('/'), fileName).Replace("\\", "/");
 
         var history = new List<string>();
-        using (var repo = new Repository(repoPath))
+
+        using var repo = new Repository(repoPath);
+        var commits = repo.Commits.QueryBy(new CommitFilter
         {
-            var commits = repo.Commits.QueryBy(new CommitFilter
+            SortBy = CommitSortStrategies.Time,
+            FirstParentOnly = true
+        });
+
+        foreach (var commit in commits)
+        {
+            if (!commit.Parents.Any())
+                continue;
+
+            var parent = commit.Parents.First();
+            var changes = repo.Diff.Compare<TreeChanges>(parent.Tree, commit.Tree);
+
+            if (changes.Any(change => change.Path == relativePath))
             {
-                SortBy = CommitSortStrategies.Time,
-                FirstParentOnly = true
-            });
-            foreach (var commit in commits)
-            {
-                if (commit[relativePath] != null)
-                    history.Add(commit.MessageShort);
+                history.Add(commit.MessageShort);
             }
-            return history;
         }
+
+        return history;
     }
 
     public async Task<string> GetHistoryCode(int agentId, string gitTitle)
