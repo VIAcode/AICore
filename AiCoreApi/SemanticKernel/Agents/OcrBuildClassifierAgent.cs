@@ -152,7 +152,6 @@ namespace AiCoreApi.SemanticKernel.Agents
             AuthData authData)
         {
             var saEndpoint = GetStorageAccountEndpoint(saAccountName);
-            //var blobServiceClient = GetBlobServiceClient(saEndpoint, authData);
 
             var containerUrl = GetContainerUrl(saEndpoint, containerName);
 
@@ -169,13 +168,13 @@ namespace AiCoreApi.SemanticKernel.Agents
         {
             var imageTypes = GetDocumentTypes(blobSources);
 
-            var buildOptions = new BuildDocumentClassifierContent(classifierId, imageTypes)
+            var buildOptions = new BuildClassifierOptions(classifierId, imageTypes)
             {
                 AllowOverwrite = true,
                 BaseClassifierId = string.IsNullOrWhiteSpace(baseClassifierId) ? null : baseClassifierId
             };
 
-            var adminClient = await GetOcrAdministrationClient(ocrEndpoint, authData).ConfigureAwait(false);
+            var adminClient = GetOcrAdministrationClient(ocrEndpoint, authData);
 
             var operation = await adminClient.BuildClassifierAsync(
                 WaitUntil.Completed,
@@ -188,17 +187,17 @@ namespace AiCoreApi.SemanticKernel.Agents
 
         Dictionary<string, ClassifierDocumentTypeDetails> GetDocumentTypes(ICollection<ImageTypeBlobSource> blobSourceItems)
         {
-            return blobSourceItems.ToDictionary(b => b.ImageTypeName, b => new ClassifierDocumentTypeDetails { AzureBlobSource = b.BlobSource });
+            return blobSourceItems.ToDictionary(b => b.ImageTypeName, b => new ClassifierDocumentTypeDetails(b.BlobSource));
         }
 
         async Task PrepareBlobs(string saEndpoint, ICollection<ImageTypeBlobSource> blobSources, string modelName, string ocrEndpoint, AuthData authData, HashSet<string> supportedFileExtensions, CancellationToken cancellationToken = default(CancellationToken))
         {
             foreach (var bsi in blobSources)
             {
-                var blobServiceClient = await GetBlobServiceClient(saEndpoint, authData).ConfigureAwait(false);
+                var blobServiceClient = GetBlobServiceClient(saEndpoint, authData);
                 var containerClient = blobServiceClient.GetBlobContainerClient(bsi.ContainerName);
+                var ocrClient = GetOcrClient(ocrEndpoint, authData);
 
-                    //TODO: in order to avoid token expiration after removing blob downloading split the logic into 2 parts: get blob list and process each blob with new blobServiceClient instance. 
                 await foreach (var blob in containerClient
                                    .GetBlobsAsync(prefix: bsi.BlobPrefix, cancellationToken: cancellationToken)
                                    .ConfigureAwait(false))
@@ -210,28 +209,19 @@ namespace AiCoreApi.SemanticKernel.Agents
 
                     try
                     {
-                        //TODO: Upgrade Azure.AI.DocumentIntelligence to a newer version and get a rid of downloading a blob. 
-                        //In the newer version of the nuget we can pass uri of a blob directly to AnalyzeDocumentAsync.
-                        //<Download blob>
-                        var blobClient = containerClient.GetBlobClient(blob.Name);
-                        using var memoryStream = new MemoryStream();
-                        await blobClient.DownloadToAsync(memoryStream, cancellationToken).ConfigureAwait(false);
+                        
+                        var blobUri = new Uri(GetBlobUrl(bsi.ContainerUrl, blob.Name));
 
-                        var content = new AnalyzeDocumentContent
-                        {
-                            Base64Source = BinaryData.FromBytes(memoryStream.ToArray()),
-                        };
-                        //</Download blob>
-
-                        // Init OCR client each time to avoid issues with token expiration
-                        var ocrClient = await GetOcrClient(ocrEndpoint, authData).ConfigureAwait(false);
-                        var operation = await ocrClient.AnalyzeDocumentAsync(WaitUntil.Completed, modelName,
-                            content, cancellationToken: cancellationToken).ConfigureAwait(false);
+                        var operation = await ocrClient.AnalyzeDocumentAsync(
+                            WaitUntil.Completed, 
+                            modelName, 
+                            blobUri, 
+                            cancellationToken: cancellationToken).ConfigureAwait(false);
                         var response = operation.GetRawResponse();
 
                         var ocrBlobName = blob.Name + ".ocr.json";
                         var ocrBlobClient = containerClient.GetBlobClient(ocrBlobName);
-                        //TODO: Init blobServiceClient->containerClient->blobClient each time to avoid token expiration?
+
                         var blobResponse = await ocrBlobClient
                             .UploadAsync(response.Content, true, cancellationToken).ConfigureAwait(false);
                     }
@@ -247,6 +237,18 @@ namespace AiCoreApi.SemanticKernel.Agents
             }
         }
 
+        string GetBlobUrl(string containerUrl, string blobName)
+        {
+            var encodedBlobName = Uri.EscapeDataString(blobName).Replace("%2F", "/");
+
+            // Handle SAS token or any other query parameters
+            var queryIndex = containerUrl.IndexOf('?');
+            var baseUrl = queryIndex >= 0 ? containerUrl[..queryIndex] : containerUrl;
+            var query = queryIndex >= 0 ? containerUrl[queryIndex..] : string.Empty;
+
+            return $"{baseUrl.TrimEnd('/')}/{encodedBlobName}{query}";
+        }
+
         ICollection<ImageTypeBlobSource> GetBlobSources(ICollection<string> prefixes, string containerName, string containerUrl)
         {
             var prefixesUnique = prefixes.Select(p => Regex.Replace(p, "/+$", "")).ToHashSet(StringComparer.InvariantCultureIgnoreCase);
@@ -257,13 +259,13 @@ namespace AiCoreApi.SemanticKernel.Agents
                 ContainerName = containerName,
                 ContainerUrl = containerUrl,
                 BlobPrefix = $"{p}/",
-                BlobSource = new AzureBlobContentSource(containerUri) { Prefix = $"{p}/" }
+                BlobSource = new BlobContentSource(containerUri) { Prefix = $"{p}/" }
             }).ToArray();
         }
 
         string GetContainerUrl(string accountEndpoint, string containerName)
         {
-            return $"{accountEndpoint}/{HttpUtility.UrlEncode(containerName)}";
+            return $"{accountEndpoint}/{Uri.EscapeDataString(containerName)}";
         }
 
         string GetStorageAccountEndpoint(string accountName)
@@ -298,11 +300,11 @@ namespace AiCoreApi.SemanticKernel.Agents
             return new AuthData
             {
                 BlobAuthIsApiKey = blobAuthIsApiKey,
-                GetBlobTokenCredential = () => GetBlobTokenCredential(blobAccessType),
+                BlobTokenCredential = blobAuthIsApiKey ? null : new EntraTokenProviderWrapperCredential(blobAccessType, _entraTokenProvider),
                 BlobKeyCredential = blobAuthIsApiKey ? new StorageSharedKeyCredential(accountName, storageAccountKey) : null,
                 OcrAuthIsApiKey = ocrAuthIsApiKey,
                 OcrKeyCredential = ocrAuthIsApiKey ? new AzureKeyCredential(ocrApiKey) : null,
-                GetOcrTokenCredential = () => GetOcrTokenCredential(ocrAccessType),
+                OcrTokenCredential = ocrAuthIsApiKey ? null : new EntraTokenProviderWrapperCredential(ocrAccessType, _entraTokenProvider)
             };
         }
 
@@ -311,64 +313,70 @@ namespace AiCoreApi.SemanticKernel.Agents
             return authTypeRaw == "apiKey";
         }
 
-        Task<TokenCredential?> GetOcrTokenCredential(string accessType)
-        {
-            return GetTokenCredential("cognitiveservices.azure.com", accessType);
-        }
-
-        Task<TokenCredential?> GetBlobTokenCredential(string accessType)
-        {
-            return GetTokenCredential("storage.azure.com", accessType);
-        }
-
-        async Task<TokenCredential?> GetTokenCredential(string resource, string accessType)
-        {
-            if (accessType == "apiKey")
-            {
-                throw new ArgumentException("ApiKey is not supported for this authentication type");
-            }
-
-            var accessToken = await _entraTokenProvider.GetAccessTokenObjectAsync(accessType, $"https://{resource}/.default");
-            return new StaticTokenCredential(accessToken.Token, accessToken.ExpiresOn);
-        }
-
         #region GetClients
 
-        async Task<DocumentIntelligenceClient> GetOcrClient(string ocrEndpoint, AuthData authData)
+        DocumentIntelligenceClient GetOcrClient(string ocrEndpoint, AuthData authData)
         {
             var ocrEndpointUri = new Uri(ocrEndpoint);
 
             return authData.OcrAuthIsApiKey
                 ? new DocumentIntelligenceClient(ocrEndpointUri, authData.OcrKeyCredential)
-                : new DocumentIntelligenceClient(ocrEndpointUri, await authData.GetOcrTokenCredential().ConfigureAwait(false));
+                : new DocumentIntelligenceClient(ocrEndpointUri, authData.OcrTokenCredential);
         }
 
-        async Task<DocumentIntelligenceAdministrationClient> GetOcrAdministrationClient(string ocrEndpoint, AuthData authData)
+        DocumentIntelligenceAdministrationClient GetOcrAdministrationClient(string ocrEndpoint, AuthData authData)
         {
             var ocrEndpointUri = new Uri(ocrEndpoint);
 
             return authData.OcrAuthIsApiKey
                 ? new DocumentIntelligenceAdministrationClient(ocrEndpointUri, authData.OcrKeyCredential)
-                : new DocumentIntelligenceAdministrationClient(ocrEndpointUri, await authData.GetOcrTokenCredential().ConfigureAwait(false));
+                : new DocumentIntelligenceAdministrationClient(ocrEndpointUri, authData.OcrTokenCredential);
         }
 
-        async Task<BlobServiceClient> GetBlobServiceClient(string accountEndpoint, AuthData authData)
+        BlobServiceClient GetBlobServiceClient(string accountEndpoint, AuthData authData)
         {
             var accountUri = new Uri(accountEndpoint);
             return authData.BlobAuthIsApiKey
                 ? new BlobServiceClient(accountUri, authData.BlobKeyCredential)
-                : new BlobServiceClient(accountUri, await authData.GetBlobTokenCredential().ConfigureAwait(false));
+                : new BlobServiceClient(accountUri, authData.BlobTokenCredential);
         }
 
         #endregion
 
         #region Types
 
+        public class EntraTokenProviderWrapperCredential : TokenCredential
+        {
+            readonly IEntraTokenProvider _tokenProvider;
+            readonly string _accessType;
+
+            public EntraTokenProviderWrapperCredential(string accessType, IEntraTokenProvider tokenProvider)
+            {
+                if (accessType == "apiKey")
+                {
+                    throw new ArgumentException("ApiKey is not supported for this authentication type");
+                }
+
+                _tokenProvider = tokenProvider;
+                _accessType = accessType;
+            }
+
+            public override AccessToken GetToken(TokenRequestContext requestContext, CancellationToken cancellationToken)
+            {
+                return GetTokenAsync(requestContext, cancellationToken).GetAwaiter().GetResult();
+            }
+
+            public override async ValueTask<AccessToken> GetTokenAsync(TokenRequestContext requestContext, CancellationToken cancellationToken)
+            {
+                return await _tokenProvider.GetAccessTokenObjectAsync(_accessType, requestContext.Scopes[0]);
+            }
+        }
+
         class AuthData
         {
             public bool BlobAuthIsApiKey { get; set; }
 
-            public Func<Task<TokenCredential?>> GetBlobTokenCredential { get; set; }
+            public TokenCredential? BlobTokenCredential { get; set; }
 
             public StorageSharedKeyCredential? BlobKeyCredential { get; set; }
 
@@ -376,14 +384,14 @@ namespace AiCoreApi.SemanticKernel.Agents
 
             public AzureKeyCredential OcrKeyCredential { get; set; }
 
-            public Func<Task<TokenCredential?>> GetOcrTokenCredential { get; set; }
+            public TokenCredential? OcrTokenCredential { get; set; }
         }
 
         class ImageTypeBlobSource
         {
             public string ImageTypeName { get; set; }
 
-            public AzureBlobContentSource BlobSource { get; set; }
+            public BlobContentSource BlobSource { get; set; }
 
             public string BlobPrefix { get; set; }
 

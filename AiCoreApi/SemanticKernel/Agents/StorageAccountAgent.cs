@@ -1,3 +1,4 @@
+using System.Text;
 using System.Web;
 using Microsoft.SemanticKernel;
 using AiCoreApi.Models.DbModels;
@@ -11,6 +12,16 @@ namespace AiCoreApi.SemanticKernel.Agents
 {
     public class StorageAccountAgent : BaseAgent, IStorageAccountAgent
     {
+        private static readonly Dictionary<string, Encoding> EncodingMap = new()
+        {
+            { "utf8", Encoding.UTF8 },
+            { "utf16", Encoding.Unicode },
+            { "utf32", Encoding.UTF32 },
+            { "ascii", Encoding.ASCII },
+            { "bigendianunicode", Encoding.BigEndianUnicode },
+            { "latin1", Encoding.Latin1 }, //iso-8859-1
+        };
+
         private const string DebugMessageSenderName = "StorageAccountAgent";
         public static class AgentPromptPlaceholders
         {
@@ -23,6 +34,8 @@ namespace AiCoreApi.SemanticKernel.Agents
             public const string Action = "action";
             public const string ConnectionName = "connectionName";
             public const string ContainerName = "containerName";
+            public const string TextEncoding = "textEncoding";
+            public const string TextContent = "textContent";
         }
 
         private readonly IEntraTokenProvider _entraTokenProvider;
@@ -97,7 +110,16 @@ namespace AiCoreApi.SemanticKernel.Agents
                             base64Content = ApplyParameters(base64Content, new Dictionary<string, string> {
                             { AgentPromptPlaceholders.FileDataPlaceholder, _requestAccessor.MessageDialog.Messages!.Last().Files!.First().Base64Data } });
                         }
-                        result = await Add(blobServiceClient, containerName, fileName, base64Content.StripBase64());
+                        var bytes = Convert.FromBase64String(base64Content);
+                        result = await AddBytes(blobServiceClient, containerName, fileName, bytes);
+                        break;
+                    }
+                case "ADDTEXT":
+                    {
+                        var encoding = GetEncoding(agent, parameters);
+                        var textContent = ApplyParameters(agent.Content[AgentContentParameters.TextContent].Value, parameters);
+                        var textBytes = encoding.GetBytes(textContent);
+                        result = await AddBytes(blobServiceClient, containerName, fileName, textBytes);
                         break;
                     }
                 case ("DELETE"):
@@ -107,13 +129,38 @@ namespace AiCoreApi.SemanticKernel.Agents
                     }
                 case ("GET"):
                     {
-                        result = await Get(blobServiceClient, containerName, fileName);
+                        var bytes = await GetBytes(blobServiceClient, containerName, fileName);
+                        result = Convert.ToBase64String(bytes);
+                        break;
+                    }
+                case ("GETTEXT"):
+                    {
+                        var encoding = GetEncoding(agent, parameters);
+                        var blobBytes = await GetBytes(blobServiceClient, containerName, fileName);
+                        result = encoding.GetString(blobBytes);
                         break;
                     }
                 default: throw new InvalidDataException($"Wrong action: {action}");
             }
             _responseAccessor.AddDebugMessage(DebugMessageSenderName, "DoCall Response", result);
             return result;
+        }
+
+        private Encoding GetEncoding(AgentModel agent, Dictionary<string, string> parameters)
+        {
+            var encodingName = "utf8";
+            if(agent.Content.TryGetValue(AgentContentParameters.TextEncoding, out var configObj) 
+               && !string.IsNullOrWhiteSpace(configObj.Value))
+            {
+                encodingName = configObj.Value.ToLower();
+            }
+
+            if (!EncodingMap.TryGetValue(encodingName, out var encoding))
+            {
+                throw new InvalidDataException($"Encoding not supported: {encodingName}");
+            }
+
+            return encoding;
         }
 
         private async Task<string> ListContainers(BlobServiceClient blobServiceClient)
@@ -139,15 +186,12 @@ namespace AiCoreApi.SemanticKernel.Agents
             return result.ToJson();
         }
 
-        private async Task<string> Add(BlobServiceClient blobServiceClient, string containerName, string fileName, string base64Content)
+        private async Task<string> AddBytes(BlobServiceClient blobServiceClient, string containerName, string fileName, byte[] bytes)
         {
             var containerClient = blobServiceClient.GetBlobContainerClient(containerName);
             var blobClient = containerClient.GetBlobClient(fileName);
-            var bytes = Convert.FromBase64String(base64Content);
-            using (var stream = new MemoryStream(bytes))
-            {
-                await blobClient.UploadAsync(stream, overwrite: true);
-            }
+            using var stream = new MemoryStream(bytes);
+            await blobClient.UploadAsync(stream, overwrite: true);
             return string.Empty;
         }
 
@@ -158,17 +202,14 @@ namespace AiCoreApi.SemanticKernel.Agents
             return string.Empty;
         }
 
-        private async Task<string> Get(BlobServiceClient blobServiceClient, string containerName, string fileName)
+        private async Task<byte[]> GetBytes(BlobServiceClient blobServiceClient, string containerName, string fileName)
         {
             var containerClient = blobServiceClient.GetBlobContainerClient(containerName);
             var blobClient = containerClient.GetBlobClient(fileName);
             var blobDownloadInfo = await blobClient.DownloadAsync();
-            using (var memoryStream = new MemoryStream())
-            {
-                await blobDownloadInfo.Value.Content.CopyToAsync(memoryStream);
-                var result = memoryStream.ToArray();
-                return Convert.ToBase64String(result);
-            }
+            using var memoryStream = new MemoryStream();
+            await blobDownloadInfo.Value.Content.CopyToAsync(memoryStream);
+            return memoryStream.ToArray();
         }
 
         public class BlobFile

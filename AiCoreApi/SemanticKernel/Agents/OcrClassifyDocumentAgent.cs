@@ -8,6 +8,7 @@ using Azure;
 using Azure.AI.DocumentIntelligence;
 using Azure.Core.Pipeline;
 using Azure.Core;
+using static Python.Runtime.TypeSpec;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
@@ -27,7 +28,6 @@ namespace AiCoreApi.SemanticKernel.Agents
             public const string ClassifierId = "classifierID";
             public const string Pages = "pages";
             public const string SplitMode = "splitMode";
-            public const string StringIndexType = "stringIndexType";
         }
 
         private readonly IEntraTokenProvider _entraTokenProvider;
@@ -71,7 +71,6 @@ namespace AiCoreApi.SemanticKernel.Agents
             var connections = await _connectionProcessor.List();
             var connection = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.DocumentIntelligence, DebugMessageSenderName, connectionName: documentIntelligenceConnection);
 
-            var stringIndexType = GetParameterValueOrNull(agent, AgentContentParameters.StringIndexType);
             var splitMode = GetParameterValueOrNull(agent, AgentContentParameters.SplitMode);
             var pages = ApplyParameters(GetParameterValueOrNull(agent, AgentContentParameters.Pages), parameters);
 
@@ -86,7 +85,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             var accessType = connection.Content.ContainsKey("accessType") ? connection.Content["accessType"] : "apiKey";
             var apiKey = connection.Content.ContainsKey("apiKey") ? connection.Content["apiKey"] : "";
 
-            _responseAccessor.AddDebugMessage(DebugMessageSenderName, "OCR Classifying", $"{endpoint}, {classifierId}, {apiKey} \r\nStringIndexType:{stringIndexType} SplitMode:{splitMode} Pages:{pages}");
+            _responseAccessor.AddDebugMessage(DebugMessageSenderName, "OCR Classifying", $"{endpoint}, {classifierId}, {apiKey} \r\nSplitMode:{splitMode} Pages:{pages}");
 
             var result = await ProcessFileAsync(
                 endpoint, 
@@ -94,7 +93,6 @@ namespace AiCoreApi.SemanticKernel.Agents
                 accessType,
                 apiKey,
                 base64Image.StripBase64(),
-                stringIndexType,
                 splitMode,
                 pages
                 );
@@ -119,7 +117,6 @@ namespace AiCoreApi.SemanticKernel.Agents
             string accessType,
             string apiKey, 
             string base64Data, 
-            string? stringIndexType, 
             string? splitMode,
             string? pages)
         {
@@ -149,13 +146,14 @@ namespace AiCoreApi.SemanticKernel.Agents
                 ? new DocumentIntelligenceClient(new Uri(modelUrl), keyCredential, clientOptions)
                 : new DocumentIntelligenceClient(new Uri(modelUrl), tokenCredential!, clientOptions);
 
-            var content = new ClassifyDocumentContent
+            var binaryData = new BinaryData(file);
+            var options = new ClassifyDocumentOptions(classifierId, binaryData)
             {
-                Base64Source = BinaryData.FromBytes(file),
+                Split = string.IsNullOrWhiteSpace(splitMode) ? (SplitMode?)null : splitMode,
+                Pages = pages
             };
 
-            var operation = await client.ClassifyDocumentAsync(WaitUntil.Completed, classifierId, content, stringIndexType ?? (StringIndexType?) null, splitMode ?? (SplitMode?) null,
-                pages);
+            var operation = await client.ClassifyDocumentAsync(WaitUntil.Completed, options);
 
             var result = HandleResult(operation.Value);
             return result.ToJson();
@@ -164,7 +162,7 @@ namespace AiCoreApi.SemanticKernel.Agents
         private static OcrClassifyResult HandleResult(AnalyzeResult result)
         {
             var documents = result.Documents
-                .Select(doc => new OcrClassifyDocument { DocType = doc.DocType, Confidence = doc.Confidence })
+                .Select(doc => new OcrClassifyDocument { DocType = doc.DocumentType, Confidence = doc.Confidence })
                 .ToList();
 
             return new OcrClassifyResult
