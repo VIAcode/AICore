@@ -151,32 +151,29 @@ namespace AiCoreApi.SemanticKernel.Agents
                 ? new DocumentIntelligenceClient(new Uri(modelUrl), keyCredential, clientOptions)
                 : new DocumentIntelligenceClient(new Uri(modelUrl), tokenCredential!, clientOptions);
 
-            var content = new AnalyzeDocumentContent
-            {
-                Base64Source = BinaryData.FromBytes(file),
-            };
+            var options = new AnalyzeDocumentOptions(modelName, BinaryData.FromBytes(file));
 
-            var features = new List<DocumentAnalysisFeature>();
             if (optionsList.Contains(AgentOptions.Barcodes))
-                features.Add(DocumentAnalysisFeature.Barcodes);
+                options.Features.Add(DocumentAnalysisFeature.Barcodes);
             if (optionsList.Contains(AgentOptions.Formulas))
-                features.Add(DocumentAnalysisFeature.Formulas);
+                options.Features.Add(DocumentAnalysisFeature.Formulas);
             if (optionsList.Contains(AgentOptions.KeyValuePairs))
-                features.Add(DocumentAnalysisFeature.QueryFields);
+                options.Features.Add(DocumentAnalysisFeature.QueryFields);
             if (optionsList.Contains(AgentOptions.HighResolution))
-                features.Add(DocumentAnalysisFeature.OcrHighResolution);
+                options.Features.Add(DocumentAnalysisFeature.OcrHighResolution);
 
-            var outputContentFormat = "text";
+            options.OutputContentFormat = DocumentContentFormat.Text;
             if (optionsList.Contains(AgentOptions.Markdown))
-                outputContentFormat = "markdown";
+                options.OutputContentFormat = DocumentContentFormat.Markdown;
 
             var useConfidence = outputList.Contains(AgentOutputOptions.Confidence);
-
-            var output = new List<AnalyzeOutputOption>();
+            
             if (optionsList.Contains(AgentOptions.FigureImages))
-                output.Add(AnalyzeOutputOption.Figures);
+            {
+                options.Output.Add(AnalyzeOutputOption.Figures);
+            }
 
-            var operation = await client.AnalyzeDocumentAsync(WaitUntil.Completed, modelName, content, features: features, outputContentFormat: outputContentFormat, output: output);
+            var operation = await client.AnalyzeDocumentAsync(WaitUntil.Completed, options, default(CancellationToken));
             var result = operation.Value;
 
             var ocrResult = new OcrResult();
@@ -241,7 +238,7 @@ namespace AiCoreApi.SemanticKernel.Agents
                         var location = PolygonToPointList(ocrPage, figure.BoundingRegions[0].Polygon, (int)ocrPage.Angle);
                         if (page.Images == null)
                             page.Images = new List<ImageItem>();
-                        var image = client.GetAnalyzeResultFigure(result.ModelId, new Guid(operation.Id), figure.Id);
+                        var image = client.GetAnalyzeResultFigure(result.ModelId, operation.Id, figure.Id);
                         var base64Image = Convert.ToBase64String(image.Value.ToArray());
                         page.Images.Add(new ImageItem
                         {
