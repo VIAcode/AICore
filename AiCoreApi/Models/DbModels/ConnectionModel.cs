@@ -42,6 +42,7 @@ namespace AiCoreApi.Models.DbModels
         AzureOpenAiLlmCarousel = 21,
         DeepSeekLlm = 22,
         StabilityAi = 23,
+        AzureLogAnalytics = 24,
     }
 
     public static class ConnectionTypeExtensions

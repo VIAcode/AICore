@@ -51,6 +51,7 @@ namespace AiCoreApi.SemanticKernel
         private readonly IWebCrawlerAgent _webCrawlerAgent;
         private readonly IStabilityAiImagesAgent _stabilityAiImagesAgent;
         private readonly IOcrBuildClassifierAgent _ocrBuildClassifierAgent;
+        private readonly IAzureLogAnalyticsAgent _azureLogAnalyticsAgent;
 
         public PlannerHelpers(
             RequestAccessor requestAccessor,
@@ -82,7 +83,8 @@ namespace AiCoreApi.SemanticKernel
             IAudioPromptAgent audioPromptAgent,
             IWebCrawlerAgent webCrawlerAgent,
             IStabilityAiImagesAgent stabilityAiImagesAgent,
-            IOcrBuildClassifierAgent ocrBuildClassifierAgent
+            IOcrBuildClassifierAgent ocrBuildClassifierAgent,
+            IAzureLogAnalyticsAgent azureLogAnalyticsAgent
             )
         {
             _requestAccessor = requestAccessor;
@@ -115,6 +117,7 @@ namespace AiCoreApi.SemanticKernel
             _webCrawlerAgent = webCrawlerAgent;
             _stabilityAiImagesAgent = stabilityAiImagesAgent;
             _ocrBuildClassifierAgent = ocrBuildClassifierAgent;
+            _azureLogAnalyticsAgent = azureLogAnalyticsAgent;
         }
 
         private List<AgentModel>? _agentsList;
@@ -241,6 +244,7 @@ namespace AiCoreApi.SemanticKernel
                 { AgentType.WebCrawler, _webCrawlerAgent },
                 { AgentType.StabilityAiImages, _stabilityAiImagesAgent },
                 { AgentType.OcrBuildClassifierAgent, _ocrBuildClassifierAgent },
+                { AgentType.AzureLogAnalytics, _azureLogAnalyticsAgent },
             };
             return agentMapping;
         }
