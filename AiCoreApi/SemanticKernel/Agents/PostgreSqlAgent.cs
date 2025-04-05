@@ -13,6 +13,12 @@ namespace AiCoreApi.SemanticKernel.Agents
     {
         private const string DebugMessageSenderName = "PostgreSqlAgent";
 
+        // In this context PostgreSQL does not allow parameter placeholders
+        private const string InitSessionContextQuery = @"
+SET aicore_session_context.login = '{0}';
+SET aicore_session_context.login_type = '{1}';
+";
+
         private static class AgentContentParameters
         {
             public const string ConnectionName = "connectionName";
@@ -50,34 +56,56 @@ namespace AiCoreApi.SemanticKernel.Agents
             _responseAccessor.AddDebugMessage(DebugMessageSenderName, "DoCall Request", sqlQuery);
             var connections = await _connectionProcessor.List();
             var connection = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.PostgreSql, DebugMessageSenderName, connectionName: connectionName);
-            var result = await ExecuteScript(sqlQuery, connection);
+            var result = await ExecuteScript(sqlQuery, connection, parameters);
             _responseAccessor.AddDebugMessage(DebugMessageSenderName, "DoCall Response", result);
             return result;
         }
 
-        private async Task<string> ExecuteScript(string script, ConnectionModel connection)
+        private async Task<string> ExecuteScript(string script, ConnectionModel connection, Dictionary<string, string> parameters)
         {
             var connectionString = connection.Content["connectionString"];
             var accessType = connection.Content.ContainsKey("accessType") ? connection.Content["accessType"] : "connectionString";
+            
+            var csBuilder  = new NpgsqlConnectionStringBuilder(connectionString);
+            
             if (accessType != "connectionString")
             {
                 var accessToken = await _entraTokenProvider.GetAccessTokenAsync(accessType, "https://ossrdbms-aad.database.windows.net/.default");
-                connectionString = connectionString.Contains("Password=")
-                    ? Regex.Replace(connectionString, @"Password=.*?;", $"Password={accessToken};")
-                    : connectionString += $";Password={accessToken}";
+                csBuilder.Password = accessToken;
             }
 
-            using var pgConnection = new NpgsqlConnection(connectionString);
-            pgConnection.Open();
-            using var command = new NpgsqlCommand(script, pgConnection);
-            using var reader = await command.ExecuteReaderAsync();
-            var tables = new List<List<Dictionary<string, object>>>();
+            var addSessionContext = false;
+            if (parameters.TryGetValue("addSessionContext", out var addSessionContextRaw))
+            {
+                bool.TryParse(addSessionContextRaw, out addSessionContext);
+            }
+
+            // When connections are pooled session context may leak.
+            // Explicitly setting this to false ensures that session context does not leak,
+            // regardless of the connection string configuration
+            if (addSessionContext)
+            {
+                csBuilder.NoResetOnClose = false;
+            }
+
+            await using var pgConnection = new NpgsqlConnection(csBuilder.ConnectionString);
+            await pgConnection.OpenAsync().ConfigureAwait(false);
+
+            if (addSessionContext)
+            {
+                await using var cmd = new NpgsqlCommand(PrepareInitSessionQuery(), pgConnection);
+                await cmd.ExecuteNonQueryAsync().ConfigureAwait(false);
+            }
+
+            await using var command = new NpgsqlCommand(script, pgConnection);
+            await using var reader = await command.ExecuteReaderAsync();
+            var tables = new List<List<Dictionary<string, object?>>>();
             do
             {
-                var rows = new List<Dictionary<string, object>>();
-                while (reader.Read())
+                var rows = new List<Dictionary<string, object?>>();
+                while (await reader.ReadAsync().ConfigureAwait(false))
                 {
-                    var row = new Dictionary<string, object>();
+                    var row = new Dictionary<string, object?>();
                     for (int i = 0; i < reader.FieldCount; i++)
                     {
                         row[reader.GetName(i)] = reader.IsDBNull(i) ? null : reader.GetValue(i);
@@ -89,8 +117,19 @@ namespace AiCoreApi.SemanticKernel.Agents
                     tables.Add(rows);
                 }
 
-            } while (reader.NextResult());
+            } while (await reader.NextResultAsync().ConfigureAwait(false));
             return JsonSerializer.Serialize(tables);
+        }
+
+        string PrepareInitSessionQuery()
+        {
+            return string.Format(InitSessionContextQuery, EscapeQueryString(_requestAccessor.Login),
+                EscapeQueryString(_requestAccessor.LoginTypeString));
+        }
+
+        string EscapeQueryString(string? value)
+        {
+            return (value ?? string.Empty).Replace("'", "''");
         }
     }
 
