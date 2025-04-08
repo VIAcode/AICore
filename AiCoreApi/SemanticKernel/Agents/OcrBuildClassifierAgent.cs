@@ -1,4 +1,4 @@
-﻿using System.Linq.Expressions;
+﻿using System.Text.Json;
 using AiCoreApi.Common;
 using AiCoreApi.Data.Processors;
 using AiCoreApi.Models.DbModels;
@@ -7,15 +7,10 @@ using Azure.Storage;
 using Azure;
 using Microsoft.SemanticKernel;
 using System.Web;
-using Azure.Identity;
 using Azure.AI.DocumentIntelligence;
-using Elastic.Transport;
 using Azure.Storage.Blobs;
-using Azure.Storage.Sas;
 using System.Text.RegularExpressions;
-using System.Text;
-using System.Text.Json;
-using Azure.Core.Pipeline;
+using AiCoreApi.Common.Extensions;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
@@ -37,19 +32,18 @@ namespace AiCoreApi.SemanticKernel.Agents
             public const string BaseClassifierId = "baseClassifierId";
             public const string ContainerName = "containerName";
             public const string DocumentTypes = "documentTypes";
+            public const string Action = "action";
         }
 
         private readonly IEntraTokenProvider _entraTokenProvider;
         private readonly RequestAccessor _requestAccessor;
         private readonly ResponseAccessor _responseAccessor;
-        private readonly IHttpClientFactory _httpClientFactory;
         private readonly IConnectionProcessor _connectionProcessor;
 
         public OcrBuildClassifierAgent(
             IEntraTokenProvider entraTokenProvider,
             RequestAccessor requestAccessor,
             ResponseAccessor responseAccessor,
-            IHttpClientFactory httpClientFactory,
             IConnectionProcessor connectionProcessor,
             ExtendedConfig extendedConfig, 
             ILogger<OcrBuildClassifierAgent> logger) : base(requestAccessor, extendedConfig, logger)
@@ -57,43 +51,81 @@ namespace AiCoreApi.SemanticKernel.Agents
             _entraTokenProvider = entraTokenProvider;
             _requestAccessor = requestAccessor;
             _responseAccessor = responseAccessor;
-            _httpClientFactory = httpClientFactory;
             _connectionProcessor = connectionProcessor;
         }
 
         public override async Task<string> DoCall(
-            AgentModel agent, 
+            AgentModel agent,
             Dictionary<string, string> parameters)
         {
             parameters.ToList().ForEach(p => parameters[p.Key] = HttpUtility.HtmlDecode(p.Value));
 
-            var diConnectionName = agent.Content[AgentContentParameters.DocumentIntelligenceConnection].Value;
-
-            var saConnectionName = agent.Content[AgentContentParameters.StorageAccountConnection].Value;
-
             var connections = await _connectionProcessor.List();
+            var action = agent.Content.ContainsKey(AgentContentParameters.Action)
+                ? agent.Content[AgentContentParameters.Action].Value
+                : "buildClassifier";
+            if (action == "buildClassifier")
+                return await BuildClassifier(connections, agent, parameters);
+            return await ReturnDocumentTypes(connections, agent, parameters);
+        }
 
+        public async Task<string> ReturnDocumentTypes(
+            List<ConnectionModel> connections,
+            AgentModel agent,
+            Dictionary<string, string> parameters)
+        {
+            var diConnectionName = agent.Content[AgentContentParameters.DocumentIntelligenceConnection].Value;
             var ocrConnection = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.DocumentIntelligence, DebugMessageSenderName, connectionName: diConnectionName);
-            var blobConnection = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.StorageAccount, DebugMessageSenderName, connectionName: saConnectionName);
-
             var classifierId = ApplyParameters(agent.Content[AgentContentParameters.ClassifierId].Value, parameters);
 
+            var ocrEndpoint = ocrConnection.Content["endpoint"];
+            var ocrEndpointUri = new Uri(ocrEndpoint);
+
+            var ocrAccessType = ocrConnection.Content.ContainsKey("accessType") ? ocrConnection.Content["accessType"] : "apiKey";
+            var ocrApiKey = ocrConnection.Content.ContainsKey("apiKey") ? ocrConnection.Content["apiKey"] : string.Empty;
+
+            DocumentIntelligenceAdministrationClient adminClient;
+            if (ocrAccessType == "apiKey")
+            {
+                adminClient = new DocumentIntelligenceAdministrationClient(ocrEndpointUri, new AzureKeyCredential(ocrApiKey));
+            }
+            else
+            {
+                var accessToken = await _entraTokenProvider.GetAccessTokenObjectAsync(ocrAccessType, "https://cognitiveservices.azure.com/.default");
+                adminClient = new DocumentIntelligenceAdministrationClient(ocrEndpointUri, new StaticTokenCredential(accessToken.Token, accessToken.ExpiresOn));
+            }
+
+            var classifier = await adminClient.GetClassifierAsync(classifierId);
+            _responseAccessor.AddDebugMessage(DebugMessageSenderName, "OCR Build Classifier", $"Document Types: {ocrEndpoint}\nClassifier ID: {classifierId}");
+
+            var documentTypes = classifier.Value.DocumentTypes.Select(docType => docType.Key).ToList();
+            var result = documentTypes.ToJson() ?? "";
+            _responseAccessor.AddDebugMessage(DebugMessageSenderName, "OCR Build Classifier Result", $"Document Types: {result}");
+            return result;
+        }
+
+        public async Task<string> BuildClassifier(
+            List<ConnectionModel> connections,
+            AgentModel agent,
+            Dictionary<string, string> parameters)
+        {
+            var diConnectionName = agent.Content[AgentContentParameters.DocumentIntelligenceConnection].Value;
+            var saConnectionName = agent.Content[AgentContentParameters.StorageAccountConnection].Value;
+            var ocrConnection = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.DocumentIntelligence, DebugMessageSenderName, connectionName: diConnectionName);
+            var blobConnection = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.StorageAccount, DebugMessageSenderName, connectionName: saConnectionName);
+            var classifierId = ApplyParameters(agent.Content[AgentContentParameters.ClassifierId].Value, parameters);
             if (string.IsNullOrWhiteSpace(classifierId))
             {
                 throw new ArgumentException($"{AgentContentParameters.ClassifierId} cannot be empty");
             }
-
             var baseClassifierId = !agent.Content.ContainsKey(AgentContentParameters.BaseClassifierId) 
                 ? null 
                 : ApplyParameters(agent.Content[AgentContentParameters.BaseClassifierId].Value, parameters);
-
             var containerName = ApplyParameters(agent.Content[AgentContentParameters.ContainerName].Value, parameters);
-
             if (string.IsNullOrWhiteSpace(containerName))
             {
                 throw new ArgumentException($"{AgentContentParameters.ContainerName} cannot be empty");
             }
-
             var documentTypesRaw = ApplyParameters(agent.Content[AgentContentParameters.DocumentTypes].Value, parameters);
             var documentTypes = Regex.Split(documentTypesRaw, @"\r?\n")
                 .Select(x => x.Trim())
@@ -152,28 +184,21 @@ namespace AiCoreApi.SemanticKernel.Agents
             AuthData authData)
         {
             var saEndpoint = GetStorageAccountEndpoint(saAccountName);
-
             var containerUrl = GetContainerUrl(saEndpoint, containerName);
-
             var blobSources = GetBlobSources(documentTypes, containerName, containerUrl);
-
             await PrepareBlobs(saEndpoint, blobSources, OcrModelName, diEndpoint, authData, SupportedFileFormats);
-
             var result = await BuildClassifier(blobSources, classifierId, baseClassifierId, diEndpoint, authData);
-
             return result?.Warnings == null ? string.Empty : JsonSerializer.Serialize(result.Warnings);
         }
 
-        async Task<DocumentClassifierDetails> BuildClassifier(ICollection<ImageTypeBlobSource> blobSources, string classifierId, string baseClassifierId, string ocrEndpoint, AuthData authData, CancellationToken cancellationToken = default(CancellationToken))
+        private async Task<DocumentClassifierDetails> BuildClassifier(ICollection<ImageTypeBlobSource> blobSources, string classifierId, string baseClassifierId, string ocrEndpoint, AuthData authData, CancellationToken cancellationToken = default(CancellationToken))
         {
             var imageTypes = GetDocumentTypes(blobSources);
-
             var buildOptions = new BuildClassifierOptions(classifierId, imageTypes)
             {
                 AllowOverwrite = true,
                 BaseClassifierId = string.IsNullOrWhiteSpace(baseClassifierId) ? null : baseClassifierId
             };
-
             var adminClient = GetOcrAdministrationClient(ocrEndpoint, authData);
 
             var operation = await adminClient.BuildClassifierAsync(
@@ -181,16 +206,13 @@ namespace AiCoreApi.SemanticKernel.Agents
                 buildOptions,
                 cancellationToken
             ).ConfigureAwait(false);
-
             return operation.Value;
         }
 
-        Dictionary<string, ClassifierDocumentTypeDetails> GetDocumentTypes(ICollection<ImageTypeBlobSource> blobSourceItems)
-        {
-            return blobSourceItems.ToDictionary(b => b.ImageTypeName, b => new ClassifierDocumentTypeDetails(b.BlobSource));
-        }
+        private Dictionary<string, ClassifierDocumentTypeDetails> GetDocumentTypes(ICollection<ImageTypeBlobSource> blobSourceItems) => 
+            blobSourceItems.ToDictionary(b => b.ImageTypeName, b => new ClassifierDocumentTypeDetails(b.BlobSource));
 
-        async Task PrepareBlobs(string saEndpoint, ICollection<ImageTypeBlobSource> blobSources, string modelName, string ocrEndpoint, AuthData authData, HashSet<string> supportedFileExtensions, CancellationToken cancellationToken = default(CancellationToken))
+        private async Task PrepareBlobs(string saEndpoint, ICollection<ImageTypeBlobSource> blobSources, string modelName, string ocrEndpoint, AuthData authData, HashSet<string> supportedFileExtensions, CancellationToken cancellationToken = default(CancellationToken))
         {
             foreach (var bsi in blobSources)
             {
@@ -203,9 +225,7 @@ namespace AiCoreApi.SemanticKernel.Agents
                                    .ConfigureAwait(false))
                 {
                     if (!supportedFileExtensions.Contains(Path.GetExtension(blob.Name)))
-                    {
                         continue;
-                    }
 
                     try
                     {
@@ -222,7 +242,7 @@ namespace AiCoreApi.SemanticKernel.Agents
                         var ocrBlobName = blob.Name + ".ocr.json";
                         var ocrBlobClient = containerClient.GetBlobClient(ocrBlobName);
 
-                        var blobResponse = await ocrBlobClient
+                        await ocrBlobClient
                             .UploadAsync(response.Content, true, cancellationToken).ConfigureAwait(false);
                     }
                     catch (Exception ex)
@@ -237,7 +257,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             }
         }
 
-        string GetBlobUrl(string containerUrl, string blobName)
+        private string GetBlobUrl(string containerUrl, string blobName)
         {
             var encodedBlobName = Uri.EscapeDataString(blobName).Replace("%2F", "/");
 
@@ -249,7 +269,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             return $"{baseUrl.TrimEnd('/')}/{encodedBlobName}{query}";
         }
 
-        ICollection<ImageTypeBlobSource> GetBlobSources(ICollection<string> prefixes, string containerName, string containerUrl)
+        private ICollection<ImageTypeBlobSource> GetBlobSources(ICollection<string> prefixes, string containerName, string containerUrl)
         {
             var prefixesUnique = prefixes.Select(p => Regex.Replace(p, "/+$", "")).ToHashSet(StringComparer.InvariantCultureIgnoreCase);
             var containerUri = new Uri(containerUrl);
@@ -263,26 +283,17 @@ namespace AiCoreApi.SemanticKernel.Agents
             }).ToArray();
         }
 
-        string GetContainerUrl(string accountEndpoint, string containerName)
+        private string GetContainerUrl(string accountEndpoint, string containerName)
         {
             return $"{accountEndpoint}/{Uri.EscapeDataString(containerName)}";
         }
 
-        string GetStorageAccountEndpoint(string accountName)
+        private string GetStorageAccountEndpoint(string accountName)
         {
             return $"https://{accountName}.blob.core.windows.net";
         }
 
-        private static string? GetParameterValueOrNull(AgentModel agent, string optionName)
-        {
-            return !agent.Content.ContainsKey(optionName)
-                ? null
-                : string.IsNullOrWhiteSpace(agent.Content[optionName].Value)
-                    ? null
-                    : agent.Content[optionName].Value;
-        }
-
-        AuthData GetAuthData(string blobAccessType, string accountName, string? storageAccountKey, string ocrAccessType, string? ocrApiKey)
+        private AuthData GetAuthData(string blobAccessType, string accountName, string? storageAccountKey, string ocrAccessType, string? ocrApiKey)
         {
             var blobAuthIsApiKey = AuthTypeIsApiKey(blobAccessType);
             var ocrAuthIsApiKey = AuthTypeIsApiKey(ocrAccessType);
@@ -308,42 +319,31 @@ namespace AiCoreApi.SemanticKernel.Agents
             };
         }
 
-        bool AuthTypeIsApiKey(string authTypeRaw)
-        {
-            return authTypeRaw == "apiKey";
-        }
+        private bool AuthTypeIsApiKey(string authTypeRaw) => authTypeRaw == "apiKey";
 
-        #region GetClients
-
-        DocumentIntelligenceClient GetOcrClient(string ocrEndpoint, AuthData authData)
+        private DocumentIntelligenceClient GetOcrClient(string ocrEndpoint, AuthData authData)
         {
             var ocrEndpointUri = new Uri(ocrEndpoint);
-
             return authData.OcrAuthIsApiKey
                 ? new DocumentIntelligenceClient(ocrEndpointUri, authData.OcrKeyCredential)
                 : new DocumentIntelligenceClient(ocrEndpointUri, authData.OcrTokenCredential);
         }
 
-        DocumentIntelligenceAdministrationClient GetOcrAdministrationClient(string ocrEndpoint, AuthData authData)
+        private DocumentIntelligenceAdministrationClient GetOcrAdministrationClient(string ocrEndpoint, AuthData authData)
         {
             var ocrEndpointUri = new Uri(ocrEndpoint);
-
             return authData.OcrAuthIsApiKey
                 ? new DocumentIntelligenceAdministrationClient(ocrEndpointUri, authData.OcrKeyCredential)
                 : new DocumentIntelligenceAdministrationClient(ocrEndpointUri, authData.OcrTokenCredential);
         }
 
-        BlobServiceClient GetBlobServiceClient(string accountEndpoint, AuthData authData)
+        private BlobServiceClient GetBlobServiceClient(string accountEndpoint, AuthData authData)
         {
             var accountUri = new Uri(accountEndpoint);
             return authData.BlobAuthIsApiKey
                 ? new BlobServiceClient(accountUri, authData.BlobKeyCredential)
                 : new BlobServiceClient(accountUri, authData.BlobTokenCredential);
         }
-
-        #endregion
-
-        #region Types
 
         public class EntraTokenProviderWrapperCredential : TokenCredential
         {
@@ -361,46 +361,32 @@ namespace AiCoreApi.SemanticKernel.Agents
                 _accessType = accessType;
             }
 
-            public override AccessToken GetToken(TokenRequestContext requestContext, CancellationToken cancellationToken)
-            {
-                return GetTokenAsync(requestContext, cancellationToken).GetAwaiter().GetResult();
-            }
+            public override AccessToken GetToken(TokenRequestContext requestContext, CancellationToken cancellationToken) => 
+                GetTokenAsync(requestContext, cancellationToken).GetAwaiter().GetResult();
 
-            public override async ValueTask<AccessToken> GetTokenAsync(TokenRequestContext requestContext, CancellationToken cancellationToken)
-            {
-                return await _tokenProvider.GetAccessTokenObjectAsync(_accessType, requestContext.Scopes[0]);
-            }
+            public override async ValueTask<AccessToken> GetTokenAsync(TokenRequestContext requestContext, CancellationToken cancellationToken) => 
+                await _tokenProvider.GetAccessTokenObjectAsync(_accessType, requestContext.Scopes[0]);
         }
 
-        class AuthData
+        private class AuthData
         {
             public bool BlobAuthIsApiKey { get; set; }
 
             public TokenCredential? BlobTokenCredential { get; set; }
-
             public StorageSharedKeyCredential? BlobKeyCredential { get; set; }
-
             public bool OcrAuthIsApiKey { get; set; }
-
             public AzureKeyCredential OcrKeyCredential { get; set; }
-
             public TokenCredential? OcrTokenCredential { get; set; }
         }
 
         class ImageTypeBlobSource
         {
             public string ImageTypeName { get; set; }
-
             public BlobContentSource BlobSource { get; set; }
-
             public string BlobPrefix { get; set; }
-
             public string ContainerName { get; set; }
-
             public string ContainerUrl { get; set; }
         }
-
-        #endregion
     }
 
     public interface IOcrBuildClassifierAgent

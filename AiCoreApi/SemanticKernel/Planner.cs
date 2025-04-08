@@ -57,7 +57,10 @@ namespace AiCoreApi.SemanticKernel
         public async Task<MessageDialogViewModel.Message> GetChatResponse()
         {
             var agentsList = await _plannerHelpers.GetAgentsList();
-            // Check if there are any call options and apply them. If call options are not valid, return current message.
+            var agentCallResponse = await GetAgentCallResponse();
+            if (agentCallResponse != null)
+                return agentCallResponse;
+            
             var applyCallOptionsResult = await _plannerCallOptions.Apply(agentsList);
             if (!applyCallOptionsResult.Success)
             {
@@ -103,6 +106,37 @@ namespace AiCoreApi.SemanticKernel
                 _distributedCache.Remove(_plannerHelpers.GetPlannerCacheKey(plannerPrompt, kernel));
             }
             return _responseAccessor.CurrentMessage;
+        }
+
+        private async Task<MessageDialogViewModel.Message?> GetAgentCallResponse()
+        {
+            var currentMessage = _requestAccessor.MessageDialog?.Messages?.Last();
+            if (currentMessage?.Options != null && currentMessage.Options.Length > 0 && currentMessage.Options[0].Type == MessageDialogViewModel.CallOptions.CallOptionsType.AgentCall)
+            {
+                try
+                {
+                    var agentName = currentMessage.Options[0].Name;
+                    var parameters = currentMessage.Options[0].Parameters.Select(item => item.Value).ToList();
+                    _responseAccessor.AddDebugMessage(DebugMessageSenderName, "Agent Execution", $"Agent {agentName}, Parameters: {string.Join(",", parameters)}");
+                    var result = await _plannerHelpers.ExecuteAgent(agentName, parameters);
+                    if (string.IsNullOrEmpty(_responseAccessor.CurrentMessage.Text))
+                    {
+                        _responseAccessor.CurrentMessage.Text = string.IsNullOrEmpty(result) || result == "null"
+                            ? _extendedConfig.NoInformationFoundText
+                            : result;
+                    }
+                    _responseAccessor.AddDebugMessage(DebugMessageSenderName, "Agent Execution Result", _responseAccessor.CurrentMessage.Text);
+                    return _responseAccessor.CurrentMessage;
+                }
+                catch (Exception ex)
+                {
+                    _responseAccessor.AddDebugMessage(DebugMessageSenderName, "Agent Execution Error", ex.Message);
+                    _responseAccessor.CurrentMessage.Text = _extendedConfig.NoInformationFoundText;
+                    _logger.LogError(ex, "Error in agent execution");
+                }
+                return _responseAccessor.CurrentMessage;
+            }
+            return null;
         }
 
         private async Task<string> AddPlugins(string plannerPrompt, bool useAllPlugins, Kernel kernel)
