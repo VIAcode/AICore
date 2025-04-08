@@ -408,7 +408,13 @@ public class ExtendedConfig
     [DataType(DataTypeAttribute.ConfigDataTypeEnum.String)]
     [Description("Git Storage Path")]
     [Tooltip("The Git Storage Path is used to specify the path of the Git Storage. Git Storage is used to store Agents History.")]
-    public string GitStoragePath => GetValue<string>("GitStoragePath", "/");
+    public string GitStoragePath => GetValue<string>("GitStoragePath", "agents");
+
+    [Category(CategoryAttribute.ConfigCategoryEnum.GitStorage)]
+    [DataType(DataTypeAttribute.ConfigDataTypeEnum.String)]
+    [Description("Git Storage branch")]
+    [Tooltip("The Git Storage branch is used to specify the branch of the Git Storage. Git Storage is used to store Agents History. This branch is used to connect to the Git Storage.")]
+    public string GitStorageBranch => GetValue<string>("GitStorageBranch", "main");
 
     [Category(CategoryAttribute.ConfigCategoryEnum.GitStorage)]
     [DataType(DataTypeAttribute.ConfigDataTypeEnum.String)]

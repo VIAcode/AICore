@@ -28,6 +28,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             public const string Options = "options";
             public const string DocumentIntelligenceConnection = "documentIntelligenceConnection";
             public const string Base64Image = "base64Image";
+            public const string OrderBy = "orderBy";
         }
 
         private static class AgentOptions
@@ -110,19 +111,19 @@ namespace AiCoreApi.SemanticKernel.Agents
             var outputFormat = !agent.Content.ContainsKey(AgentContentParameters.OutputFormat)
                 ? "text"
                 : agent.Content[AgentContentParameters.OutputFormat].Value.ToLower();
-
+            var orderByAsc = agent.Content.ContainsKey(AgentContentParameters.OrderBy) && agent.Content[AgentContentParameters.OrderBy].Value == "asc";
             var endpoint = connection.Content["endpoint"];
             var modelName = connection.Content["modelName"];
             var accessType = connection.Content.ContainsKey("accessType") ? connection.Content["accessType"] : "apiKey";
             var apiKey = connection.Content.ContainsKey("apiKey") ? connection.Content["apiKey"] : "";
             _responseAccessor.AddDebugMessage(DebugMessageSenderName, "OCR Processing", $"{endpoint}, {modelName}, {accessType}, {apiKey} \r\nFormat: {outputFormat} Options:{string.Join(", ", optionsList)} Output:{string.Join(", ", outputList)}");
-            var result = await ProcessFile(endpoint, modelName, apiKey, accessType, optionsList, outputList, outputFormat, base64Image.StripBase64());
+            var result = await ProcessFile(endpoint, modelName, apiKey, accessType, optionsList, outputList, outputFormat, base64Image.StripBase64(), orderByAsc);
             _responseAccessor.AddDebugMessage(DebugMessageSenderName, "OCR Processing Result", result);
             return result;
         }
 
 
-        private async Task<string?> ProcessFile(string modelUrl, string modelName, string apiKey, string accessType, List<string> optionsList, List<string> outputList, string outputFormat, string base64Data)
+        private async Task<string?> ProcessFile(string modelUrl, string modelName, string apiKey, string accessType, List<string> optionsList, List<string> outputList, string outputFormat, string base64Data, bool orderByAsc)
         {
             var file = Convert.FromBase64String(base64Data);
 
@@ -199,22 +200,22 @@ namespace AiCoreApi.SemanticKernel.Agents
                     // WordArea
                     if (outputList.Contains(AgentOutputOptions.WordArea))
                     {
-                        page.WordArea = GetWordArea(ocrPage, useConfidence);
+                        page.WordArea = GetWordArea(ocrPage, useConfidence, orderByAsc);
                     }
                     // WordMiddle
                     if (outputList.Contains(AgentOutputOptions.WordMiddle))
                     {
-                        page.WordMiddle = GetWordMiddle(ocrPage, useConfidence);
+                        page.WordMiddle = GetWordMiddle(ocrPage, useConfidence, orderByAsc);
                     }
                     // TextArea
                     if (outputList.Contains(AgentOutputOptions.TextArea))
                     {
-                        page.TextArea = GetTextArea(ocrPage);
+                        page.TextArea = GetTextArea(ocrPage, orderByAsc);
                     }
                     // TextMiddle
                     if (outputList.Contains(AgentOutputOptions.TextMiddle))
                     {
-                        page.TextMiddle = GetTextMiddle(ocrPage);
+                        page.TextMiddle = GetTextMiddle(ocrPage, orderByAsc);
                     }
                     // BarCodes
                     if (outputList.Contains(AgentOutputOptions.BarCodes))
@@ -384,7 +385,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             return markdown.ToString();
         }
 
-        private List<ContentPointItem> GetWordMiddle(DocumentPage ocrPage, bool useConfidence)
+        private List<ContentPointItem> GetWordMiddle(DocumentPage ocrPage, bool useConfidence, bool orderByAsc)
         {
             var textMiddle = new List<ContentPointItem>();
             foreach (var word in ocrPage.Words)
@@ -397,11 +398,13 @@ namespace AiCoreApi.SemanticKernel.Agents
                     Confidence = useConfidence ? word.Confidence : null,
                 });
             }
-            textMiddle = textMiddle.OrderByDescending(item => item.Location.Y).ToList();
+            textMiddle = orderByAsc
+                ? textMiddle.OrderBy(item => item.Location.Y).ToList()
+                : textMiddle.OrderByDescending(item => item.Location.Y).ToList();
             return textMiddle;
         }
 
-        private List<ContentAreaItem> GetWordArea(DocumentPage ocrPage, bool useConfidence)
+        private List<ContentAreaItem> GetWordArea(DocumentPage ocrPage, bool useConfidence, bool orderByAsc)
         {
             var textAreas = new List<ContentAreaItem>();
             foreach (var word in ocrPage.Words)
@@ -414,11 +417,13 @@ namespace AiCoreApi.SemanticKernel.Agents
                     Confidence = useConfidence ? word.Confidence : null,
                 });
             }
-            textAreas = textAreas.OrderByDescending(item => item.Location.Sum(l => l.Y)).ToList();
+            textAreas = orderByAsc
+                ? textAreas.OrderBy(item => item.Location.Sum(l => l.Y)).ToList()
+                : textAreas.OrderByDescending(item => item.Location.Sum(l => l.Y)).ToList();
             return textAreas;
         }
 
-        private List<ContentPointItem> GetTextMiddle(DocumentPage ocrPage)
+        private List<ContentPointItem> GetTextMiddle(DocumentPage ocrPage, bool orderByAsc)
         {
             var wordsMiddle = ocrPage.Words.Select(word => new
             {
@@ -436,11 +441,13 @@ namespace AiCoreApi.SemanticKernel.Agents
                     Confidence = wordsMiddle.Select(word => IsPointInsideQuadrilateral(word.Middle, points) ? word.Confidence : 1).Min(x => x)
                 });
             }
-            textMiddle = textMiddle.OrderByDescending(item => item.Location.Y).ToList();
+            textMiddle = orderByAsc
+                ? textMiddle.OrderBy(item => item.Location.Y).ToList()
+                : textMiddle.OrderByDescending(item => item.Location.Y).ToList();
             return textMiddle;
         }
 
-        private List<ContentAreaItem> GetTextArea(DocumentPage ocrPage)
+        private List<ContentAreaItem> GetTextArea(DocumentPage ocrPage, bool orderByAsc)
         {
             var wordsMiddle = ocrPage.Words.Select(word => new
             {
@@ -458,7 +465,9 @@ namespace AiCoreApi.SemanticKernel.Agents
                     Confidence = wordsMiddle.Select(word => IsPointInsideQuadrilateral(word.Middle, points) ? word.Confidence : 1).Min(x => x)
                 });
             }
-            textAreas = textAreas.OrderByDescending(item => item.Location.Sum(l => l.Y)).ToList();
+            textAreas = orderByAsc
+                ? textAreas.OrderBy(item => item.Location.Sum(l => l.Y)).ToList()
+                : textAreas.OrderByDescending(item => item.Location.Sum(l => l.Y)).ToList();
             return textAreas;
         }
 
