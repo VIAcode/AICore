@@ -357,6 +357,7 @@ public class AgentsService : IAgentsService
 
     private async Task<string> EnsureClonedGitRepo()
     {
+        var gitBranch = _extendedConfig.GitStorageBranch;
         var repoPath = GetRepoPath();
         await GitRepoLock.WaitAsync();
         try
@@ -364,10 +365,11 @@ public class AgentsService : IAgentsService
             if (!Repository.IsValid(repoPath))
             {
                 if (Directory.Exists(repoPath))
-                    Directory.Delete(repoPath, true); 
+                    Directory.Delete(repoPath, true);
 
                 var co = new CloneOptions
                 {
+                    BranchName = gitBranch,
                     FetchOptions = {
                         CredentialsProvider = (_, _, _) =>
                             new UsernamePasswordCredentials
@@ -381,18 +383,21 @@ public class AgentsService : IAgentsService
             }
             else
             {
-                using var repo = new Repository(repoPath);
-                var remote = repo.Network.Remotes["origin"];
-                var refSpecs = remote.FetchRefSpecs.Select(x => x.Specification);
-                Commands.Fetch(repo, remote.Name, refSpecs, new FetchOptions
+                using (var repo = new Repository(repoPath))
                 {
-                    CredentialsProvider = (_, _, _) =>
-                        new UsernamePasswordCredentials
-                        {
-                            Username = _extendedConfig.GitStorageUsername,
-                            Password = _extendedConfig.GitStoragePassword
-                        }
-                }, null);
+                    var remote = repo.Network.Remotes["origin"];
+                    var refSpecs = remote.FetchRefSpecs.Select(x => x.Specification);
+                    Commands.Fetch(repo, remote.Name, refSpecs, new FetchOptions
+                    {
+                        CredentialsProvider = (_, _, _) =>
+                            new UsernamePasswordCredentials
+                            {
+                                Username = _extendedConfig.GitStorageUsername,
+                                Password = _extendedConfig.GitStoragePassword
+                            }
+                    }, null);
+                    EnsureBranchCheckedOut(repo, gitBranch);
+                }
             }
         }
         finally
@@ -409,6 +414,7 @@ public class AgentsService : IAgentsService
             return;
         try
         {
+            var gitBranch = _extendedConfig.GitStorageBranch;
             var repoPath = await EnsureClonedGitRepo();
             var fileMap = await PrepareAgentExportFiles((await _agentsProcessor.List()).Select(a => a.AgentId).ToList());
             foreach (var kvp in fileMap)
@@ -419,11 +425,12 @@ public class AgentsService : IAgentsService
             }
             using (var repo = new Repository(repoPath))
             {
+                var localBranch = EnsureBranchCheckedOut(repo, gitBranch);
                 Commands.Stage(repo, "*");
                 var author = new Signature(_requestAccessor.Login, _requestAccessor.Login, DateTimeOffset.Now);
                 repo.Commit($"Changes from {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss} by {_requestAccessor.Login}", author, author);
 
-                repo.Network.Push(repo.Head, new PushOptions
+                repo.Network.Push(localBranch, new PushOptions
                 {
                     CredentialsProvider = (_, _, _) => new UsernamePasswordCredentials
                     {
@@ -445,6 +452,7 @@ public class AgentsService : IAgentsService
         if (agent == null || !_extendedConfig.UseGitStorage)
             return new();
 
+        var gitBranch = _extendedConfig.GitStorageBranch;
         var repoPath = await EnsureClonedGitRepo();
         var content = agent.Content.First();
         var fileName = $"{agent.Name}-{content.Value.Code}.{content.Value.Extension}";
@@ -452,27 +460,29 @@ public class AgentsService : IAgentsService
 
         var history = new List<string>();
 
-        using var repo = new Repository(repoPath);
-        var commits = repo.Commits.QueryBy(new CommitFilter
+        using (var repo = new Repository(repoPath))
         {
-            SortBy = CommitSortStrategies.Time,
-            FirstParentOnly = true
-        });
-
-        foreach (var commit in commits)
-        {
-            if (!commit.Parents.Any())
-                continue;
-
-            var parent = commit.Parents.First();
-            var changes = repo.Diff.Compare<TreeChanges>(parent.Tree, commit.Tree);
-
-            if (changes.Any(change => change.Path == relativePath))
+            EnsureBranchCheckedOut(repo, gitBranch);
+            var commits = repo.Commits.QueryBy(new CommitFilter
             {
-                history.Add(commit.MessageShort);
+                SortBy = CommitSortStrategies.Time,
+                FirstParentOnly = true
+            });
+
+            foreach (var commit in commits)
+            {
+                if (!commit.Parents.Any())
+                    continue;
+
+                var parent = commit.Parents.First();
+                var changes = repo.Diff.Compare<TreeChanges>(parent.Tree, commit.Tree);
+
+                if (changes.Any(change => change.Path == relativePath))
+                {
+                    history.Add(commit.MessageShort);
+                }
             }
         }
-
         return history;
     }
 
@@ -482,6 +492,7 @@ public class AgentsService : IAgentsService
         if (agent == null || !_extendedConfig.UseGitStorage)
             return string.Empty;
 
+        var gitBranch = _extendedConfig.GitStorageBranch;
         var repoPath = await EnsureClonedGitRepo();
         var content = agent.Content.First();
         var fileName = $"{agent.Name}-{content.Value.Code}.{content.Value.Extension}";
@@ -489,6 +500,7 @@ public class AgentsService : IAgentsService
 
         using (var repo = new Repository(repoPath))
         {
+            EnsureBranchCheckedOut(repo, gitBranch);
             var commit = repo.Commits
                 .QueryBy(new CommitFilter { SortBy = CommitSortStrategies.Time, FirstParentOnly = true })
                 .FirstOrDefault(c => c.MessageShort == gitTitle);
@@ -500,6 +512,23 @@ public class AgentsService : IAgentsService
             using (var reader = new StreamReader(stream))
                 return await reader.ReadToEndAsync();
         }
+    }
+
+    private Branch EnsureBranchCheckedOut(Repository repo, string gitBranch)
+    {
+        var localBranch = repo.Branches[gitBranch];
+        if (localBranch == null)
+        {
+            var remoteBranch = repo.Branches["origin/" + gitBranch];
+            if (remoteBranch == null)
+                throw new Exception($"Branch '{gitBranch}' not found in remote.");
+
+            localBranch = repo.CreateBranch(gitBranch, remoteBranch.Tip);
+            repo.Branches.Update(localBranch, b => b.TrackedBranch = remoteBranch.CanonicalName);
+        }
+
+        Commands.Checkout(repo, localBranch);
+        return localBranch;
     }
 }
 
