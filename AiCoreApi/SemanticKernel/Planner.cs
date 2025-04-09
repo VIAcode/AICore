@@ -119,11 +119,13 @@ namespace AiCoreApi.SemanticKernel
                     var parameters = currentMessage.Options[0].Parameters.Select(item => item.Value).ToList();
                     _responseAccessor.AddDebugMessage(DebugMessageSenderName, "Agent Execution", $"Agent {agentName}, Parameters: {string.Join(",", parameters)}");
                     var result = await _plannerHelpers.ExecuteAgent(agentName, parameters);
-                    if (string.IsNullOrEmpty(_responseAccessor.CurrentMessage.Text))
+                    if (!string.IsNullOrEmpty(result))
                     {
-                        _responseAccessor.CurrentMessage.Text = string.IsNullOrEmpty(result) || result == "null"
-                            ? _extendedConfig.NoInformationFoundText
-                            : result;
+                        _responseAccessor.CurrentMessage.Text = result;
+                    }
+                    else if (string.IsNullOrEmpty(_responseAccessor.CurrentMessage.Text))
+                    {
+                        _responseAccessor.CurrentMessage.Text = _extendedConfig.NoInformationFoundText;
                     }
                     _responseAccessor.AddDebugMessage(DebugMessageSenderName, "Agent Execution Result", _responseAccessor.CurrentMessage.Text);
                     return _responseAccessor.CurrentMessage;
