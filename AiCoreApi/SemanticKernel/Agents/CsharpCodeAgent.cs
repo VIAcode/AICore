@@ -324,25 +324,24 @@ namespace AiCoreApi.SemanticKernel.Agents
             return packagePaths;
         }
 
-        private async Task ResolvePackageAndDependencies(
+
+        private async Task<(FindPackageByIdResource? resource, NuGetVersion? selectedVersion)> GetPackageResourceAndVersion(
+            string packageName, string version, List<SourceRepository> repositories, SourceCacheContext cache, ILogger logger) =>
+            await GetPackageResourceAndVersion(packageName, new VersionRange(NuGetVersion.Parse(version)), repositories, cache, logger);
+
+        private async Task<(FindPackageByIdResource? resource, NuGetVersion? selectedVersion)> GetPackageResourceAndVersion(
             string packageName,
-            string version,
+            VersionRange versionRange,
             List<SourceRepository> repositories,
             SourceCacheContext cache,
-            ILogger logger,
-            List<string> packagePaths,
-            HashSet<string> processedPackages)
+            ILogger logger)
         {
-            var currentFramework = NuGetFramework.ParseFolder($"net{Environment.Version.Major}.{Environment.Version.Minor}");
-            var runtimeIdentifier = RuntimeInformation.RuntimeIdentifier;
-
             FindPackageByIdResource? resource = null;
             NuGetVersion? selectedVersion = null;
 
             foreach (var repository in repositories)
             {
                 resource = await repository.GetResourceAsync<FindPackageByIdResource>();
-                var versionRange = new VersionRange(NuGetVersion.Parse(version));
                 var versions = await resource.GetAllVersionsAsync(packageName, cache, logger, CancellationToken.None);
                 selectedVersion = versions.FindBestMatch(versionRange, v => v);
                 if (selectedVersion == null)
@@ -355,11 +354,27 @@ namespace AiCoreApi.SemanticKernel.Agents
                     _responseAccessor.AddDebugMessage(
                         DebugMessageSenderName,
                         "C# Code Warning",
-                        $"NuGet package '{packageName}' version '{version}' not found. Using latest: {selectedVersion}"
+                        $"NuGet package '{packageName}' version '{versionRange.ToString()}' not found. Using latest: {selectedVersion}"
                     );
                 }
                 break;
             }
+
+            return (resource, selectedVersion);
+        }
+
+        private async Task ResolvePackageAndDependencies(
+            string packageName,
+            string version,
+            List<SourceRepository> repositories,
+            SourceCacheContext cache,
+            ILogger logger,
+            List<string> packagePaths,
+            HashSet<string> processedPackages)
+        {
+            var currentFramework = NuGetFramework.ParseFolder($"net{Environment.Version.Major}.{Environment.Version.Minor}");
+
+            (FindPackageByIdResource? resource, NuGetVersion? selectedVersion) = await GetPackageResourceAndVersion(packageName, version, repositories, cache, logger);
 
             if (resource == null || selectedVersion == null)
                 throw new Exception($"NuGet package '{packageName}' not found in any repository");
@@ -470,28 +485,12 @@ namespace AiCoreApi.SemanticKernel.Agents
                 {
                     var depPackageName = dependency.Id;
                     var depVersionRange = dependency.VersionRange;
-                    var depVersions = await resource.GetAllVersionsAsync(depPackageName, cache, logger, CancellationToken.None);
-                    var depVersion = depVersions.FindBestMatch(depVersionRange, v => v);
-
-                    if (depVersion == null)
-                    {
-                        if (!depVersions.Any())
-                            throw new Exception($"Dependency {depPackageName} not found in NuGet repository");
-
-                        // If the exact version isn't found, use the latest
-                        depVersion = depVersions.Last();
-                        _responseAccessor.AddDebugMessage(
-                            DebugMessageSenderName,
-                            "C# Code Warning",
-                            $"Dependency NuGet package '{depPackageName}' version not found. Using latest: {depVersion}"
-                        );
-                    }
-
+                    (FindPackageByIdResource? _, NuGetVersion? depSelectedVersion) = await GetPackageResourceAndVersion(depPackageName, depVersionRange, repositories, cache, logger);
                     try
                     {
                         await ResolvePackageAndDependencies(
                             depPackageName,
-                            depVersion.ToNormalizedString(),
+                            depSelectedVersion.ToNormalizedString(),
                             repositories,
                             cache,
                             logger,
