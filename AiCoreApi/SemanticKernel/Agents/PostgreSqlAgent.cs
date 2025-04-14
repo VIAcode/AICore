@@ -1,5 +1,4 @@
 using System.Text.Json;
-using System.Text.RegularExpressions;
 using Microsoft.SemanticKernel;
 using AiCoreApi.Models.DbModels;
 using System.Web;
@@ -11,7 +10,7 @@ namespace AiCoreApi.SemanticKernel.Agents
 {
     public class PostgreSqlAgent : BaseAgent, IPostgreSqlAgent
     {
-        private const string DebugMessageSenderName = "PostgreSqlAgent";
+        private string _debugMessageSenderName = "PostgreSqlAgent";
 
         // In this context PostgreSQL does not allow parameter placeholders
         private const string InitSessionContextQuery = @"
@@ -36,7 +35,7 @@ SET aicore_session_context.login_type = '{1}';
             RequestAccessor requestAccessor,
             ResponseAccessor responseAccessor,
             ExtendedConfig extendedConfig,
-            ILogger<PostgreSqlAgent> logger) : base(requestAccessor, extendedConfig, logger)
+            ILogger<PostgreSqlAgent> logger) : base(responseAccessor, requestAccessor, extendedConfig, logger)
         {
             _connectionProcessor = connectionProcessor;
             _entraTokenProvider = entraTokenProvider;
@@ -44,20 +43,19 @@ SET aicore_session_context.login_type = '{1}';
             _responseAccessor = responseAccessor; 
         }
         
-        public override async Task<string> DoCall(
-            AgentModel agent, 
-            Dictionary<string, string> parameters)
+        public override async Task<string> DoCall(AgentModel agent, Dictionary<string, string> parameters)
         {
             parameters.ToList().ForEach(p => parameters[p.Key] = HttpUtility.HtmlDecode(p.Value));
+            _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
             var connectionName = agent.Content[AgentContentParameters.ConnectionName].Value;
             var sqlQuery = ApplyParameters(agent.Content[AgentContentParameters.SqlQuery].Value, parameters);
 
-            _responseAccessor.AddDebugMessage(DebugMessageSenderName, "DoCall Request", sqlQuery);
-            var connections = await _connectionProcessor.List();
-            var connection = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.PostgreSql, DebugMessageSenderName, connectionName: connectionName);
+            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Request", sqlQuery);
+            var connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
+            var connection = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.PostgreSql, _debugMessageSenderName, connectionName: connectionName);
             var result = await ExecuteScript(sqlQuery, connection, parameters);
-            _responseAccessor.AddDebugMessage(DebugMessageSenderName, "DoCall Response", result);
+            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Response", result);
             return result;
         }
 

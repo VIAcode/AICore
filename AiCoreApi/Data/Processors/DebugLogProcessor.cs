@@ -19,9 +19,10 @@ namespace AiCoreApi.Data.Processors
             _extendedConfig = extendedConfig;
         }
 
-        public async Task<List<DebugLogModel>> List(DebugLogFilterModel filter)
+        public async Task<List<DebugLogModel>> List(DebugLogFilterModel filter, int workspaceId)
         {
             var result = _db.DebugLog.AsNoTracking()
+                .OrderByDescending(item => item.DebugLogId)
                 .Skip(filter.Skip)
                 .Take(filter.Take);
             if (!string.IsNullOrEmpty(filter.Login))
@@ -32,12 +33,15 @@ namespace AiCoreApi.Data.Processors
                 result = result.Where(item => item.Prompt.Contains(filter.Prompt));
             if (filter.DateFrom != null)
                 result = result.Where(item => item.Date > filter.DateFrom);
+            if (workspaceId != 0)
+                result = result.Where(item => item.WorkspaceId == workspaceId);
+            else
+                result = result.Where(item => item.WorkspaceId == null);
             return await result
-                .OrderByDescending(item => item.DebugLogId)
                 .ToListAsync();
         }
 
-        public async Task<int> PagesCount(DebugLogFilterModel filter)
+        public async Task<int> PagesCount(DebugLogFilterModel filter, int workspaceId)
         {
             var result = _db.DebugLog.AsNoTracking();
             if (!string.IsNullOrEmpty(filter.Login))
@@ -48,11 +52,15 @@ namespace AiCoreApi.Data.Processors
                 result = result.Where(item => item.Prompt.Contains(filter.Prompt));
             if (filter.DateFrom != null)
                 result = result.Where(item => item.Date > filter.DateFrom);
+            if (workspaceId != 0)
+                result = result.Where(item => item.WorkspaceId == workspaceId);
+            else
+                result = result.Where(item => item.WorkspaceId == null);
             var itemsCount = await result.CountAsync();
             return itemsCount % filter.Take == 0 ? itemsCount / filter.Take : itemsCount / filter.Take + 1;
         }
 
-        public async Task<DebugLogModel> Set(DebugLogModel debugLogModel)
+        public async Task<DebugLogModel> Set(DebugLogModel debugLogModel, int workspaceId)
         {
             DebugLogModel? debugLogValue;
             if (debugLogModel.DebugLogId == 0)
@@ -66,19 +74,20 @@ namespace AiCoreApi.Data.Processors
                     DebugMessages = debugLogModel.DebugMessages,
                     Files = debugLogModel.Files,
                     SpentTokens = debugLogModel.SpentTokens,
+                    WorkspaceId = workspaceId,
                 };
                 await _db.DebugLog.AddAsync(debugLogValue);
             }
             else
             {
                 debugLogValue = await _db.DebugLog.FirstAsync(item => item.DebugLogId == debugLogModel.DebugLogId);
-                debugLogValue.Login = debugLogValue.Login;
-                debugLogValue.Date = debugLogValue.Date;
-                debugLogValue.Prompt = debugLogValue.Prompt;
-                debugLogValue.Result = debugLogValue.Result;
-                debugLogValue.DebugMessages = debugLogValue.DebugMessages;
-                debugLogValue.Files = debugLogValue.Files;
-                debugLogValue.SpentTokens = debugLogValue.SpentTokens;
+                debugLogValue.Login = debugLogModel.Login;
+                debugLogValue.Date = debugLogModel.Date;
+                debugLogValue.Prompt = debugLogModel.Prompt;
+                debugLogValue.Result = debugLogModel.Result;
+                debugLogValue.DebugMessages = debugLogModel.DebugMessages;
+                debugLogValue.Files = debugLogModel.Files;
+                debugLogValue.SpentTokens = debugLogModel.SpentTokens;
                 _db.DebugLog.Update(debugLogValue);
             }
 
@@ -86,7 +95,7 @@ namespace AiCoreApi.Data.Processors
             return debugLogValue;
         }
 
-        public async Task Add(string? login, string? prompt, MessageDialogViewModel messageDialog)
+        public async Task Add(string? login, string? prompt, MessageDialogViewModel messageDialog, int workspaceId)
         {
             if (_extendedConfig.DebugMessagesStorageEnabled)
             {
@@ -107,7 +116,7 @@ namespace AiCoreApi.Data.Processors
                         Title = x.Title,
                         Details = x.Details
                     }).ToList()
-                });
+                }, workspaceId);
             }
         }
 
@@ -124,10 +133,10 @@ namespace AiCoreApi.Data.Processors
 
     public interface IDebugLogProcessor
     {
-        Task<List<DebugLogModel>> List(DebugLogFilterModel filter);
-        Task<int> PagesCount(DebugLogFilterModel filter);
-        Task<DebugLogModel> Set(DebugLogModel debugLogModel);
-        Task Add(string? login, string? prompt, MessageDialogViewModel messageDialog);
+        Task<List<DebugLogModel>> List(DebugLogFilterModel filter, int workspaceId);
+        Task<int> PagesCount(DebugLogFilterModel filter, int workspaceId);
+        Task<DebugLogModel> Set(DebugLogModel debugLogModel, int workspaceId);
+        Task Add(string? login, string? prompt, MessageDialogViewModel messageDialog, int workspaceId);
         Task Remove(DateTime dateLimit);
     }
 }

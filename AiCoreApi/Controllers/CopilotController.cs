@@ -1,4 +1,5 @@
 ﻿using AiCoreApi.Authorization;
+using AiCoreApi.Common.Extensions;
 using AiCoreApi.Models.ViewModels;
 using AiCoreApi.Services.ControllersServices;
 using Microsoft.AspNetCore.Authorization;
@@ -13,7 +14,8 @@ namespace AiCoreApi.Controllers
     public class CopilotController : ControllerBase
     {
         private readonly ICopilotService _copilotService;
-        public CopilotController(ICopilotService copilotService)           
+        public CopilotController(
+            ICopilotService copilotService)           
         {
             _copilotService = copilotService;
         }
@@ -21,7 +23,7 @@ namespace AiCoreApi.Controllers
         [HttpPost("chat")]
         [CombinedAuthorize]
         [Consumes("application/json")]
-        [Produces("application/json")]
+        [Produces("application/json", "text/plain")]
         [SwaggerResponse(StatusCodes.Status200OK, Type = typeof(MessageDialogViewModel))]
         [SwaggerOperation(Summary = "Chat endpoint, main entrypoint for communication with AI Core.")]
         [DisableRequestSizeLimit]
@@ -46,16 +48,27 @@ namespace AiCoreApi.Controllers
             bool useCachedPlan = true,
             [FromQuery(Name = "use_debug")]
             [SwaggerParameter("Allow Administrator to get debug information while executing Plan.", Required = false)]
-            bool useDebug = false)
+            bool useDebug = false,
+            [FromQuery(Name = "simple_output")]
+            [SwaggerParameter("Flag to specify if we need structured output with history or just result.", Required = false)]
+            bool simpleOutput = false, 
+            [FromQuery(Name = "workspace_id")]
+            [SwaggerParameter("Workspace Id, use 0 for default.", Required = false)]
+            int workspaceId = 0)
         {
             var result = await _copilotService.Chat();
+            if (simpleOutput)
+            {
+                var text = result.Messages?.LastOrDefault()?.Text ?? "";
+                return Content(text, text.IsJson() ? "application/json" : "text/plain");
+            }
             return Ok(result);
         }
 
         [HttpPost("agent/{agentName}")]
         [CombinedAuthorize]
         [Consumes("application/json")]
-        [Produces("application/json")]
+        [Produces("application/json", "text/plain")]
         [SwaggerResponse(StatusCodes.Status200OK, Type = typeof(MessageDialogViewModel))]
         [SwaggerOperation(Summary = "Agents call endpoint. Entrypoint for direct calling Agents. Wrapper for chat endpoint.")]
         [DisableRequestSizeLimit]
@@ -72,9 +85,20 @@ namespace AiCoreApi.Controllers
             string connectionName = "",
             [FromQuery(Name = "use_debug")]
             [SwaggerParameter("Allow Administrator to get debug information while executing Plan.", Required = false)]
-            bool useDebug = false)
+            bool useDebug = false,
+            [FromQuery(Name = "simple_output")]
+            [SwaggerParameter("Flag to specify if we need structured output with history or just result.", Required = false)]
+            bool simpleOutput = false,
+            [FromQuery(Name = "workspace_id")]
+            [SwaggerParameter("Workspace Id, use 0 for default.", Required = false)]
+            int workspaceId = 0)
         {
             var result = await _copilotService.Agent(agentName, parameters);
+            if (simpleOutput)
+            {
+                var text = result.Messages?.LastOrDefault()?.Text ?? "";
+                return Content(text, text.IsJson() ? "application/json" : "text/plain");
+            }
             return Ok(result);
         }
 

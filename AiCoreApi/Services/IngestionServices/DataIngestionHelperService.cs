@@ -24,12 +24,12 @@ namespace AiCoreApi.Services.IngestionServices
         }
 
         private List<ConnectionModel>? _connectionModels;
-        private async Task<List<ConnectionModel>> GetConnections() => _connectionModels ?? (_connectionModels = await _connectionProcessor.List());
+        private async Task<List<ConnectionModel>> GetConnections(int? workspaceId) => _connectionModels ?? (_connectionModels = await _connectionProcessor.List(workspaceId));
 
         public async Task<ConnectionModel> GetEmbeddingConnection(IngestionModel ingestion)
         {
             var embeddingConnection = ingestion.Content.ContainsKey(Constants.EmbeddingConnectionField) ? ingestion.Content[Constants.EmbeddingConnectionField] : "";
-            var connections = await GetConnections();
+            var connections = await GetConnections(ingestion.WorkspaceId);
             if (connections.Count == 0)
                 throw new ApplicationException("No connections found");
             var connection = connections.Find(x => x.Type.IsEmbeddingConnection() && x.ConnectionId.ToString() == embeddingConnection);
@@ -52,7 +52,7 @@ namespace AiCoreApi.Services.IngestionServices
                 embeddingConnectionModel.ConnectionString = _config.QdrantUrl;
                 return;
             }
-            var connections = await GetConnections();
+            var connections = await GetConnections(ingestion.WorkspaceId);
             if (connections.Count == 0)
                 throw new ApplicationException("No connections found");
             var connection = connections.Find(x => x.Type == ConnectionType.AzureAiSearch && x.ConnectionId.ToString() == vectorDbConnectionName);
@@ -77,7 +77,7 @@ namespace AiCoreApi.Services.IngestionServices
             if(string.IsNullOrEmpty(result.TargetLanguage))
                 return new TranslateStepModel();
 
-            var connections = await GetConnections();
+            var connections = await GetConnections(ingestion.WorkspaceId);
             if (connections.Count == 0)
                 throw new ApplicationException("No connections found");
             var aiTranslatorConnectionName = ingestion.Content["TranslateStepConnection"];

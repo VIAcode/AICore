@@ -2,6 +2,7 @@
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using JsonRepairUtils;
 using Microsoft.AspNetCore.Mvc;
@@ -42,6 +43,27 @@ public static class Extensions
         {
             return null;
         }
+    }
+
+    public static bool IsJson(this string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return false;
+        value = value.Trim();
+        if ((value.StartsWith("{") && value.EndsWith("}")) || // Object
+            (value.StartsWith("[") && value.EndsWith("]")))   // Array
+        {
+            try
+            {
+                JsonDocument.Parse(value);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+        return false;
     }
 
     public static string FromBase64(this string base64EncodedData)

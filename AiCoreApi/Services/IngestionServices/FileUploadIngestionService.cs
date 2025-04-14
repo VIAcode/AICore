@@ -76,7 +76,7 @@ namespace AiCoreApi.Services.IngestionServices
             }
             ingestion.Content["File"] = "";
             ingestion.LastSync = DateTime.UtcNow;
-            await _ingestionProcessor.Set(ingestion);
+            await _ingestionProcessor.Set(ingestion, null);
         }
 
         private async Task<List<FileModel>> GetFiles(string base64File, string fileName)

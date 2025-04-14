@@ -20,6 +20,7 @@ public class AgentsService : IAgentsService
     private readonly IAgentsProcessor _agentsProcessor;
     private readonly IDistributedCache _distributedCache;
     private readonly ILoginProcessor _loginProcessor;
+    private readonly ITagsProcessor _tagsProcessor;
     private readonly RequestAccessor _requestAccessor;
 
     public AgentsService(
@@ -29,6 +30,7 @@ public class AgentsService : IAgentsService
         ILogger<AgentsService> logger,
         IDistributedCache distributedCache,
         ILoginProcessor loginProcessor,
+        ITagsProcessor tagsProcessor,
         RequestAccessor requestAccessor)
     {
         _extendedConfig = extendedConfig;
@@ -37,19 +39,20 @@ public class AgentsService : IAgentsService
         _logger = logger;
         _distributedCache = distributedCache;
         _loginProcessor = loginProcessor;
+        _tagsProcessor = tagsProcessor;
         _requestAccessor = requestAccessor;
     }
 
     private static readonly SemaphoreSlim GitRepoLock = new(1, 1);
     private string GetRepoPath() => Path.Combine(Path.GetTempPath(), $"git-cache-{_extendedConfig.GitStoragePath.GetHashCode()}");
 
-    public async Task<AgentViewModel> AddAgent(AgentViewModel agentViewModel)
+    public async Task<AgentViewModel> AddAgent(AgentViewModel agentViewModel, int workspaceId)
     {
         if (agentViewModel.AgentId != 0)
             throw new ArgumentException("Value should be 0.", nameof(AgentViewModel.AgentId));
 
         var agentModel = _mapper.Map<AgentModel>(agentViewModel);
-        var savedModel = await _agentsProcessor.Add(agentModel);
+        var savedModel = await _agentsProcessor.Add(agentModel, workspaceId);
         var result = _mapper.Map<AgentViewModel>(savedModel);
         await SaveGit();
         return result;
@@ -67,9 +70,9 @@ public class AgentsService : IAgentsService
         return result;
     }
 
-    public async Task<List<AgentViewModel>> ListAgents()
+    public async Task<List<AgentViewModel>> ListAgents(int? workspaceId)
     {
-        var agents = await _agentsProcessor.List();
+        var agents = await _agentsProcessor.List(workspaceId);
         var agentsViewModelList = _mapper.Map<List<AgentViewModel>>(agents);
         return agentsViewModelList.OrderBy(agent => agent.AgentId).ToList();
     }
@@ -82,7 +85,7 @@ public class AgentsService : IAgentsService
 
     public async Task<List<ParameterModel>?> GetParameters(int agentId)
     {
-        var agentViewModel = (await ListAgents()).FirstOrDefault(agent => agent.AgentId == agentId);
+        var agentViewModel = (await ListAgents(null)).FirstOrDefault(agent => agent.AgentId == agentId);
         if (agentViewModel == null)
             return null;        
         if(!agentViewModel.Content.ContainsKey("parameterDescription") || string.IsNullOrEmpty(agentViewModel.Content["parameterDescription"].Value))
@@ -111,7 +114,7 @@ public class AgentsService : IAgentsService
 
     public async Task<bool> IsAgentEnabled(string agentName)
     {
-        var agents = await _agentsProcessor.List();
+        var agents = await _agentsProcessor.List(null);
         var agent = agents.FirstOrDefault(a => a.Name == agentName);
         if (agent == null)
             return true;
@@ -144,7 +147,7 @@ public class AgentsService : IAgentsService
 
     private async Task<Dictionary<string, string>> PrepareAgentExportFiles(List<int> agentIdsList)
     {
-        var agents = await _agentsProcessor.List();
+        var agents = await _agentsProcessor.List(null);
 
         var agentsToExport = agents
             .Where(agent => agentIdsList.Contains(agent.AgentId) && agent.Type != Models.DbModels.AgentType.Composite)
@@ -211,7 +214,7 @@ public class AgentsService : IAgentsService
         }
     }
 
-    public async Task<ImportAgentsResultModel> ImportAgents(IFormFile file, Dictionary<Models.ViewModels.AgentType, int> agentVersions)
+    public async Task<ImportAgentsResultModel> ImportAgents(IFormFile file, Dictionary<Models.ViewModels.AgentType, int> agentVersions, int workspaceId)
     {
         var agentExportModels = new List<AgentExportModel>();
         var content = new Dictionary<string, string>();
@@ -245,7 +248,7 @@ public class AgentsService : IAgentsService
             }
         }
 
-        var agents = await _agentsProcessor.List();
+        var agents = await _agentsProcessor.List(workspaceId);
         var overridingAgents = agentExportModels
             .Where(agent => agents
                 .Any(item => item.Name == agent.Name))
@@ -257,7 +260,7 @@ public class AgentsService : IAgentsService
 
         if(overridingAgents.Count == 0 && agentsWithOldVersion.Count == 0)
         {
-            await ImportAgentsConfirmed(agentExportModels);
+            await ImportAgentsConfirmed(agentExportModels, workspaceId);
             return new ImportAgentsResultModel
             {
                 IsSuccess = true
@@ -292,25 +295,25 @@ public class AgentsService : IAgentsService
         };
     }
 
-    public async Task ConfirmImportAgents(string confirmationId)
+    public async Task ConfirmImportAgents(string confirmationId, int workspaceId)
     {
         var importAgents = await _distributedCache.GetStringAsync(GetAgentImportCacheKey(confirmationId));
         if (string.IsNullOrEmpty(importAgents))
             throw new ArgumentException("ConfirmationId is not valid.", nameof(confirmationId));
         var importAgentsList = importAgents.JsonGet<List<AgentExportModel>>();
-        await ImportAgentsConfirmed(importAgentsList);
+        await ImportAgentsConfirmed(importAgentsList, workspaceId);
     }
 
     private string GetAgentImportCacheKey(string confirmationId) => $"agentImport-{confirmationId}";
 
-    private async Task ImportAgentsConfirmed(List<AgentExportModel> agentExportModels)
+    private async Task ImportAgentsConfirmed(List<AgentExportModel> agentExportModels, int workspaceId)
     {
-        var agents = (await _agentsProcessor.List()).Select(agent => agent.Name).ToList();
+        var agents = (await _agentsProcessor.List(workspaceId)).Select(agent => agent.Name).ToList();
         var nonCompositeAgents = agentExportModels.Where(agent => agent.Type != Models.ViewModels.AgentType.Composite.ToString()).ToList();
         var compositeAgents = agentExportModels.Where(agent => agent.Type == Models.ViewModels.AgentType.Composite.ToString()).ToList();
         foreach (var agent in nonCompositeAgents)
         {
-            await ImportAgentConfirmed(agent);
+            await ImportAgentConfirmed(agent, workspaceId);
             agents.Add(agent.Name);
         }
         var lastLoopWasNonEmpty = true;
@@ -324,14 +327,14 @@ public class AgentsService : IAgentsService
                 if (subAgentNames.Any(subAgent => !agents.Contains(subAgent)))
                     continue;
 
-                var subAgentsIds = (await _agentsProcessor.List())
+                var subAgentsIds = (await _agentsProcessor.List(workspaceId))
                     .Where(subAgent => subAgentNames.Contains(subAgent.Name))
                     .Select(subAgent => subAgent.AgentId)
                     .Distinct()
                     .ToDictionary(key => key, value => true);
                 agent.Content[AgentContentParameters.AgentsList].Value = subAgentsIds.ToJson();
 
-                await ImportAgentConfirmed(agent);
+                await ImportAgentConfirmed(agent, workspaceId);
                 agents.Add(agent.Name);
                 compositeAgents.Remove(agent);
                 lastLoopWasNonEmpty = true;
@@ -340,13 +343,47 @@ public class AgentsService : IAgentsService
         await SaveGit();
     }
 
-    private async Task ImportAgentConfirmed(AgentExportModel agentExportModel)
+    private string GeneratePastelColor()
+    {
+        var random = new Random();
+        var r = random.Next(127, 255);
+        var g = random.Next(127, 255);
+        var b = random.Next(127, 255);
+
+        return $"#{(r << 16 | g << 8 | b):X6}";
+    }
+
+    private async Task<List<TagModel>> HandleImportTags(AgentModel agentModel, List<TagModel> existingTags)
+    {
+        var newTags = new List<TagModel>();
+        foreach (var agentTag in agentModel.Tags)
+        {
+            var tag = existingTags.FirstOrDefault(existingTag => existingTag.Name == agentTag.Name) ?? await _tagsProcessor.Set(new TagModel
+            {
+                TagId = 0,
+                Name = agentTag.Name,
+                Description = agentTag.Description,
+                Created = DateTime.UtcNow,
+                CreatedBy = _requestAccessor.Login ?? "",
+                Color = GeneratePastelColor()
+            });
+            newTags.Add(tag);
+        }
+        return newTags;
+    }
+
+    private async Task ImportAgentConfirmed(AgentExportModel agentExportModel, int workspaceId)
     {
         var agentModel = _mapper.Map<AgentModel>(agentExportModel);
-        var agent = await _agentsProcessor.GetByName(agentExportModel.Name);
+        var agent = await _agentsProcessor.GetByName(agentExportModel.Name, workspaceId);
+        if (agentModel.Tags.Count > 0)
+        {
+            var existingTags = _tagsProcessor.List();
+            agentModel.Tags = await HandleImportTags(agentModel, existingTags);
+        }
         if (agent == null)
         {
-            await _agentsProcessor.Add(agentModel);
+            await _agentsProcessor.Add(agentModel, workspaceId);
         }
         else
         {
@@ -416,7 +453,7 @@ public class AgentsService : IAgentsService
         {
             var gitBranch = _extendedConfig.GitStorageBranch;
             var repoPath = await EnsureClonedGitRepo();
-            var fileMap = await PrepareAgentExportFiles((await _agentsProcessor.List()).Select(a => a.AgentId).ToList());
+            var fileMap = await PrepareAgentExportFiles((await _agentsProcessor.List(null)).Select(a => a.AgentId).ToList());
             foreach (var kvp in fileMap)
             {
                 var fullPath = Path.Combine(repoPath, _extendedConfig.GitStoragePath.Trim('/'), kvp.Key);
@@ -534,16 +571,16 @@ public class AgentsService : IAgentsService
 
 public interface IAgentsService
 {
-    Task<List<AgentViewModel>> ListAgents();
-    Task<AgentViewModel> AddAgent(AgentViewModel agentViewModel);
+    Task<List<AgentViewModel>> ListAgents(int? workspaceId);
+    Task<AgentViewModel> AddAgent(AgentViewModel agentViewModel, int workspaceId);
     Task<AgentViewModel> UpdateAgent(AgentViewModel agentViewModel);
     Task DeleteAgent(int agentId); 
     Task<List<ParameterModel>?> GetParameters(int agentId); 
     Task SwitchEnableAgent(int agentId, bool isEnabled);
     Task<bool> IsAgentEnabled(string agentName);
     Task<byte[]> ExportAgents(List<int> agentIdsList);
-    Task<ImportAgentsResultModel> ImportAgents(IFormFile file, Dictionary<Models.ViewModels.AgentType, int> agentVersions);
-    Task ConfirmImportAgents(string confirmationId);
+    Task<ImportAgentsResultModel> ImportAgents(IFormFile file, Dictionary<Models.ViewModels.AgentType, int> agentVersions, int workspaceId);
+    Task ConfirmImportAgents(string confirmationId, int workspaceId);
     Task<List<string>> GetHistory(int agentId);
     Task<string> GetHistoryCode(int agentId, string gitTitle);
 }

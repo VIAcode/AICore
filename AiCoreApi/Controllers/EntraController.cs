@@ -1,4 +1,5 @@
 ﻿using AiCoreApi.Authorization;
+using AiCoreApi.Authorization.Attributes;
 using AiCoreApi.Models.ViewModels;
 using AiCoreApi.Services.ControllersServices;
 using Microsoft.AspNetCore.Authorization;
@@ -21,7 +22,7 @@ public class EntraController : ControllerBase
 
     [HttpGet]
     [CombinedAuthorize]
-    [AdminAuthorize]
+    [RoleAuthorize(Role.Admin)]
     public async Task<IActionResult> List()
     {
         var result = await _entraService.ListEntraCredentials();
@@ -29,7 +30,7 @@ public class EntraController : ControllerBase
     }
 
     [HttpPost]
-    [AdminAuthorize]
+    [RoleAuthorize(Role.Admin)]
     public async Task<IActionResult> Add([FromBody] EntraCredentialExtendedItem entraCredentialViewModel)
     {
         entraCredentialViewModel = await _entraService.AddEntraCredential(entraCredentialViewModel);
@@ -37,7 +38,7 @@ public class EntraController : ControllerBase
     }
 
     [HttpDelete("{entraCredentialId}")]
-    [AdminAuthorize]
+    [RoleAuthorize(Role.Admin)]
     public async Task<IActionResult> Delete(int entraCredentialId)
     {
         await _entraService.DeleteEntraCredential(entraCredentialId);

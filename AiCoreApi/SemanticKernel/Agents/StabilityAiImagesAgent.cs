@@ -10,7 +10,7 @@ namespace AiCoreApi.SemanticKernel.Agents
 {
     public class StabilityAiImagesAgent : BaseAgent, IStabilityAiImagesAgent
     {
-        private const string DebugMessageSenderName = "StabilityAiImagesAgent";
+        private string _debugMessageSenderName = "StabilityAiImagesAgent";
 
         private static class AgentContentParameters
         {
@@ -88,7 +88,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             ExtendedConfig extendedConfig,
             IHttpClientFactory httpClientFactory,
             ResponseAccessor responseAccessor,
-            RequestAccessor requestAccessor) : base(requestAccessor, extendedConfig, logger)
+            RequestAccessor requestAccessor) : base(responseAccessor, requestAccessor, extendedConfig, logger)
         {
             _connectionProcessor = connectionProcessor;
             _httpClientFactory = httpClientFactory;
@@ -99,10 +99,11 @@ namespace AiCoreApi.SemanticKernel.Agents
         public override async Task<string> DoCall(AgentModel agent, Dictionary<string, string> parameters)
         {
             parameters.ToList().ForEach(p => parameters[p.Key] = HttpUtility.HtmlDecode(p.Value));
+            _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
             var connectionName = agent.Content[AgentContentParameters.StabilityAiConnectionName].Value;
-            var connections = await _connectionProcessor.List();
-            var connection = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.StabilityAi, DebugMessageSenderName, connectionName: connectionName);
+            var connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
+            var connection = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.StabilityAi, _debugMessageSenderName, connectionName: connectionName);
             if (connection == null)
             {
                 throw new Exception("Connection not found");
@@ -111,7 +112,7 @@ namespace AiCoreApi.SemanticKernel.Agents
 
             var imageProcessingType = agent.Content[AgentContentParameters.ImageProcessingType].Value;
 
-            _responseAccessor.AddDebugMessage(DebugMessageSenderName, "DoCall Request",
+            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Request",
                 $"Image Processing Type: \r\n{imageProcessingType}");
             var result = "";
             switch (imageProcessingType)
@@ -131,7 +132,7 @@ namespace AiCoreApi.SemanticKernel.Agents
                 default:
                     throw new Exception("Invalid image processing type");
             }
-            _responseAccessor.AddDebugMessage(DebugMessageSenderName, "DoCall Response", result);
+            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Response", result);
             return result;
         }
 

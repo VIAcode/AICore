@@ -1,4 +1,4 @@
-﻿using AiCoreApi.Authorization;
+﻿using AiCoreApi.Authorization.Attributes;
 using AiCoreApi.Common.Extensions;
 using AiCoreApi.Models.ViewModels;
 using AiCoreApi.Services.ControllersServices;
@@ -29,7 +29,7 @@ namespace AiCoreApi.Controllers
             return Ok(client);
         }
 
-        [AdminAuthorize]
+        [RoleAuthorize(Role.Admin)]
         [HttpGet("clients")]
         public async Task<IActionResult> ListClients()
         {
@@ -40,7 +40,7 @@ namespace AiCoreApi.Controllers
             return Ok(clients);
         }
 
-        [AdminAuthorize]
+        [RoleAuthorize(Role.Admin)]
         [HttpDelete("clients/{clientSsoId}")]
         public async Task<IActionResult> DeleteClient(int clientSsoId)
         {
@@ -51,7 +51,7 @@ namespace AiCoreApi.Controllers
             return Ok();
         }
 
-        [AdminAuthorize]
+        [RoleAuthorize(Role.Admin)]
         [HttpPost("clients")]
         public async Task<IActionResult> AddClient([FromBody] ClientSsoViewModel clientSsoViewModel)
         {
@@ -64,7 +64,7 @@ namespace AiCoreApi.Controllers
             return Ok(model != null);
         }
 
-        [AdminAuthorize]
+        [RoleAuthorize(Role.Admin)]
         [HttpPut("clients/{clientSsoId}")]
         public async Task<IActionResult> UpdateClient([FromBody] ClientSsoViewModel clientSsoViewModel)
         {

@@ -86,7 +86,7 @@ namespace AiCoreApi.SemanticKernel
         public async Task<Kernel> GetKernel()
         {
             // Get the default LLM connection
-            var connections = await _connectionProcessor.List();
+            var connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
             var llmConnection = connections.FirstOrDefault(conn =>
                 conn.Type.IsLlmConnection() &&
                 _requestAccessor.DefaultConnectionNames.Contains(conn.Name))

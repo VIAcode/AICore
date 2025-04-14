@@ -15,6 +15,7 @@
         public bool IsLastSyncFailed { get; set; } = false;
         public string? LastSyncFailedMessage { get; set; }
         public IngestionStatus Status { get; set; } = IngestionStatus.Ready;
+        public int? WorkspaceId { get; set; }
     }
 
     public enum IngestionType

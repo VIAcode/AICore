@@ -14,7 +14,7 @@ namespace AiCoreApi.SemanticKernel.Agents
     {
         private enum QueryScope { Workspace, Resource }
 
-        private const string DebugMessageSenderName = "AzureLogAnalyticsAgent";
+        private string _debugMessageSenderName = "AzureLogAnalyticsAgent";
 
         private static class AgentContentParameters
         {
@@ -36,7 +36,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             RequestAccessor requestAccessor,
             ResponseAccessor responseAccessor,
             ExtendedConfig extendedConfig,
-            ILogger<SqlServerAgent> logger) : base(requestAccessor, extendedConfig, logger)
+            ILogger<SqlServerAgent> logger) : base(responseAccessor, requestAccessor, extendedConfig, logger)
         {
             _connectionProcessor = connectionProcessor;
             _entraTokenProvider = entraTokenProvider;
@@ -49,18 +49,19 @@ namespace AiCoreApi.SemanticKernel.Agents
             Dictionary<string, string> parameters)
         {
             parameters.ToList().ForEach(p => parameters[p.Key] = HttpUtility.HtmlDecode(p.Value));
+            _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
             var connectionName = agent.Content[AgentContentParameters.ConnectionName].Value;
             var query = ApplyParameters(agent.Content[AgentContentParameters.KqlQuery].Value, parameters);
             var timeRange = ReadQueryTimeRange(agent, parameters);
 
-            _responseAccessor.AddDebugMessage(DebugMessageSenderName, "DoCall Request", $"Time range: {timeRange}\r\n\r\nKQL query:\r\n{query}");
-            var connections = await _connectionProcessor.List();
-            var connection = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.AzureLogAnalytics, DebugMessageSenderName, connectionName: connectionName);
+            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Request", $"Time range: {timeRange}\r\n\r\nKQL query:\r\n{query}");
+            var connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
+            var connection = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.AzureLogAnalytics, _debugMessageSenderName, connectionName: connectionName);
 
             var result = await QueryLogsAsync(query, timeRange, connection);
 
-            _responseAccessor.AddDebugMessage(DebugMessageSenderName, "DoCall Response", result);
+            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Response", result);
             return result;
         }
 

@@ -16,6 +16,7 @@ namespace AiCoreApi.Models.DbModels
         public Dictionary<string, string> Content { get; set; } = new();
         public DateTime Created { get; set; } = DateTime.UtcNow;
         public string CreatedBy { get; set; } = string.Empty;
+        public int? WorkspaceId { get; set; }
     }
 
     public enum ConnectionType

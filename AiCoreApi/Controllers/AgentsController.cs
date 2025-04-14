@@ -1,6 +1,6 @@
 ﻿using AiCoreApi.Authorization;
+using AiCoreApi.Authorization.Attributes;
 using AiCoreApi.Common.Extensions;
-using AiCoreApi.Models.DbModels;
 using AiCoreApi.Models.ViewModels;
 using AiCoreApi.Services.ControllersServices;
 using Microsoft.AspNetCore.Authorization;
@@ -16,38 +16,35 @@ namespace AiCoreApi.Controllers;
 public class AgentsController : ControllerBase
 {
     private readonly IAgentsService _agentsService;
-    private readonly IConnectService _connectService;
 
     public AgentsController(
-        IAgentsService agentsService,
-        IConnectService connectService)
+        IAgentsService agentsService)
     {
         _agentsService = agentsService;
-        _connectService = connectService;
     }
 
     [HttpGet]
     [CombinedAuthorize]
-    [AdminAuthorize]
-    public async Task<IActionResult> List()
+    [RoleAuthorize(Role.Admin, Role.Developer)]
+    public async Task<IActionResult> List([FromQuery(Name = "workspace_id")] int workspaceId = 0)
     {
-        var result = await _agentsService.ListAgents();
+        var result = await _agentsService.ListAgents(workspaceId);
         return Ok(result);
     }
 
     [HttpGet]
     [Route("{agentId}")]
-    [AdminAuthorize]
+    [RoleAuthorize(Role.Admin, Role.Developer)]
     public async Task<IActionResult> Get(int agentId)
     {
-        var agentsList = await _agentsService.ListAgents();
+        var agentsList = await _agentsService.ListAgents(null);
         var agent = agentsList.FirstOrDefault(x => x.AgentId == agentId);
         return Ok(agent);
     }
 
     [HttpGet]
     [Route("{agentId}/parameters")]
-    [AdminAuthorize]
+    [RoleAuthorize(Role.Admin, Role.Developer)]
     public async Task<IActionResult> GetParameters(int agentId)
     {
         var agentParameters = await _agentsService.GetParameters(agentId);
@@ -55,15 +52,15 @@ public class AgentsController : ControllerBase
     }
 
     [HttpPost]
-    [AdminAuthorize]
-    public async Task<IActionResult> Add([FromBody] AgentViewModel agentViewModel)
+    [RoleAuthorize(Role.Admin, Role.Developer)]
+    public async Task<IActionResult> Add([FromBody] AgentViewModel agentViewModel, [FromQuery(Name = "workspace_id")] int workspaceId = 0)
     {
-        var newAgent = await _agentsService.AddAgent(agentViewModel);
+        var newAgent = await _agentsService.AddAgent(agentViewModel, workspaceId);
         return Ok(newAgent.AgentId);
     }
 
     [HttpPut("{agentId}")]
-    [AdminAuthorize]
+    [RoleAuthorize(Role.Admin, Role.Developer)]
     public async Task<IActionResult> Update([FromBody] AgentViewModel agentViewModel)
     {
         await _agentsService.UpdateAgent(agentViewModel);
@@ -71,7 +68,7 @@ public class AgentsController : ControllerBase
     }
 
     [HttpDelete("{agentId}")]
-    [AdminAuthorize]
+    [RoleAuthorize(Role.Admin, Role.Developer)]
     public async Task<IActionResult> Delete(int agentId)
     {
         await _agentsService.DeleteAgent(agentId);
@@ -79,7 +76,7 @@ public class AgentsController : ControllerBase
     }
 
     [HttpPut("{agentId}/enable")]
-    [AdminAuthorize]
+    [RoleAuthorize(Role.Admin, Role.Developer)]
     public async Task<IActionResult> Enable(int agentId)
     {
         await _agentsService.SwitchEnableAgent(agentId, true);
@@ -87,7 +84,7 @@ public class AgentsController : ControllerBase
     }
 
     [HttpPut("{agentId}/disable")]
-    [AdminAuthorize]
+    [RoleAuthorize(Role.Admin, Role.Developer)]
 
     public async Task<IActionResult> Disable(int agentId)
     {
@@ -97,6 +94,7 @@ public class AgentsController : ControllerBase
 
     [HttpGet("{agentName}/isEnabled")]
     [CombinedAuthorize]
+    [RoleAuthorize(Role.Admin, Role.Developer)]
     [SwaggerOperation(Summary = "Check if specific Agent is enabled or not")]
     [SwaggerResponse(StatusCodes.Status200OK, Type = typeof(bool))]
     public async Task<IActionResult> IsEnabled(
@@ -110,44 +108,37 @@ public class AgentsController : ControllerBase
 
     [HttpGet("export")]
     [AllowAnonymous]
+    [RoleAuthorize(Role.Admin, Role.Developer)]
     public async Task<IActionResult> Export([FromQuery] string agentIds, [FromQuery] string token)
     {
         var agentIdsList = agentIds.Split(',').Select(int.Parse).ToList();
-        // Check if the token is valid and has the required permissions (Admin)
-        // We use AllowAnonymous attribute just to allow the request to be made without a token in Header, but we still need to check the token
-        var loginModel = await _connectService.CheckAccessToken(token);
-        if (loginModel == null)
-            return Unauthorized("Invalid Token");
-        if (loginModel.Role != RoleEnum.Admin)
-            return Unauthorized("No Permissions");
-
         var result = await _agentsService.ExportAgents(agentIdsList);
         return File(result, "application/zip", $"agents-{DateTime.UtcNow:yyyy-MM-dd-hh-mm}.zip");
     }
 
     [HttpPost("import")]
     [CombinedAuthorize]
-    [AdminAuthorize]
-    public async Task<IActionResult> Import(IFormFile file, [FromForm] string agentsVersions)
+    [RoleAuthorize(Role.Admin, Role.Developer)]
+    public async Task<IActionResult> Import(IFormFile file, [FromForm] string agentsVersions, [FromQuery(Name = "workspace_id")] int workspaceId = 0)
     {
         var agentsVersionsDict = agentsVersions.JsonGet<Dictionary<AgentType, int>>();
-        var result = await _agentsService.ImportAgents(file, agentsVersionsDict);
+        var result = await _agentsService.ImportAgents(file, agentsVersionsDict, workspaceId);
         return Ok(result);
     }
 
     [HttpPut("import/{confirmationId}")]
     [CombinedAuthorize]
-    [AdminAuthorize]
-    public async Task<IActionResult> ImportConfirm(string confirmationId)
+    [RoleAuthorize(Role.Admin, Role.Developer)]
+    public async Task<IActionResult> ImportConfirm(string confirmationId, [FromQuery(Name = "workspace_id")] int workspaceId = 0)
     {
-        await _agentsService.ConfirmImportAgents(confirmationId);
+        await _agentsService.ConfirmImportAgents(confirmationId, workspaceId);
         return Ok();
     }
 
 
     [HttpGet]
     [Route("{agentId}/history")]
-    [AdminAuthorize]
+    [RoleAuthorize(Role.Admin, Role.Developer)]
     public async Task<IActionResult> GetHistory(int agentId)
     {
         var agentHistory = await _agentsService.GetHistory(agentId);
@@ -157,7 +148,7 @@ public class AgentsController : ControllerBase
 
     [HttpGet]
     [Route("{agentId}/history/{title}")]
-    [AdminAuthorize]
+    [RoleAuthorize(Role.Admin, Role.Developer)]
     public async Task<IActionResult> GetHistory(int agentId, string title)
     {
         var agentCode = await _agentsService.GetHistoryCode(agentId, title);

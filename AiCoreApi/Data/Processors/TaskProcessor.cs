@@ -88,9 +88,9 @@ namespace AiCoreApi.Data.Processors
             return _db.Tasks.AsNoTracking().ToList();
         }
 
-        public async Task<List<TaskModel>> ListWithIngestion()
+        public async Task<List<TaskModel>> ListWithIngestion(int workspaceId)
         {
-            return await _db.Tasks
+            var qry = _db.Tasks
                 .Include(t => t.Ingestion)
                 .Select(t => new TaskModel
                 {
@@ -104,7 +104,12 @@ namespace AiCoreApi.Data.Processors
                     ErrorMessage = t.ErrorMessage
                 })
                 .OrderByDescending(t => t.Updated)
-                .AsNoTracking().ToListAsync();
+                .AsNoTracking();
+            qry = workspaceId == 0 
+                ? qry.Where(t => t.Ingestion.WorkspaceId == null) 
+                : qry.Where(t => t.Ingestion.WorkspaceId == workspaceId);
+
+            return await qry.ToListAsync();
         }
 
         public async Task<List<TaskModel>> LastTaskList(List<int> ingestionIds)
@@ -146,7 +151,7 @@ namespace AiCoreApi.Data.Processors
         Task<TaskModel?> SetMessage(int taskId, string message);
         List<TaskModel> List();
         Task ClearHistory();
-        Task<List<TaskModel>> ListWithIngestion();
+        Task<List<TaskModel>> ListWithIngestion(int workspaceId);
         Task<List<TaskModel>> LastTaskList(List<int> ingestionIds);
         Task ResetUnfinishedTasks();
     }

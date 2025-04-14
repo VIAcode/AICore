@@ -10,6 +10,7 @@ namespace AiCoreApi.Models.ViewModels
         public string LlmType { get; set; } = string.Empty;
         public string Type { get; set; } = string.Empty;
         public Dictionary<string, ConfigurableExportSetting> Content { get; set; } = new();
+        public List<string> Tags { get; set; } = new();
         public int Version { get; set; } = 0;
     }
 

@@ -10,7 +10,7 @@ namespace AiCoreApi.SemanticKernel.Agents
 {
     public class RabbitMqNotificationAgent : BaseAgent, IRabbitMqNotificationAgent
     {
-        private const string DebugMessageSenderName = "RabbitMqNotificationAgent";
+        private string _debugMessageSenderName = "RabbitMqNotificationAgent";
 
         private static class AgentContentParameters
         {
@@ -28,32 +28,31 @@ namespace AiCoreApi.SemanticKernel.Agents
             RequestAccessor requestAccessor,
             ResponseAccessor responseAccessor,
             ExtendedConfig extendedConfig,
-            ILogger<RabbitMqNotificationAgent> logger) : base(requestAccessor, extendedConfig, logger)
+            ILogger<RabbitMqNotificationAgent> logger) : base(responseAccessor, requestAccessor, extendedConfig, logger)
         {
             _requestAccessor = requestAccessor;
             _responseAccessor = responseAccessor;
             _connectionProcessor = connectionProcessor;
         }
 
-        public override async Task<string> DoCall(
-            AgentModel agent,
-            Dictionary<string, string> parameters)
+        public override async Task<string> DoCall(AgentModel agent, Dictionary<string, string> parameters)
         {
             parameters.ToList().ForEach(p => parameters[p.Key] = HttpUtility.HtmlDecode(p.Value));
+            _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
             var connectionName = agent.Content[AgentContentParameters.ConnectionName].Value;
             var queueOrTopicName = ApplyParameters(agent.Content[AgentContentParameters.QueueOrTopicName].Value, parameters);
             var notificationPayload = ApplyParameters(agent.Content[AgentContentParameters.NotificationPayload].Value, parameters);
 
-            _responseAccessor.AddDebugMessage(DebugMessageSenderName, "DoCall Request", notificationPayload);
-            var connections = await _connectionProcessor.List();
-            var connection = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.RabbitMq, DebugMessageSenderName, connectionName: connectionName);
+            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Request", notificationPayload);
+            var connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
+            var connection = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.RabbitMq, _debugMessageSenderName, connectionName: connectionName);
             var rabbitMqConnectionString = connection.Content["rabbitMqConnectionString"];
 
             SendNotification(rabbitMqConnectionString, queueOrTopicName, notificationPayload);
 
             var responseMessage = $"Message sent to {queueOrTopicName}.";
-            _responseAccessor.AddDebugMessage(DebugMessageSenderName, "DoCall Response", responseMessage);
+            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Response", responseMessage);
             return responseMessage;
         }
 
@@ -85,7 +84,7 @@ namespace AiCoreApi.SemanticKernel.Agents
                                  basicProperties: properties,
                                  body: body);
 
-            _responseAccessor.AddDebugMessage(DebugMessageSenderName, "Message Sent", payload);
+            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "Message Sent", payload);
         }
     }
 

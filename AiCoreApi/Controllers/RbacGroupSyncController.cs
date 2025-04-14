@@ -1,4 +1,4 @@
-﻿using AiCoreApi.Authorization;
+﻿using AiCoreApi.Authorization.Attributes;
 using AiCoreApi.Common.Extensions;
 using AiCoreApi.Models.ViewModels;
 using AiCoreApi.Services.ControllersServices;
@@ -19,14 +19,14 @@ namespace AiCoreApi.Controllers
         }
 
         [HttpGet]
-        [AdminAuthorize]
+        [RoleAuthorize(Role.Admin)]
         public async Task<IActionResult> List()
         {
             return Ok(await _rbacGroupSyncService.ListRbacGroupSyncs());
         }
 
         [HttpDelete("{rbacGroupSyncId}")]
-        [AdminAuthorize]
+        [RoleAuthorize(Role.Admin)]
         public async Task<IActionResult> DeleteRbacGroupSync(int rbacGroupSyncId)
         {
             await _rbacGroupSyncService.DeleteRbacGroupSync(rbacGroupSyncId);
@@ -34,7 +34,7 @@ namespace AiCoreApi.Controllers
         }
 
         [HttpPost]
-        [AdminAuthorize]
+        [RoleAuthorize(Role.Admin)]
         public async Task<IActionResult> Add([FromBody] RbacGroupSyncViewModel rbacGroupSyncViewModel)
         {
             var currentUser = this.GetLogin();
@@ -46,7 +46,7 @@ namespace AiCoreApi.Controllers
         }
 
         [HttpPut]
-        [AdminAuthorize]
+        [RoleAuthorize(Role.Admin)]
         public async Task<IActionResult> Update([FromBody] RbacGroupSyncViewModel rbacGroupSyncViewModel)
         {
             var currentUser = this.GetLogin();

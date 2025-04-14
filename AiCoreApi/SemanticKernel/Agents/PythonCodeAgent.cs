@@ -19,7 +19,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             PythonEngine.BeginAllowThreads();
         }
 
-        private const string DebugMessageSenderName = "PythonCodeAgent";
+        private string _debugMessageSenderName = "PythonCodeAgent";
         public static class AgentPromptPlaceholders
         {
             public const string HasFilesPlaceholder = "hasFiles";
@@ -44,7 +44,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             ResponseAccessor responseAccessor,
             ICacheAccessor cacheAccessor, 
             ExtendedConfig extendedConfig,
-            ILogger<PythonCodeAgent> logger) : base(requestAccessor, extendedConfig, logger)
+            ILogger<PythonCodeAgent> logger) : base(responseAccessor, requestAccessor, extendedConfig, logger)
         {
             _plannerHelpers = plannerHelpers;
             _requestAccessor = requestAccessor;
@@ -56,11 +56,10 @@ namespace AiCoreApi.SemanticKernel.Agents
 
         public async Task<string> DoCallWrapper(AgentModel agent, Dictionary<string, string> parameters) => await base.DoCallWrapper(agent, parameters);
 
-        public override async Task<string> DoCall(
-            AgentModel agent, 
-            Dictionary<string, string> parameters)
+        public override async Task<string> DoCall(AgentModel agent, Dictionary<string, string> parameters)
         {
             parameters.ToList().ForEach(p => parameters[p.Key] = HttpUtility.HtmlDecode(p.Value));
+            _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
             var pythonCode = ApplyParameters(agent.Content[AgentContentParameters.PythonCode].Value, parameters);
             pythonCode = ApplyParameters(pythonCode, new Dictionary<string, string>
@@ -69,7 +68,7 @@ namespace AiCoreApi.SemanticKernel.Agents
                 {AgentPromptPlaceholders.FilesDataPlaceholder, _requestAccessor.MessageDialog.Messages.Last().GetFileContents()},
                 {AgentPromptPlaceholders.FilesNamesPlaceholder, _requestAccessor.MessageDialog.Messages.Last().GetFileNames()}
             });
-            _responseAccessor.AddDebugMessage(DebugMessageSenderName, "Execute Python Code", pythonCode);
+            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "Execute Python Code", pythonCode);
 
 
             var result = string.Empty;
@@ -121,10 +120,10 @@ namespace AiCoreApi.SemanticKernel.Agents
             }
             catch (Exception e)
             {
-                _responseAccessor.AddDebugMessage(DebugMessageSenderName, "Python Code Error", $"Exception: {e.Message}\r\n\r\nInner Exception: {e.InnerException?.Message}");
+                _responseAccessor.AddDebugMessage(_debugMessageSenderName, "Python Code Error", $"Exception: {e.Message}\r\n\r\nInner Exception: {e.InnerException?.Message}");
                 throw;
             }
-            _responseAccessor.AddDebugMessage(DebugMessageSenderName, "Python Code Result", result);
+            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "Python Code Result", result);
             return result;
         }
 
@@ -140,7 +139,7 @@ namespace AiCoreApi.SemanticKernel.Agents
                     if(_executedCommands.Contains(cmd))
                         continue;
                     _executedCommands.Add(cmd);
-                    _responseAccessor.AddDebugMessage(DebugMessageSenderName, "Python Code Command", cmd);
+                    _responseAccessor.AddDebugMessage(_debugMessageSenderName, "Python Code Command", cmd);
                     if (cmd.StartsWith("pip"))
                         cmd += " --break-system-packages --root-user-action=ignore";
                     var process = new Process
@@ -165,11 +164,11 @@ namespace AiCoreApi.SemanticKernel.Agents
 
                     if (!string.IsNullOrWhiteSpace(cmdError))
                     {
-                        _responseAccessor.AddDebugMessage(DebugMessageSenderName, "Python Code Command Error", cmdError);
+                        _responseAccessor.AddDebugMessage(_debugMessageSenderName, "Python Code Command Error", cmdError);
                     }
                     else
                     {
-                        _responseAccessor.AddDebugMessage(DebugMessageSenderName, "Python Code Command Result", cmdResult);
+                        _responseAccessor.AddDebugMessage(_debugMessageSenderName, "Python Code Command Result", cmdResult);
                     }
                 }
                 pythonCode = Regex.Replace(pythonCode, cmdPattern, string.Empty);
@@ -193,7 +192,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             }
             catch (Exception e)
             {
-                _responseAccessor.AddDebugMessage(DebugMessageSenderName,
+                _responseAccessor.AddDebugMessage(_debugMessageSenderName,
                     "Python Code ExecuteAgent Error", $"Agent: {agentName}\r\n\r\n Exception: {e.Message}\r\n\r\nInner Exception: {e.InnerException?.Message}");
                 throw;
             }

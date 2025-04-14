@@ -33,7 +33,7 @@ public class IngestionService : IIngestionService
         return viewModel;
     }
 
-    public async Task<IngestionViewModel> AddIngestion(IngestionViewModel ingestionViewModel, string initiator)
+    public async Task<IngestionViewModel> AddIngestion(IngestionViewModel ingestionViewModel, string initiator, int workspaceId)
     {
         if (ingestionViewModel.IngestionId != 0)
         {
@@ -42,7 +42,7 @@ public class IngestionService : IIngestionService
 
         ingestionViewModel.CreatedBy = initiator;
         var ingestionModel = _mapper.Map<IngestionModel>(ingestionViewModel);
-        var savedModel = await _ingestionProcessor.Set(ingestionModel);
+        var savedModel = await _ingestionProcessor.Set(ingestionModel, workspaceId);
         await SyncIngestion(savedModel.IngestionId, initiator);
         var result = _mapper.Map<IngestionViewModel>(savedModel);
         return result;
@@ -56,15 +56,15 @@ public class IngestionService : IIngestionService
         }
 
         var ingestionModel = _mapper.Map<IngestionModel>(ingestionViewModel);
-        var savedModel = await _ingestionProcessor.Set(ingestionModel);
+        var savedModel = await _ingestionProcessor.Set(ingestionModel, null);
         await HandleUpdate(savedModel.IngestionId, initiator);
         var result = _mapper.Map<IngestionViewModel>(savedModel);
         return result;
     }
 
-    public async Task<List<IngestionViewModel>> ListIngestions()
+    public async Task<List<IngestionViewModel>> ListIngestions(int workspaceId)
     {
-        var ingestions = await _ingestionProcessor.List();
+        var ingestions = await _ingestionProcessor.List(workspaceId);
         var tasksFailed = await _taskProcessor
             .LastTaskList(ingestions.Select(e => e.IngestionId)
                 .Distinct().ToList());
@@ -85,9 +85,9 @@ public class IngestionService : IIngestionService
         return viewModels;
     }
 
-    public async Task<List<IngestionTaskViewModel>> ListIngestionTasks()
+    public async Task<List<IngestionTaskViewModel>> ListIngestionTasks(int workspaceId)
     {
-        var taskWithIngestions = await _taskProcessor.ListWithIngestion();
+        var taskWithIngestions = await _taskProcessor.ListWithIngestion(workspaceId);
         var viewModels = _mapper.Map<List<IngestionTaskViewModel>>(taskWithIngestions);
         return viewModels;
     }
@@ -164,11 +164,11 @@ public class IngestionService : IIngestionService
 public interface IIngestionService
 {
     Task<IngestionViewModel?> GetIngestionById(int ingestionId);
-    Task<IngestionViewModel> AddIngestion(IngestionViewModel ingestionViewModel, string initiator);
+    Task<IngestionViewModel> AddIngestion(IngestionViewModel ingestionViewModel, string initiator, int workspaceId);
     Task<IngestionViewModel> UpdateIngestion(IngestionViewModel ingestionViewModel, string initiator);
-    Task<List<IngestionViewModel>> ListIngestions();
+    Task<List<IngestionViewModel>> ListIngestions(int workspaceId);
     Task SyncIngestion(int ingestionId, string initiator);
     Task DeleteIngestion(int ingestionId, string initiator);
-    Task<List<IngestionTaskViewModel>> ListIngestionTasks();
+    Task<List<IngestionTaskViewModel>> ListIngestionTasks(int workspaceId);
     Task<List<string>> GetAutoComplete(string parameterName, IngestionViewModel ingestionViewModel);
 }

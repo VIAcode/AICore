@@ -1,4 +1,5 @@
 ﻿using AiCoreApi.Authorization;
+using AiCoreApi.Authorization.Attributes;
 using AiCoreApi.Common;
 using AiCoreApi.Common.Extensions;
 using AiCoreApi.Models.ViewModels;
@@ -50,7 +51,7 @@ public class TagsController : ControllerBase
     }
 
     [HttpPost]
-    [AdminAuthorize]
+    [RoleAuthorize(Role.Admin)]
     public async Task<IActionResult> Add([FromBody] TagViewModel tagViewModel)
     {
         var currentUser = this.GetLogin();
@@ -64,7 +65,7 @@ public class TagsController : ControllerBase
     }
 
     [HttpPut("{tagId}")]
-    [AdminAuthorize]
+    [RoleAuthorize(Role.Admin)]
     public async Task<IActionResult> Update([FromBody] TagViewModel tagViewModel)
     {
         var currentUser = this.GetLogin();
@@ -74,5 +75,13 @@ public class TagsController : ControllerBase
 
         await _tagsService.AddOrUpdateTag(tagViewModel);
         return Ok(true);
+    }
+
+    [HttpDelete("{tagId}")]
+    [RoleAuthorize(Role.Admin)]
+    public async Task<IActionResult> Remove(int tagId)
+    {
+        var result = await _tagsService.RemoveTag(tagId);
+        return Ok(result);
     }
 }

@@ -23,7 +23,9 @@ namespace AiCoreApi.Common.Data
         public DbSet<AgentModel> Agents { get; set; }
         public DbSet<SchedulerAgentTaskModel> SchedulerAgentTasks { get; set; }
         public DbSet<DebugLogModel> DebugLog { get; set; }
-        
+        public DbSet<WorkspaceModel> Workspaces { get; set; }
+
+
         private readonly IDbQuery _dbQuery;
         private readonly ILogger<Db> _logger;
         private readonly IDataSourceProvider _dataSourceProvider;
@@ -91,6 +93,11 @@ namespace AiCoreApi.Common.Data
                 .HasMany(e => e.Tags)
                 .WithMany(e => e.Agents)
                 .UsingEntity("tags_x_agents");
+
+            builder.Entity<WorkspaceModel>()
+                .HasMany(e => e.Tags)
+                .WithMany(e => e.Workspaces)
+                .UsingEntity("tags_x_workspaces");
 
             foreach (var entity in builder.Model.GetEntityTypes())
             {

@@ -27,7 +27,7 @@ namespace AiCoreApi.SemanticKernel.Agents
         private static ConcurrentDictionary<string, List<string>> _assemblyPaths = new();
         private static ConcurrentDictionary<string, Script<string>> _compiledScripts = new();
 
-        private const string DebugMessageSenderName = "CSharpCodeAgent";
+        private string _debugMessageSenderName = "CSharpCodeAgent";
 
         private static class AgentContentParameters
         {
@@ -47,7 +47,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             ResponseAccessor responseAccessor,
             ExtendedConfig extendedConfig,
             ICacheAccessor cacheAccessor,
-            ILogger<CsharpCodeAgent> logger) : base(requestAccessor, extendedConfig, logger)
+            ILogger<CsharpCodeAgent> logger) : base(responseAccessor, requestAccessor, extendedConfig, logger)
         {
             _plannerHelpers = plannerHelpers;
             _requestAccessor = requestAccessor;
@@ -60,14 +60,10 @@ namespace AiCoreApi.SemanticKernel.Agents
 
         public async Task<string> DoCallWrapper(AgentModel agent, Dictionary<string, string> parameters) => await base.DoCallWrapper(agent, parameters);
 
-        public override async Task<string> DoCall(
-            AgentModel agent,
-            Dictionary<string, string> parameters)
+        public override async Task<string> DoCall(AgentModel agent, Dictionary<string, string> parameters)
         {
-            // Ensure values are HTML-decoded
-            parameters
-                .ToList()
-                .ForEach(p => parameters[p.Key] = HttpUtility.HtmlDecode(p.Value));
+            parameters.ToList().ForEach(p => parameters[p.Key] = HttpUtility.HtmlDecode(p.Value));
+            _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
             // Insert user parameters into the code template
             var csharpCode = ApplyParameters(agent.Content[AgentContentParameters.CsharpCode].Value, parameters);
@@ -82,7 +78,7 @@ namespace AiCoreApi.SemanticKernel.Agents
 
         private async Task<string> Call(Dictionary<string, string> parameters, string csharpCode)
         {
-            _responseAccessor.AddDebugMessage(DebugMessageSenderName, "Execute C# Code", csharpCode);
+            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "Execute C# Code", csharpCode);
 
             // Clean the script code by removing #r "..." directives
             var cleanedCode = Regex.Replace(csharpCode, @"#r\s+""nuget:[^""]+""", "");
@@ -115,7 +111,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             var references = _assemblyPaths.FirstOrDefault(x => x.Key == assemblyPathsCacheKey).Value;
             try
             {
-                _responseAccessor.AddDebugMessage(DebugMessageSenderName, "C# Code Execution", "");
+                _responseAccessor.AddDebugMessage(_debugMessageSenderName, "C# Code Execution", "");
 
                 // Prepare delegate references for Agent calls
                 Func<string, List<string>?, string> executeAgent = ExecuteAgent;
@@ -155,13 +151,13 @@ namespace AiCoreApi.SemanticKernel.Agents
                 }
 
                 var result = executor.Execute(dllPath, "Agent", "Run", args, references)?.ToString();
-                _responseAccessor.AddDebugMessage(DebugMessageSenderName, "C# Code Result", result);
+                _responseAccessor.AddDebugMessage(_debugMessageSenderName, "C# Code Result", result);
                 return result;
             }
             catch (Exception e)
             {
                 _responseAccessor.AddDebugMessage(
-                    DebugMessageSenderName,
+                    _debugMessageSenderName,
                     "C# Code Error",
                     $"Exception: {e.Message}\r\n\r\nInner Exception: {e.InnerException?.Message}"
                 );
@@ -172,7 +168,7 @@ namespace AiCoreApi.SemanticKernel.Agents
         // Quick mode – interpret the snippet directly with Roslyn's C# scripting
         private async Task<string> QuickCall(Dictionary<string, string> parameters, string csharpCode)
         {
-            _responseAccessor.AddDebugMessage(DebugMessageSenderName, "Execute C# Code (quick)", csharpCode);
+            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "Execute C# Code (quick)", csharpCode);
 
             var globals = new Globals
             {
@@ -220,15 +216,15 @@ namespace AiCoreApi.SemanticKernel.Agents
 
             try
             {
-                _responseAccessor.AddDebugMessage(DebugMessageSenderName, "C# Code Execution (quick)", "");
+                _responseAccessor.AddDebugMessage(_debugMessageSenderName, "C# Code Execution (quick)", "");
                 var result = await compiledScript.RunAsync(globals);
-                _responseAccessor.AddDebugMessage(DebugMessageSenderName, "C# Code Result (quick)", result.ReturnValue);
+                _responseAccessor.AddDebugMessage(_debugMessageSenderName, "C# Code Result (quick)", result.ReturnValue);
                 return result.ReturnValue;
             }
             catch (Exception e)
             {
                 _responseAccessor.AddDebugMessage(
-                    DebugMessageSenderName,
+                    _debugMessageSenderName,
                     "C# Code Error (quick)",
                     $"Exception: {e.Message}\r\n\r\nInner Exception: {e.InnerException?.Message}"
                 );
@@ -247,7 +243,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             catch (Exception e)
             {
                 _responseAccessor.AddDebugMessage(
-                    DebugMessageSenderName,
+                    _debugMessageSenderName,
                     "C# Code ExecuteAgent Error",
                     $"Agent: {agentName}\r\n\r\n Exception: {e.Message}\r\n\r\nInner Exception: {e.InnerException?.Message}"
                 );
@@ -352,7 +348,7 @@ namespace AiCoreApi.SemanticKernel.Agents
                     // If the exact version wasn't found, use the latest
                     selectedVersion = versions.Last();
                     _responseAccessor.AddDebugMessage(
-                        DebugMessageSenderName,
+                        _debugMessageSenderName,
                         "C# Code Warning",
                         $"NuGet package '{packageName}' version '{versionRange.ToString()}' not found. Using latest: {selectedVersion}"
                     );

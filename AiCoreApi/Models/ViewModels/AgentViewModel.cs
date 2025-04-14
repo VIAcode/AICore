@@ -14,6 +14,7 @@ namespace AiCoreApi.Models.ViewModels
         public Dictionary<string, ConfigurableSettingView> Content { get; set; } = new();
         public List<TagViewModel> Tags { get; set; } = new();
         public int Version { get; set; } = 0;
+        public int? WorkspaceId { get; set; }
     }
 
     public class ConfigurableSettingView

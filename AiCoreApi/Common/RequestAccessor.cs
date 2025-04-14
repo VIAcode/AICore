@@ -9,18 +9,24 @@ namespace AiCoreApi.Common
     public class RequestAccessor
     {
         private readonly IHttpContextAccessor? _httpContextAccessor;
+        public readonly UserContextAccessor UserContext;
 
-        public RequestAccessor(IHttpContextAccessor httpContextAccessor)
+        public RequestAccessor(
+            IHttpContextAccessor httpContextAccessor,
+            UserContextAccessor userContextAccessor
+            )
         {
             if (httpContextAccessor == null)
                 return;
+            UserContext = userContextAccessor;
             _httpContextAccessor = httpContextAccessor;
             UseMarkdown = GetParameter("use_markdown") != "false";
             UseBing = GetParameter("use_bing") == "true";
             UseCachedPlan = GetParameter("use_cached_plan") != "false";
-            UseDebug = GetParameter("use_debug") == "true" && IsAdmin;
+            UseDebug = GetParameter("use_debug") == "true" && UserContext.HasRole(nameof(RoleEnum.Developer)) || UserContext.HasRole(nameof(RoleEnum.Admin));
             DefaultConnectionNames = GetParameter("connection_name")?.Split(',').ToList() ?? new List<string>();
             TagsString = string.IsNullOrEmpty(GetParameter("tags")) ? "0" : GetParameter("tags");
+            WorkspaceId = GetParameter("workspace_id") != null ? Convert.ToInt32(GetParameter("workspace_id")) : null;
             Query = GetParameter("q") ?? "";
 
             if (_httpContextAccessor.HttpContext != null &&
@@ -61,36 +67,19 @@ namespace AiCoreApi.Common
             LoginTypeString = request.LoginTypeString;
             Login = request.Login;
             MessageDialog = request.MessageDialog;
+            WorkspaceId = request.WorkspaceId;
         }
 
         public bool UseMarkdown { get; set; }
         public bool UseBing { get; set; }
         public bool UseCachedPlan { get; set; }
         public bool UseDebug { get; set; }
-        public bool? _isAdmin { get; set; } = null;
-
-        public bool IsAdmin
-        {
-            get
-            {
-                if (_isAdmin == null)
-                {
-                    _isAdmin = _httpContextAccessor?.HttpContext?.User.FindFirstValue(ClaimTypes.Role) == "Admin";
-                }
-                return _isAdmin.Value;
-
-            }
-            set
-            {
-                _isAdmin = value;
-            }
-        }
-
         public List<string> DefaultConnectionNames { get; set; }
         public string? TagsString { get; set; }
         public string Query { get; set; }
         public string? LoginTypeString { get; set; }
         public string? Login { get; set; }
+        public int? WorkspaceId { get; set; }
         public MessageDialogViewModel? MessageDialog { get; set; }
 
         public List<int> Tags => (TagsString ?? "")

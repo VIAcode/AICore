@@ -40,7 +40,8 @@ namespace AiCoreApi.Common
 
             if (string.IsNullOrEmpty(modelDeploymentName))
                 return await base.SendAsync(request, cancellationToken);
-            var connections = await connectionProcessor.List();
+            var requestAccessor = serviceProvider.GetService<RequestAccessor>();
+            var connections = await connectionProcessor.List(requestAccessor.WorkspaceId);
 
             var connection = connections.FirstOrDefault(conn => conn.Type == connectionType.Value &&
                 (conn.Type == ConnectionType.AzureOpenAiLlm && conn.Content["deploymentName"].ToLower() == modelDeploymentName) ||
@@ -55,7 +56,7 @@ namespace AiCoreApi.Common
             var loginProcessor = serviceProvider.GetService<ILoginProcessor>();
             var logger = serviceProvider.GetService<ILogger<OpenAiHttpCallHandler>>();
 
-            var loginId = userContextAccessor?.LoginId ?? UserContextAccessor.AsyncScheduledLoginId.Value;
+            var loginId = (await userContextAccessor?.GetLoginIdAsync()) ?? UserContextAccessor.AsyncScheduledLoginId.Value;
             if (loginId == null)
                 return new HttpResponseMessage(HttpStatusCode.Unauthorized);
             var spent = await spentProcessor.GetTodayByLoginId(loginId.Value, connection.Name);

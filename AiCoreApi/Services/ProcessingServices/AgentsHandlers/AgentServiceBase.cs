@@ -68,6 +68,7 @@ namespace AiCoreApi.Services.ProcessingServices.AgentsHandlers
                     requestAccessor.Login = runAsUser.Login;
                     requestAccessor.LoginTypeString = runAsUser.LoginType.ToString();
                     requestAccessor.TagsString = string.Join(",", runAsUser.Tags.Select(tag => tag.TagId));
+                    requestAccessor.WorkspaceId = agentToCallModel.WorkspaceId ?? 0;
                     if (_extendedConfig.AllowDebugMode && _extendedConfig.DebugMessagesStorageEnabled)
                     {
                         requestAccessor.UseDebug = true;
@@ -109,7 +110,7 @@ namespace AiCoreApi.Services.ProcessingServices.AgentsHandlers
                                         DebugMessages = responseAccessor.CurrentMessage.DebugMessages
                                     }
                                 }
-                            });
+                            }, agentToCallModel.WorkspaceId ?? 0);
                     }
                     return result;
                 }

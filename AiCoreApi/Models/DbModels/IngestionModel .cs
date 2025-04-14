@@ -20,6 +20,7 @@ namespace AiCoreApi.Models.DbModels
         public DateTime Updated { get; set; } = DateTime.UtcNow;
         public List<TagModel> Tags { get; set; } = new();
         public DateTime LastSync { get; set; } = DateTime.UtcNow;
+        public int? WorkspaceId { get; set; }
     }
 
     public enum IngestionType

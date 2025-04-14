@@ -9,7 +9,7 @@ namespace AiCoreApi.SemanticKernel.Agents
 {
     public class BackgroundWorkerAgent : BaseAgent, IBackgroundWorkerAgent
     {
-        private const string DebugMessageSenderName = "BackgroundWorkerAgent";
+        private string _debugMessageSenderName = "BackgroundWorkerAgent";
         public static class AgentContentParameters
         {
             public const string CompositeAgentName = "compositeAgentName";
@@ -27,7 +27,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             ResponseAccessor responseAccessor,
             RequestAccessor requestAccessor,
             ExtendedConfig extendedConfig,
-            ILogger<BackgroundWorkerAgent> logger) : base(requestAccessor, extendedConfig, logger)
+            ILogger<BackgroundWorkerAgent> logger) : base(responseAccessor, requestAccessor, extendedConfig, logger)
         {
             _schedulerAgentTaskProcessor = schedulerAgentTaskProcessor;
             _userContextAccessor = userContextAccessor;
@@ -38,6 +38,7 @@ namespace AiCoreApi.SemanticKernel.Agents
         public override async Task<string> DoCall(AgentModel agent, Dictionary<string, string> parameters)
         {
             parameters.ToList().ForEach(p => parameters[p.Key] = HttpUtility.HtmlDecode(p.Value));
+            _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
             // Handle Return value
             if (parameters.Count > 0)
@@ -57,7 +58,7 @@ namespace AiCoreApi.SemanticKernel.Agents
                             result = "[Failed]";
                         else if(schedulerAgentTaskModel.SchedulerAgentTaskState == SchedulerAgentTaskState.Completed)
                             result = schedulerAgentTaskModel.Result;
-                        _responseAccessor.AddDebugMessage(DebugMessageSenderName, "DoCall", $"Task found ({parameter1}):\r\n{result}");
+                        _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall", $"Task found ({parameter1}):\r\n{result}");
                         return result;
                     }
                 }
@@ -66,7 +67,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             var compositeAgentName = agent.Content[AgentContentParameters.CompositeAgentName].Value;
             var lifeTimeMinutes = agent.Content.ContainsKey(AgentContentParameters.LifeTimeMinutes) ? int.Parse(agent.Content[AgentContentParameters.LifeTimeMinutes].Value) : 60;
 
-            _responseAccessor.AddDebugMessage(DebugMessageSenderName, "DoCall Request",
+            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Request",
                 $"Parameters: {string.Join(", ", parameters.Select(item => $"{item.Key}: {item.Value}"))}\r\nCompositeAgent:\r\n{compositeAgentName}");
             var schedulerAgentTaskGuid = Guid.NewGuid().ToString().ToLower();
 
@@ -76,13 +77,13 @@ namespace AiCoreApi.SemanticKernel.Agents
                 CompositeAgentName = compositeAgentName,
                 Parameters = parameters.ToJson()!,
                 RequestAccessor = _requestAccessor.ToJson()!,
-                LoginId = _userContextAccessor.LoginId ?? 0,
+                LoginId = await _userContextAccessor.GetLoginIdAsync() ?? 0,
                 ValidTill = DateTime.UtcNow.AddMinutes(lifeTimeMinutes),
                 CreatedAt = DateTime.UtcNow,
                 SchedulerAgentTaskState = SchedulerAgentTaskState.New
             });
 
-            _responseAccessor.AddDebugMessage(DebugMessageSenderName, "DoCall Response", schedulerAgentTaskGuid);
+            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Response", schedulerAgentTaskGuid);
             return schedulerAgentTaskGuid;
         }
     }

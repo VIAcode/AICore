@@ -1,4 +1,5 @@
 ﻿using AiCoreApi.Authorization;
+using AiCoreApi.Authorization.Attributes;
 using AiCoreApi.Models.ViewModels;
 using AiCoreApi.Services.ControllersServices;
 using Microsoft.AspNetCore.Authorization;
@@ -18,7 +19,7 @@ namespace AiCoreApi.Controllers
         }
 
         [HttpGet]
-        [AdminAuthorize]
+        [RoleAuthorize(Role.Admin)]
         [CombinedAuthorize]
         public IActionResult ListAll()
         {
@@ -26,7 +27,7 @@ namespace AiCoreApi.Controllers
         }
 
         [HttpPost]
-        [AdminAuthorize]
+        [RoleAuthorize(Role.Admin)]
         [CombinedAuthorize]
         public IActionResult Save([FromBody] List<SettingsViewModel> settingsViewModels)
         {
@@ -35,7 +36,7 @@ namespace AiCoreApi.Controllers
         }
 
         [HttpPost("reboot")]
-        [AdminAuthorize]
+        [RoleAuthorize(Role.Admin)]
         [CombinedAuthorize]
         public IActionResult Reboot()
         {

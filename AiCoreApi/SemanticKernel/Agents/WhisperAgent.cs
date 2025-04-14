@@ -10,7 +10,7 @@ namespace AiCoreApi.SemanticKernel.Agents
 {
     public class WhisperAgent : BaseAgent, IWhisperAgent
     {
-        private const string DebugMessageSenderName = "WhisperAgent";
+        private string _debugMessageSenderName = "WhisperAgent";
         public static class AgentPromptPlaceholders
         {
             public const string FileDataPlaceholder = "firstFileData";
@@ -35,7 +35,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             ResponseAccessor responseAccessor,
             IHttpClientFactory httpClientFactory,
             ExtendedConfig extendedConfig,
-            ILogger<WhisperAgent> logger) : base(requestAccessor, extendedConfig, logger)
+            ILogger<WhisperAgent> logger) : base(responseAccessor, requestAccessor, extendedConfig, logger)
         {
             _connectionProcessor = connectionProcessor;
             _requestAccessor = requestAccessor;
@@ -43,11 +43,11 @@ namespace AiCoreApi.SemanticKernel.Agents
             _httpClientFactory = httpClientFactory;
         }
 
-        public override async Task<string> DoCall(
-            AgentModel agent,
-            Dictionary<string, string> parameters)
+        public override async Task<string> DoCall(AgentModel agent, Dictionary<string, string> parameters)
         {
             parameters.ToList().ForEach(p => parameters[p.Key] = HttpUtility.HtmlDecode(p.Value));
+            _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
+
             var base64Audio = ApplyParameters(agent.Content[AgentContentParameters.Base64Audio].Value, parameters);
             var extension = ApplyParameters(agent.Content[AgentContentParameters.Extension].Value, parameters);
             var mimeType = ApplyParameters(agent.Content[AgentContentParameters.MimeType].Value, parameters);
@@ -62,9 +62,9 @@ namespace AiCoreApi.SemanticKernel.Agents
 
         public async Task<string> Transcribe(string base64Audio, string extension, string mimeType, string connectionName = "")
         {
-            _responseAccessor.AddDebugMessage(DebugMessageSenderName, "DoCall Request", $"Extension: {extension}\r\nConnection: {connectionName}\r\nBase64Audio: {base64Audio.Length} bytes");
-            var connections = await _connectionProcessor.List();
-            var connection = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.AzureWhisper, DebugMessageSenderName, connectionName: connectionName);
+            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Request", $"Extension: {extension}\r\nConnection: {connectionName}\r\nBase64Audio: {base64Audio.Length} bytes");
+            var connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
+            var connection = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.AzureWhisper, _debugMessageSenderName, connectionName: connectionName);
 
             var whisperApiKey = connection.Content["apiKey"];
             var whisperEndpoint = connection.Content["endpoint"];
@@ -80,13 +80,13 @@ namespace AiCoreApi.SemanticKernel.Agents
             var response = await httpClient.PostAsync(whisperEndpoint, form);
             if (!response.IsSuccessStatusCode)
             {
-                _responseAccessor.AddDebugMessage(DebugMessageSenderName, "DoCall Error", $"Failed to transcribe the audio file. Status code: {response.StatusCode}");
+                _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Error", $"Failed to transcribe the audio file. Status code: {response.StatusCode}");
                 throw new Exception("Failed to transcribe the audio file.");
             }
             var responseContent = await response.Content.ReadAsStringAsync();
             var recognizedText = responseContent.JsonGet<string>("text") ?? string.Empty;
 
-            _responseAccessor.AddDebugMessage(DebugMessageSenderName, "DoCall Response", recognizedText);
+            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Response", recognizedText);
             return recognizedText ?? "";
         }
     }

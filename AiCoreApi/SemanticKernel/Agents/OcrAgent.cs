@@ -15,7 +15,7 @@ namespace AiCoreApi.SemanticKernel.Agents
 {
     public class OcrAgent : BaseAgent, IOcrAgent
     {
-        private const string DebugMessageSenderName = "OcrAgent";
+        private string _debugMessageSenderName = "OcrAgent";
         public static class AgentPromptPlaceholders
         {
             public const string FileDataPlaceholder = "firstFileData";
@@ -74,7 +74,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             IHttpClientFactory httpClientFactory,
             IConnectionProcessor connectionProcessor,
             ExtendedConfig extendedConfig,
-            ILogger<OcrAgent> logger) : base(requestAccessor, extendedConfig, logger)
+            ILogger<OcrAgent> logger) : base(responseAccessor, requestAccessor, extendedConfig, logger)
         {
             _entraTokenProvider = entraTokenProvider;
             _requestAccessor = requestAccessor;
@@ -83,11 +83,10 @@ namespace AiCoreApi.SemanticKernel.Agents
             _connectionProcessor = connectionProcessor;
         }
 
-        public override async Task<string> DoCall(
-            AgentModel agent, 
-            Dictionary<string, string> parameters)
+        public override async Task<string> DoCall(AgentModel agent, Dictionary<string, string> parameters)
         {
             parameters.ToList().ForEach(p => parameters[p.Key] = HttpUtility.HtmlDecode(p.Value));
+            _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
             var base64Image = ApplyParameters(agent.Content[AgentContentParameters.Base64Image].Value, parameters);
             if (_requestAccessor.MessageDialog != null && _requestAccessor.MessageDialog.Messages!.Last().HasFiles() && base64Image.Contains(AgentPromptPlaceholders.FileDataPlaceholder))
@@ -99,8 +98,8 @@ namespace AiCoreApi.SemanticKernel.Agents
             }
 
             var documentIntelligenceConnection = agent.Content[AgentContentParameters.DocumentIntelligenceConnection].Value;
-            var connections = await _connectionProcessor.List();
-            var connection = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.DocumentIntelligence, DebugMessageSenderName, connectionName: documentIntelligenceConnection);
+            var connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
+            var connection = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.DocumentIntelligence, _debugMessageSenderName, connectionName: documentIntelligenceConnection);
 
             var optionsList = !agent.Content.ContainsKey(AgentContentParameters.Options)
                 ? new List<string>()
@@ -116,9 +115,9 @@ namespace AiCoreApi.SemanticKernel.Agents
             var modelName = connection.Content["modelName"];
             var accessType = connection.Content.ContainsKey("accessType") ? connection.Content["accessType"] : "apiKey";
             var apiKey = connection.Content.ContainsKey("apiKey") ? connection.Content["apiKey"] : "";
-            _responseAccessor.AddDebugMessage(DebugMessageSenderName, "OCR Processing", $"{endpoint}, {modelName}, {accessType}, {apiKey} \r\nFormat: {outputFormat} Options:{string.Join(", ", optionsList)} Output:{string.Join(", ", outputList)}");
+            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "OCR Processing", $"{endpoint}, {modelName}, {accessType}, {apiKey} \r\nFormat: {outputFormat} Options:{string.Join(", ", optionsList)} Output:{string.Join(", ", outputList)}");
             var result = await ProcessFile(endpoint, modelName, apiKey, accessType, optionsList, outputList, outputFormat, base64Image.StripBase64(), orderByAsc);
-            _responseAccessor.AddDebugMessage(DebugMessageSenderName, "OCR Processing Result", result);
+            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "OCR Processing Result", result);
             return result;
         }
 

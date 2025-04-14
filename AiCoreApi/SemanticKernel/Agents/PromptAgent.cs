@@ -11,7 +11,7 @@ namespace AiCoreApi.SemanticKernel.Agents
 {
     public class PromptAgent : BaseAgent, IPromptAgent
     {
-        private const string DebugMessageSenderName = "PromptAgent";
+        private string _debugMessageSenderName = "PromptAgent";
         public static class AgentPromptPlaceholders
         {
             public const string HasFilesPlaceholder = "hasFiles";
@@ -40,7 +40,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             RequestAccessor requestAccessor,
             ResponseAccessor responseAccessor,
             ExtendedConfig extendedConfig,
-            ILogger<PromptAgent> logger) : base(requestAccessor, extendedConfig, logger)
+            ILogger<PromptAgent> logger) : base(responseAccessor, requestAccessor, extendedConfig, logger)
         {
             _semanticKernelProvider = semanticKernelProvider;
             _connectionProcessor = connectionProcessor;
@@ -53,6 +53,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             Dictionary<string, string> parameters)
         {
             parameters.ToList().ForEach(p => parameters[p.Key] = HttpUtility.HtmlDecode(p.Value));
+            _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
             var templateText = ApplyParameters(agent.Content[AgentContentParameters.Prompt].Value, parameters);
             templateText = ApplyParameters(templateText, new Dictionary<string, string>
@@ -61,7 +62,7 @@ namespace AiCoreApi.SemanticKernel.Agents
                 {AgentPromptPlaceholders.FilesDataPlaceholder, _requestAccessor.MessageDialog.Messages.Last().GetFileContents()},
                 {AgentPromptPlaceholders.FilesNamesPlaceholder, _requestAccessor.MessageDialog.Messages.Last().GetFileNames()}
             });
-            _responseAccessor.AddDebugMessage(DebugMessageSenderName, "DoCall Request", templateText);
+            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Request", templateText);
 
             var outputType = agent.Content.ContainsKey(AgentContentParameters.OutputType) ? agent.Content[AgentContentParameters.OutputType].Value : string.Empty;
             var jsonSchema = agent.Content.ContainsKey(AgentContentParameters.JsonSchema) ? ApplyParameters(agent.Content[AgentContentParameters.JsonSchema].Value, parameters) : string.Empty;
@@ -69,9 +70,9 @@ namespace AiCoreApi.SemanticKernel.Agents
             var temperature = agent.Content.ContainsKey(AgentContentParameters.Temperature) ? Convert.ToDouble(agent.Content[AgentContentParameters.Temperature].Value) : 0;
             var strictMode = !agent.Content.ContainsKey(AgentContentParameters.StrictMode) || agent.Content[AgentContentParameters.StrictMode].Value == "true";
 
-            var connections = await _connectionProcessor.List();
+            var connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
             var llmConnection = GetConnection(_requestAccessor, _responseAccessor, connections,
-                new[] { ConnectionType.AzureOpenAiLlm, ConnectionType.OpenAiLlm, ConnectionType.CohereLlm, ConnectionType.AzureOpenAiLlmCarousel, ConnectionType.DeepSeekLlm }, DebugMessageSenderName, agent.LlmType);
+                new[] { ConnectionType.AzureOpenAiLlm, ConnectionType.OpenAiLlm, ConnectionType.CohereLlm, ConnectionType.AzureOpenAiLlmCarousel, ConnectionType.DeepSeekLlm }, _debugMessageSenderName, agent.LlmType);
 
             var kernel = _semanticKernelProvider.GetKernel(llmConnection);
             var chat = kernel.GetRequiredService<IChatCompletionService>();
@@ -99,15 +100,15 @@ namespace AiCoreApi.SemanticKernel.Agents
             }
             var resultContent = await chat.GetChatMessageContentAsync(history, executionSettings);
             var result = resultContent.Content ?? "";
-            _responseAccessor.AddDebugMessage(DebugMessageSenderName, "DoCall Response", result);
+            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Response", result);
             return result;
         }
 
         public async Task<string> Prompt(string prompt, double temperature = 0, string connectionName = "")
         {
-            var connections = await _connectionProcessor.List();
+            var connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
             var llmConnection = GetConnection(_requestAccessor, _responseAccessor, connections,
-                new[] { ConnectionType.AzureOpenAiLlm, ConnectionType.OpenAiLlm, ConnectionType.CohereLlm, ConnectionType.AzureOpenAiLlmCarousel, ConnectionType.DeepSeekLlm }, DebugMessageSenderName, connectionName: connectionName);
+                new[] { ConnectionType.AzureOpenAiLlm, ConnectionType.OpenAiLlm, ConnectionType.CohereLlm, ConnectionType.AzureOpenAiLlmCarousel, ConnectionType.DeepSeekLlm }, _debugMessageSenderName, connectionName: connectionName);
             var kernel = _semanticKernelProvider.GetKernel(llmConnection);
             var chat = kernel.GetRequiredService<IChatCompletionService>();
             var history = new ChatHistory();

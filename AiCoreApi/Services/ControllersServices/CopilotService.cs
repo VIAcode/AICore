@@ -4,7 +4,6 @@ using AiCoreApi.SemanticKernel;
 using AiCoreApi.SemanticKernel.Agents;
 using AiCoreApi.Common.Extensions;
 using AiCoreApi.Data.Processors;
-using AiCoreApi.Models.DbModels;
 
 namespace AiCoreApi.Services.ControllersServices
 {
@@ -81,7 +80,7 @@ namespace AiCoreApi.Services.ControllersServices
                 var parametersString = string.Join(Environment.NewLine, messageItem.Parameters.Select(x => $" - {x.Key}: {x.Value}"));
                 message = $"Agent: {messageItem.Name}{Environment.NewLine}Parameters:{Environment.NewLine}{parametersString}";
             }
-            await _debugLogProcessor.Add(_requestAccessor.Login, message, messageDialog);
+            await _debugLogProcessor.Add(_requestAccessor.Login, message, messageDialog, _requestAccessor.WorkspaceId ?? 0);
             return messageDialog;
         }
 

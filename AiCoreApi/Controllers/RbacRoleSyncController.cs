@@ -1,4 +1,4 @@
-﻿using AiCoreApi.Authorization;
+﻿using AiCoreApi.Authorization.Attributes;
 using AiCoreApi.Common.Extensions;
 using AiCoreApi.Models.ViewModels;
 using AiCoreApi.Services.ControllersServices;
@@ -19,14 +19,14 @@ namespace AiCoreApi.Controllers
         }
 
         [HttpGet]
-        [AdminAuthorize]
+        [RoleAuthorize(Role.Admin)]
         public async Task<IActionResult> List()
         {
             return Ok(await _rbacRoleSyncService.ListRbacRoleSyncs());
         }
 
         [HttpDelete("{rbacRoleSyncId}")]
-        [AdminAuthorize]
+        [RoleAuthorize(Role.Admin)]
         public async Task<IActionResult> DeleteRbacRoleSync(int rbacRoleSyncId)
         {
             await _rbacRoleSyncService.DeleteRbacRoleSync(rbacRoleSyncId);
@@ -34,7 +34,7 @@ namespace AiCoreApi.Controllers
         }
 
         [HttpPost]
-        [AdminAuthorize]
+        [RoleAuthorize(Role.Admin)]
         public async Task<IActionResult> Add([FromBody] RbacRoleSyncViewModel rbacRoleSyncViewModel)
         {
             var currentUser = this.GetLogin();
@@ -46,7 +46,7 @@ namespace AiCoreApi.Controllers
         }
 
         [HttpPut]
-        [AdminAuthorize]
+        [RoleAuthorize(Role.Admin)]
         public async Task<IActionResult> Update([FromBody] RbacRoleSyncViewModel rbacRoleSyncViewModel)
         {
             var currentUser = this.GetLogin();

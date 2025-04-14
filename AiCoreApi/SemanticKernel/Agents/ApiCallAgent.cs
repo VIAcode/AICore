@@ -9,7 +9,7 @@ namespace AiCoreApi.SemanticKernel.Agents
 {
     public class ApiCallAgent : BaseAgent, IApiCallAgent
     {
-        private const string DebugMessageSenderName = "ApiCallAgent";
+        private string _debugMessageSenderName = "ApiCallAgent";
         private static class AgentContentParameters
         {
             public const string Url = "url";
@@ -30,7 +30,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             ExtendedConfig extendedConfig,
             IHttpClientFactory httpClientFactory, 
             ResponseAccessor responseAccessor,
-            RequestAccessor requestAccessor) : base(requestAccessor, extendedConfig, logger)
+            RequestAccessor requestAccessor) : base(responseAccessor, requestAccessor, extendedConfig, logger)
         {
             _httpClientFactory = httpClientFactory;
             _responseAccessor = responseAccessor;
@@ -39,6 +39,7 @@ namespace AiCoreApi.SemanticKernel.Agents
         public override async Task<string> DoCall(AgentModel agent, Dictionary<string, string> parameters)
         {
             parameters.ToList().ForEach(p => parameters[p.Key] = HttpUtility.HtmlDecode(p.Value));
+            _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
             var url = ApplyParameters(agent.Content[AgentContentParameters.Url].Value, parameters);
             var uri = new Uri(url);
@@ -55,12 +56,12 @@ namespace AiCoreApi.SemanticKernel.Agents
                     httpRequestMessage.Content = new StringContent(body, Encoding.UTF8, contentType);
                 }
             }
-            _responseAccessor.AddDebugMessage(DebugMessageSenderName, "DoCall Request", $"{GetHttpMethod(agent)}: {uri}\r\nBody: \r\n{body}");
+            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Request", $"{GetHttpMethod(agent)}: {uri}\r\nBody: \r\n{body}");
             using var httpClient = GetHttpClient(agent, parameters);
             using var response = await httpClient.SendAsync(httpRequestMessage);
             response.EnsureSuccessStatusCode();
             var responseBody = await response.Content.ReadAsStringAsync();
-            _responseAccessor.AddDebugMessage(DebugMessageSenderName, "DoCall Response", responseBody);
+            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Response", responseBody);
             return responseBody;
         }
 

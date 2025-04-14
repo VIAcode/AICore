@@ -31,7 +31,7 @@ namespace AiCoreApi.Services.ProcessingServices.AgentsHandlers
 
         public async Task ProcessTask()
         {
-            var agents = await _agentsProcessor.List();
+            var agents = await _agentsProcessor.List(null);
             var schedulerAgents = agents.Where(agent => agent.Type == AgentType.AzureServiceBusListener).ToList();
             var processedAgents = new List<string>();
             foreach (var agent in schedulerAgents)
@@ -54,7 +54,7 @@ namespace AiCoreApi.Services.ProcessingServices.AgentsHandlers
                 if (ServiceBusProcessors.ContainsKey(key))
                     continue;
 
-                var connections = await _connectionProcessor.List();
+                var connections = await _connectionProcessor.List(agent.WorkspaceId);
                 var connection = connections.FirstOrDefault(conn => conn.Type == ConnectionType.AzureServiceBus && conn.Name == connectionName);
                 if (connection == null)
                 {
@@ -121,7 +121,7 @@ namespace AiCoreApi.Services.ProcessingServices.AgentsHandlers
             using var scope = ServiceProvider.CreateScope();
             var agentsProcessor = scope.ServiceProvider.GetRequiredService<IAgentsProcessor>();
 
-            var agents = await agentsProcessor.List();
+            var agents = await agentsProcessor.List(null);
             var agent = agents.FirstOrDefault(item => item.Name == currentAgentName);
 
             agent.Content["lastResult"].Value = $"ProcessError: {args.Exception.Message}";
@@ -134,7 +134,7 @@ namespace AiCoreApi.Services.ProcessingServices.AgentsHandlers
             using var scope = ServiceProvider.CreateScope();
             var agentsProcessor = scope.ServiceProvider.GetRequiredService<IAgentsProcessor>();
 
-            var agents = await agentsProcessor.List();
+            var agents = await agentsProcessor.List(null);
             var agent = agents.FirstOrDefault(item => item.Name == currentAgentName);
 
             try
@@ -147,7 +147,8 @@ namespace AiCoreApi.Services.ProcessingServices.AgentsHandlers
 
                 var cts = new CancellationTokenSource();
                 var renewalTask = RenewLockAsync(args.Message, args, cts.Token);
-                await RunAgent("AzureServiceBus", agents, agent, agentToCallName, runAs, parametersValues);
+                var availableAgents = await _agentsProcessor.List(agent.WorkspaceId);
+                await RunAgent("AzureServiceBus", availableAgents, agent, agentToCallName, runAs, parametersValues);
                 await agentsProcessor.Update(agent);
                 await args.CompleteMessageAsync(args.Message);
                 cts.Cancel();

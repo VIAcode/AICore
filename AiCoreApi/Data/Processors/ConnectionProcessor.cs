@@ -16,12 +16,22 @@ namespace AiCoreApi.Data.Processors
             _config = config;
         }
 
-        public async Task<List<ConnectionModel?>> List()
+        public async Task<List<ConnectionModel?>> List(int? workspaceId)
         {
-            return await _db.Connections.AsNoTracking().OrderBy(item => item.ConnectionId).ToListAsync();
+            var qry = _db.Connections.OrderBy(item => item.ConnectionId).AsNoTracking();
+            if (workspaceId == 0)
+            {
+                qry = qry.Where(e => e.WorkspaceId == null);
+            }
+            else if (workspaceId != null && workspaceId > 0)
+            {
+                qry = qry.Where(e => e.WorkspaceId == workspaceId);
+            }
+            var data = await qry.ToListAsync();
+            return data;
         }
 
-        public async Task<ConnectionModel> Set(ConnectionModel connectionModel)
+        public async Task<ConnectionModel> Set(ConnectionModel connectionModel, int? workspaceId)
         {
             ConnectionModel? settingValue;
             if (connectionModel.ConnectionId == 0)
@@ -33,6 +43,7 @@ namespace AiCoreApi.Data.Processors
                     Name = connectionModel.Name,
                     Type = connectionModel.Type,
                     Content = connectionModel.Content,
+                    WorkspaceId = workspaceId == 0 ? null : workspaceId,
                 };
                 await _db.Connections.AddAsync(settingValue);
             }
@@ -66,8 +77,8 @@ namespace AiCoreApi.Data.Processors
 
     public interface IConnectionProcessor
     {
-        Task<List<ConnectionModel?>> List();
-        Task<ConnectionModel> Set(ConnectionModel connectionModel);
+        Task<List<ConnectionModel?>> List(int? workspaceId);
+        Task<ConnectionModel> Set(ConnectionModel connectionModel, int? workspaceId);
         Task Remove(int connectionId);
         Task<ConnectionModel?> GetById(int connectionId);
     }

@@ -18,6 +18,7 @@ namespace AiCoreApi.Models.DbModels
         public Dictionary<string, ConfigurableSetting> Content { get; set; } = new();
         public List<TagModel> Tags { get; set; } = new();
         public int Version { get; set; } = 0;
+        public int? WorkspaceId { get; set; }
 
     }
 

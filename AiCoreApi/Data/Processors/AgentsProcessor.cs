@@ -14,9 +14,18 @@ public class AgentsProcessor : IAgentsProcessor
         _db = db;
     }
 
-    public async Task<List<AgentModel>> List()
+    public async Task<List<AgentModel>> List(int? workspaceId)
     {
-        var data = await _db.Agents.Include(e => e.Tags).AsNoTracking().ToListAsync();
+        var qry = _db.Agents.Include(e => e.Tags).AsNoTracking();
+        if (workspaceId == 0)
+        {
+            qry = qry.Where(e => e.WorkspaceId == null);
+        }
+        else if(workspaceId != null && workspaceId > 0)
+        {
+            qry = qry.Where(e => e.WorkspaceId == workspaceId);
+        }
+        var data = await qry.ToListAsync();
         return data;
     }
 
@@ -25,9 +34,14 @@ public class AgentsProcessor : IAgentsProcessor
         return await _db.Agents.Include(e => e.Tags).AsNoTracking().FirstOrDefaultAsync(e => e.AgentId == agentId);
     }
 
-    public async Task<AgentModel?> GetByName(string agentName)
+    public async Task<AgentModel?> GetByName(string agentName, int? workspaceId)
     {
-        return await _db.Agents.Include(e => e.Tags).AsNoTracking().FirstOrDefaultAsync(e => e.Name == agentName);
+        var qry = _db.Agents.Include(e => e.Tags).AsNoTracking();
+        if (workspaceId == 0)
+            qry = qry.Where(item => item.WorkspaceId == null);
+        else if (workspaceId != null)
+            qry = qry.Where(item => item.WorkspaceId == workspaceId);
+        return await qry.FirstOrDefaultAsync(e => e.Name == agentName);
     }
 
     public async Task<AgentModel?> Update(AgentModel agentModel)
@@ -36,7 +50,8 @@ public class AgentsProcessor : IAgentsProcessor
             .Include(e => e.Tags)
             .FirstOrDefaultAsync(item => item.AgentId == agentModel.AgentId);
         if (existingAgent == null)
-            return await Add(agentModel);
+            return await Add(agentModel, agentModel.WorkspaceId ?? 0);
+        agentModel.WorkspaceId = existingAgent.WorkspaceId;
         var tIds = agentModel.Tags.Select(e => e.TagId);
         var tags = tIds.Any()
             ? await _db.Tags.Where(e => tIds.Contains(e.TagId)).ToListAsync()
@@ -48,7 +63,7 @@ public class AgentsProcessor : IAgentsProcessor
         return existingAgent;
     }
 
-    public async Task<AgentModel> Add(AgentModel agentModel)
+    public async Task<AgentModel> Add(AgentModel agentModel, int workspaceId)
     {
         var existingAgent = await _db.Agents
             .Include(e => e.Tags)
@@ -61,22 +76,8 @@ public class AgentsProcessor : IAgentsProcessor
             var tIds = agentModel.Tags.Select(e => e.TagId);
             agentModel.Tags = tags.Where(e => tIds.Contains(e.TagId)).ToList();
         }
+        agentModel.WorkspaceId = workspaceId > 0 ? workspaceId : null;
         await _db.Agents.AddAsync(agentModel);
-        await _db.SaveChangesAsync();
-        return agentModel;
-    }
-
-    public async Task<AgentModel> Set(AgentModel agentModel)
-    {
-        if (agentModel.AgentId == 0)
-        {
-            await _db.Agents.AddAsync(agentModel);
-        }
-        else
-        {
-            _db.Agents.Update(agentModel);
-        }
-
         await _db.SaveChangesAsync();
         return agentModel;
     }
@@ -95,10 +96,10 @@ public class AgentsProcessor : IAgentsProcessor
 
 public interface IAgentsProcessor
 {
-    Task<List<AgentModel>> List();
+    Task<List<AgentModel>> List(int? workspaceId);
     Task<AgentModel?> GetById(int agentId);
-    Task<AgentModel?> GetByName(string agentName);
-    Task<AgentModel> Add(AgentModel agentModel);
+    Task<AgentModel?> GetByName(string agentName, int? workspaceId);
+    Task<AgentModel> Add(AgentModel agentModel, int workspaceId);
     Task<AgentModel?> Update(AgentModel agentModel);
     Task Delete(int agentId);
 }

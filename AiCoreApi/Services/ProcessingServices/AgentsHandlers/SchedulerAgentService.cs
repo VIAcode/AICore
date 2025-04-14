@@ -22,7 +22,7 @@ namespace AiCoreApi.Services.ProcessingServices.AgentsHandlers
 
         public async Task ProcessTask()
         {
-            var agents = await _agentsProcessor.List();
+            var agents = await _agentsProcessor.List(null);
             var schedulerAgents = agents.Where(agent => agent.Type == AgentType.Scheduler).ToList();
             foreach (var agent in schedulerAgents)
             {
@@ -43,7 +43,8 @@ namespace AiCoreApi.Services.ProcessingServices.AgentsHandlers
                 var nextRunTime = cronExpression.GetNextOccurrence(lastRunDateTime);
                 if (DateTime.UtcNow >= nextRunTime)
                 {
-                    await RunAgent("Scheduler", agents, agent, agentToCallName, runAs, parametersValues);
+                    var availableAgents = await _agentsProcessor.List(agent.WorkspaceId);
+                    await RunAgent("Scheduler", availableAgents, agent, agentToCallName, runAs, parametersValues);
                     await _agentsProcessor.Update(agent);
                 }
             }

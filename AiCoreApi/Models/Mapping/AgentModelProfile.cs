@@ -14,8 +14,12 @@ public class AgentModelProfile : Profile
         CreateMap<ConfigurableSetting, ConfigurableSettingView>();
         CreateMap<ConfigurableSettingView, ConfigurableSetting>();
 
-        CreateMap<AgentExportModel, AgentModel>();
-        CreateMap<AgentModel, AgentExportModel>();
+        CreateMap<AgentExportModel, AgentModel>()
+            .ForMember(dst => dst.Tags,
+            opt => opt.MapFrom(e => e.Tags.Select(tag => new TagModel { Name = tag }).ToList()));
+        CreateMap<AgentModel, AgentExportModel>()
+            .ForMember(dst => dst.Tags,
+                opt => opt.MapFrom(e => e.Tags.Select(tag => tag.Name)));
 
         CreateMap<ConfigurableSetting, ConfigurableExportSetting>();
         CreateMap<ConfigurableExportSetting, ConfigurableSetting>();

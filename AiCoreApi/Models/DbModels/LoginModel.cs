@@ -45,7 +45,8 @@ namespace AiCoreApi.Models.DbModels
     public enum RoleEnum
     {
         User = 1,
-        Admin = 2
+        Admin = 2,
+        Developer = 3,
     }
 
     public enum LoginTypeEnum

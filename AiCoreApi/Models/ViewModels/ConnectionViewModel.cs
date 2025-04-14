@@ -9,6 +9,7 @@
         public DateTime Created { get; set; } = DateTime.UtcNow;
         public string CreatedBy { get; set; } = string.Empty;
         public bool CanBeDeleted { get; set; } = true;
+        public int? WorkspaceId { get; set; }
     }
 
     public enum ConnectionType

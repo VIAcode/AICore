@@ -1,5 +1,4 @@
-﻿using AiCoreApi.Common;
-using AiCoreApi.Common.Data;
+﻿using AiCoreApi.Common.Data;
 using AiCoreApi.Models.DbModels;
 using Microsoft.EntityFrameworkCore;
 
@@ -8,14 +7,10 @@ namespace AiCoreApi.Data.Processors;
 public class TagsProcessor : ITagsProcessor
 {
     private readonly Db _db;
-    private readonly IDbQuery _dbQuery;
-    private readonly ExtendedConfig _config;
 
-    public TagsProcessor(Db db, IDbQuery dbQuery, ExtendedConfig config)
+    public TagsProcessor(Db db)
     {
         _db = db;
-        _dbQuery = dbQuery;
-        _config = config;
     }
 
     public TagModel? Get(int tagId)
@@ -69,6 +64,31 @@ public class TagsProcessor : ITagsProcessor
             })
             .AsNoTracking().ToList();
     }
+
+    public async Task<bool> Remove(int tagId)
+    {
+        var tag = await _db.Tags.FirstOrDefaultAsync(item => item.TagId == tagId);
+        if (tag != null)
+        {
+            // Check if the tag is in use in Ingestions, we cannot delete it
+            var isInUse = await _db.Tags
+                .FromSqlRaw("SELECT * FROM tags_x_ingestions WHERE tags_tag_id = {0}", tagId)
+                .AnyAsync();
+            if (isInUse)
+                return false;
+
+            // Clean up many-to-many relations
+            await _db.Database.ExecuteSqlRawAsync("DELETE FROM tags_x_groups WHERE tags_tag_id = {0}", tagId);
+            await _db.Database.ExecuteSqlRawAsync("DELETE FROM tags_x_logins WHERE tags_tag_id = {0}", tagId);
+            await _db.Database.ExecuteSqlRawAsync("DELETE FROM tags_x_rbac_role_sync WHERE tags_tag_id = {0}", tagId);
+            await _db.Database.ExecuteSqlRawAsync("DELETE FROM tags_x_agents WHERE tags_tag_id = {0}", tagId);
+            await _db.Database.ExecuteSqlRawAsync("DELETE FROM tags_x_workspaces WHERE tags_tag_id = {0}", tagId);
+
+            _db.Tags.Remove(tag);
+            await _db.SaveChangesAsync();
+        }
+        return true;
+    }
 }
 
 public interface ITagsProcessor
@@ -76,4 +96,5 @@ public interface ITagsProcessor
     TagModel? Get(int tagId);
     Task<TagModel?> Set(TagModel tagModel);
     List<TagModel> List();
+    Task<bool> Remove(int tagId);
 }

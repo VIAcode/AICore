@@ -1,6 +1,7 @@
 ﻿using System.Security.Claims;
 using AiCoreApi.Common;
 using AiCoreApi.Data.Processors;
+using AiCoreApi.Models.DbModels;
 using AspNetCore.Authentication.Basic;
 using Microsoft.AspNetCore.Mvc.Filters;
 
@@ -35,7 +36,7 @@ public class BasicUserValidationService : IBasicUserValidationService
             var result = login != null;
             if (result && _httpContextAccessor.HttpContext != null)
             {
-                _httpContextAccessor.HttpContext.Items.Add(ClaimTypes.Role, login.Role == Models.DbModels.RoleEnum.Admin ? "Admin" : "User");
+                _httpContextAccessor.HttpContext.Items.Add(ClaimTypes.Role, nameof(login.Role));
             }
             return result;
         }
@@ -55,7 +56,7 @@ public class CombinedAuthorizeAttribute : Attribute, IAuthorizationFilter
         {
             context.HttpContext.User.AddIdentity(new ClaimsIdentity(new List<Claim>
             {
-                new(ClaimTypes.Role, context.HttpContext.Items[ClaimTypes.Role]?.ToString() ?? "User"),
+                new(ClaimTypes.Role, context.HttpContext.Items[ClaimTypes.Role]?.ToString() ?? nameof(RoleEnum.User)),
             }));
         }
     }

@@ -126,12 +126,12 @@ namespace AiCoreApi.SemanticKernel
             if(_agentsList != null)
                 return _agentsList;
 
-            return await _agentsProcessor.List();
+            return await _agentsProcessor.List(_requestAccessor.WorkspaceId);
         }
 
         public async Task<string> ExecuteAgent(string agentName, List<string>? parameters = null)
         {
-            var dbAgents = await _agentsProcessor.List();
+            var dbAgents = await _agentsProcessor.List(_requestAccessor.WorkspaceId);
             var agent = dbAgents.FirstOrDefault(item => item.Name.ToLower() == agentName.ToLower());
             if (agent == null)
                 throw new Exception($"Agent not found: {agentName}");
@@ -145,7 +145,7 @@ namespace AiCoreApi.SemanticKernel
             if (!agentTypes.TryGetValue(agent.Type, out var agentType))
                 throw new Exception($"Agent type not found: {agent.Type}");
             var agentInstance = ((BaseAgent)agentType);
-            var result = await agentInstance.DoCall(agent, parametersDictionary);
+            var result = await agentInstance.DoCallWrapper(agent, parametersDictionary);
             return result;
         }
 

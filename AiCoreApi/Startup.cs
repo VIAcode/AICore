@@ -239,7 +239,7 @@ public class Startup
                 msg.StatusCode != HttpStatusCode.NoContent;
             if (nonSuccessRequest)
             {
-                _logger.LogTrace("Startup: {0}, url: {1}, request headers: {2}, code: {3}, body: {4}, response headers: {5}", "GetRetryPolicy",
+                _logger.LogWarning("Startup: {0}, url: {1}, request headers: {2}, code: {3}, body: {4}, response headers: {5}", "GetRetryPolicy",
                     msg.RequestMessage.RequestUri, msg.RequestMessage.Headers, msg.StatusCode, msg.Content.ReadAsStringAsync().Result, msg.Headers);
             }
             return nonSuccessRequest;
