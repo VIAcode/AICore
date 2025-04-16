@@ -96,7 +96,7 @@ namespace AiCoreApi.Data.Processors
                 {
                     TaskId = t.TaskId,
                     IngestionId = t.IngestionId,
-                    Ingestion = new IngestionModel { Name = t.Ingestion.Name },
+                    Ingestion = new IngestionModel { Name = t.Ingestion.Name, WorkspaceId = t.Ingestion.WorkspaceId },
                     State = t.State,
                     Type = t.Type,
                     Created = t.Created,
