@@ -29,19 +29,22 @@ namespace AiCoreApi.Common
             WorkspaceId = GetParameter("workspace_id") != null ? Convert.ToInt32(GetParameter("workspace_id")) : null;
             Query = GetParameter("q") ?? "";
 
-            if (_httpContextAccessor.HttpContext != null &&
-                _httpContextAccessor.HttpContext.User.Identity is ClaimsIdentity identity)
+            if (_httpContextAccessor.HttpContext != null)
             {
-                var claims = identity.Claims.ToDictionary(key => key.Type, value => value.Value);
-                // LoginTypeString
-                if (claims.ContainsKey(IdTokenClaims.LoginType))
+                if (_httpContextAccessor.HttpContext.User.Identity is ClaimsIdentity identity)
                 {
-                    LoginTypeString = claims[IdTokenClaims.LoginType];
-                }
-                // Login
-                if (claims.ContainsKey(ClaimTypes.NameIdentifier))
-                {
-                    Login = claims[ClaimTypes.NameIdentifier];
+                    IsPublicCall = false;
+                    var claims = identity.Claims.ToDictionary(key => key.Type, value => value.Value);
+                    // LoginTypeString
+                    if (claims.ContainsKey(IdTokenClaims.LoginType))
+                    {
+                        LoginTypeString = claims[IdTokenClaims.LoginType];
+                    }
+                    // Login
+                    if (claims.ContainsKey(ClaimTypes.NameIdentifier))
+                    {
+                        Login = claims[ClaimTypes.NameIdentifier];
+                    }
                 }
                 // MessageDialog
                 var request = _httpContextAccessor.HttpContext.Request;
@@ -70,6 +73,8 @@ namespace AiCoreApi.Common
             WorkspaceId = request.WorkspaceId;
         }
 
+        public bool IsMcpCall { get; set; }
+        public bool IsPublicCall { get; set; }
         public bool UseMarkdown { get; set; }
         public bool UseBing { get; set; }
         public bool UseCachedPlan { get; set; }

@@ -14,6 +14,7 @@ using Polly;
 using Polly.Extensions.Http;
 using Microsoft.OpenApi.Models;
 using Prometheus;
+using AiCoreApi.Services.ProcessingServices;
 
 namespace AiCoreApi;
 
@@ -87,7 +88,6 @@ public class Startup
             IssuerSigningKey = extendedConfig.AuthSecurityKey.GetSymmetricSecurityKey(),
             ClockSkew = TimeSpan.Zero,
         };
-
         services.AddSingleton(tokenValidationParameters);
         services.AddHttpContextAccessor();
         services.AddScoped<OpenAiHttpCallHandler>();
@@ -192,6 +192,20 @@ public class Startup
             loggingBuilder.AddConsole(opt => opt.LogToStandardErrorThreshold = Enum.Parse<LogLevel>(extendedConfig.LogLevel));
             loggingBuilder.AddDebug();
         });
+        services.AddMcpServer()
+            .WithHttpTransport()
+            .WithListToolsHandler(async (listContext, listCancellationToken) =>
+            {
+                var mcpListCallServices = listContext.Services!.GetRequiredService<IMcpServerProcessingService>();
+                var result = await mcpListCallServices.ListTools(listContext, listCancellationToken);
+                return await result;
+            })
+            .WithCallToolHandler(async (execContext, execCancellationToken) =>
+            {
+                var mcpExecCallServices = execContext.Services!.GetRequiredService<IMcpServerProcessingService>();
+                var result = await mcpExecCallServices.CallTool(execContext, execCancellationToken);
+                return await result;
+            });
     }
 
     public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
@@ -225,6 +239,7 @@ public class Startup
             {
                 ResponseWriter = UIResponseWriter.WriteHealthCheckUIResponse
             });
+            endpoints.MapMcp("/mcp");
         });
     }
 

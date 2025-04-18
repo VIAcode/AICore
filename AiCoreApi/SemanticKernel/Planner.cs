@@ -76,7 +76,9 @@ namespace AiCoreApi.SemanticKernel
                 if (agentsList.Count(agent => agent.IsEnabled) == 1)
                 {
                     var agent = agentsList.First(agent => agent.IsEnabled);
-                    _responseAccessor.CurrentMessage.Text = await _plannerHelpers.ExecuteAgent(agent.Name, new List<string> { _requestAccessor.MessageDialog?.Messages?.Last().Text ?? "" });
+                    _responseAccessor.CurrentMessage.Text = await _plannerHelpers.ExecuteAgent(agent.Name, 
+                        new List<string> { _requestAccessor.MessageDialog?.Messages?.Last().Text ?? "" },
+                        true);
                     return _responseAccessor.CurrentMessage;
                 }
                 plannerPrompt = _plannerHelpers.ApplyPlaceholders(plannerPrompt);
@@ -117,8 +119,9 @@ namespace AiCoreApi.SemanticKernel
                 {
                     var agentName = currentMessage.Options[0].Name;
                     var parameters = currentMessage.Options[0].Parameters.Select(item => item.Value).ToList();
-                    _responseAccessor.AddDebugMessage(DebugMessageSenderName, "Agent Execution", $"Agent {agentName}, Parameters: {string.Join(",", parameters)}");
-                    var result = await _plannerHelpers.ExecuteAgent(agentName, parameters);
+                    _responseAccessor.AddDebugMessage(DebugMessageSenderName, "Agent Execution",
+                        $"Agent {agentName}, Parameters: {string.Join(",", parameters)}");
+                    var result = await _plannerHelpers.ExecuteAgent(agentName, parameters, true);
                     if (!string.IsNullOrEmpty(result))
                     {
                         _responseAccessor.CurrentMessage.Text = result;
@@ -127,8 +130,14 @@ namespace AiCoreApi.SemanticKernel
                     {
                         _responseAccessor.CurrentMessage.Text = _extendedConfig.NoInformationFoundText;
                     }
-                    _responseAccessor.AddDebugMessage(DebugMessageSenderName, "Agent Execution Result", _responseAccessor.CurrentMessage.Text);
+
+                    _responseAccessor.AddDebugMessage(DebugMessageSenderName, "Agent Execution Result",
+                        _responseAccessor.CurrentMessage.Text);
                     return _responseAccessor.CurrentMessage;
+                }
+                catch (ExceptionHandlingMiddleware.AiCoreAuthException ex)
+                {
+                    throw;
                 }
                 catch (Exception ex)
                 {
@@ -136,6 +145,7 @@ namespace AiCoreApi.SemanticKernel
                     _responseAccessor.CurrentMessage.Text = _extendedConfig.NoInformationFoundText;
                     _logger.LogError(ex, "Error in agent execution");
                 }
+
                 return _responseAccessor.CurrentMessage;
             }
             return null;

@@ -21,7 +21,7 @@ namespace AiCoreApi.Controllers
         }
 
         [HttpPost("chat")]
-        [CombinedAuthorize]
+        [AllowAnonymous]
         [Consumes("application/json")]
         [Produces("application/json", "text/plain")]
         [SwaggerResponse(StatusCodes.Status200OK, Type = typeof(MessageDialogViewModel))]
@@ -56,6 +56,7 @@ namespace AiCoreApi.Controllers
             [SwaggerParameter("Workspace Id, use 0 for default.", Required = false)]
             int workspaceId = 0)
         {
+            await _copilotService.InitializeContext();
             var result = await _copilotService.Chat();
             if (simpleOutput)
             {
@@ -66,7 +67,7 @@ namespace AiCoreApi.Controllers
         }
 
         [HttpPost("agent/{agentName}")]
-        [CombinedAuthorize]
+        [AllowAnonymous]
         [Consumes("application/json")]
         [Produces("application/json", "text/plain")]
         [SwaggerResponse(StatusCodes.Status200OK, Type = typeof(MessageDialogViewModel))]
@@ -93,6 +94,7 @@ namespace AiCoreApi.Controllers
             [SwaggerParameter("Workspace Id, use 0 for default.", Required = false)]
             int workspaceId = 0)
         {
+            await _copilotService.InitializeContext();
             var result = await _copilotService.Agent(agentName, parameters);
             if (simpleOutput)
             {

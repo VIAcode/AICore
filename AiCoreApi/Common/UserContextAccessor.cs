@@ -24,7 +24,9 @@ namespace AiCoreApi.Common
         public async Task<int?> GetLoginIdAsync()
         {
             if (!_loginId.HasValue)
+            {
                 await LoadUserData();
+            }
             return _loginId;
         }
 
@@ -38,6 +40,11 @@ namespace AiCoreApi.Common
         public void SetLoginId(int? loginId)
         {
             _loginId = loginId;
+        }
+
+        public void SetTags(List<TagModel> tags)
+        {
+            _tags = tags;
         }
 
         private readonly Dictionary<string, bool> _roles = new();
@@ -55,11 +62,13 @@ namespace AiCoreApi.Common
             if (_httpContextAccessor.HttpContext.User.Identity is not ClaimsIdentity identity)
                 return;
             var claims = identity.Claims.ToDictionary(key => key.Type, value => value.Value);
-            var login = claims[ClaimTypes.NameIdentifier];
+            claims.TryGetValue(ClaimTypes.NameIdentifier, out var login);
+
             var loginType = claims.TryGetValue(IdTokenClaims.LoginType, out var loginTypeClaimValue)
                 ? Enum.Parse<LoginTypeEnum>(loginTypeClaimValue)
                 : LoginTypeEnum.Password;
-
+            if (login == null)
+                return;
             var userData = await _loginProcessor.GetByLogin(login, loginType);
             if(userData == null)
                 return;
