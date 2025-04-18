@@ -4,11 +4,15 @@ using AiCoreApi.SemanticKernel;
 using AiCoreApi.SemanticKernel.Agents;
 using AiCoreApi.Common.Extensions;
 using AiCoreApi.Data.Processors;
+using System.Security.Claims;
+using AiCoreApi.Models.DbModels;
 
 namespace AiCoreApi.Services.ControllersServices
 {
     public class CopilotService : ICopilotService
     {
+        private readonly IHttpContextAccessor _httpContextAccessor;
+        private readonly ExtendedConfig _extendedConfig;
         private readonly RequestAccessor _requestAccessor;
         private readonly ResponseAccessor _responseAccessor;
         private readonly IPlanner _planner;
@@ -16,10 +20,13 @@ namespace AiCoreApi.Services.ControllersServices
         private readonly IPromptAgent _promptAgent;
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly IVectorSearchAgent _vectorSearchAgent;
+        private readonly ILoginProcessor _loginProcessor;
         private readonly IDebugLogProcessor _debugLogProcessor;
         private readonly ILogger _logger;
 
         public CopilotService(
+            IHttpContextAccessor httpContextAccessor,
+            ExtendedConfig extendedConfig,
             RequestAccessor requestAccessor,
             ResponseAccessor responseAccessor,
             IPlanner planner,
@@ -27,9 +34,12 @@ namespace AiCoreApi.Services.ControllersServices
             IPromptAgent promptAgent,
             IHttpClientFactory httpClientFactory,
             IVectorSearchAgent vectorSearchAgent,
+            ILoginProcessor loginProcessor,
             IDebugLogProcessor debugLogProcessor,
             ILogger<CopilotService> logger)
         {
+            _httpContextAccessor = httpContextAccessor;
+            _extendedConfig = extendedConfig;
             _requestAccessor = requestAccessor;
             _responseAccessor = responseAccessor;
             _planner = planner;
@@ -37,6 +47,7 @@ namespace AiCoreApi.Services.ControllersServices
             _promptAgent = promptAgent;
             _httpClientFactory = httpClientFactory;
             _vectorSearchAgent = vectorSearchAgent;
+            _loginProcessor = loginProcessor;
             _debugLogProcessor = debugLogProcessor;
             _logger = logger;
         }
@@ -150,7 +161,23 @@ namespace AiCoreApi.Services.ControllersServices
             return await response.Content.ReadAsStringAsync();
         }
 
-
+        public async Task InitializeContext()
+        {
+            if (!(_httpContextAccessor.HttpContext?.User.Identity is ClaimsIdentity claimsIdentity) || !claimsIdentity.IsAuthenticated)
+            {
+                if(!_extendedConfig.UsePublicCalls)
+                    throw new ExceptionHandlingMiddleware.AiCoreAuthException("Public access is not configured in the system.");
+                var publicCallsUser = _extendedConfig.PublicCallsUser;
+                var publicLogin = await _loginProcessor.GetByLogin(publicCallsUser, LoginTypeEnum.Password);
+                if (publicLogin == null)
+                    throw new ExceptionHandlingMiddleware.AiCoreAuthException($"Public login '{publicCallsUser}' not found.");
+                _requestAccessor.IsPublicCall = true;
+                _requestAccessor.Login = publicLogin.Login;
+                _requestAccessor.LoginTypeString = LoginTypeEnum.Password.ToString();
+                _requestAccessor.UserContext.SetLoginId(publicLogin.LoginId);
+                _requestAccessor.UserContext.SetTags(publicLogin.Tags);
+            }
+        }
     }
 
     public interface ICopilotService
@@ -161,5 +188,6 @@ namespace AiCoreApi.Services.ControllersServices
         Task<List<SearchItemModel>?> Search();
         Task<string> Transcribe(IFormFile file);
         Task<string> Proxy(ProxyRequestModel proxyRequest);
+        Task InitializeContext();
     }
 }

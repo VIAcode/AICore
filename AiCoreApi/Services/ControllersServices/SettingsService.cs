@@ -87,6 +87,8 @@ namespace AiCoreApi.Services.ControllersServices
                 AutoRenderImages = _extendedConfig.AutoRenderImages,
                 UseKeyVaultAppRegistration = _extendedConfig.UseKeyVaultAppRegistration,
                 UseGitStorage = _extendedConfig.UseGitStorage,
+                UseMcpServer = _extendedConfig.UseMcpServer,
+                UsePublicCalls = _extendedConfig.UsePublicCalls,
                 FeatureFlags = _featureFlags.GetValues()
             };
         }

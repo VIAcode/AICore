@@ -333,6 +333,18 @@ public class ExtendedConfig
     [Tooltip("The Custom Nuget Feed API Key is used to authenticate the custom Nuget feed. This key is used for package management.")]
     public string CustomNugetFeedApiKey => GetValue<string>("CustomNugetFeedApiKey", "");
 
+    [Category(CategoryAttribute.ConfigCategoryEnum.Nuget)]
+    [DataType(DataTypeAttribute.ConfigDataTypeEnum.Boolean)]
+    [Description("Use Nuget.org as Primary Feed")]
+    [Tooltip("Specifies if Nuget.org is used as the primary feed. When enabled, the system uses Nuget.org as the primary feed for package management, and custom as a fallback.")]
+    public bool UseNugetOrgAsPrimaryFeed => GetValue<bool>("UseNugetOrgAsPrimaryFeed", true);
+
+    [Category(CategoryAttribute.ConfigCategoryEnum.Nuget)]
+    [DataType(DataTypeAttribute.ConfigDataTypeEnum.Boolean)]
+    [Description("Skip System package load")]
+    [Tooltip("Specifies if the system should skip loading system packages. When enabled, the system skips loading system packages that are not explicitly specified in Agents code.")]
+    public bool SkipNonExplicitSystemPackageLoad => GetValue<bool>("SkipNonExplicitSystemPackageLoad", true);
+
     [Category(CategoryAttribute.ConfigCategoryEnum.Logging)]
     [Description("Log Level")]
     [Tooltip("Log Level is used to specify the level of logging that the system should use. The log level determines the amount of information that is logged by the system. The available log levels are: Debug, Information, Warning, Error, and Critical.")]
@@ -367,6 +379,12 @@ public class ExtendedConfig
     [Description("Log Agent PII info (input parameters/result)")]
     [Tooltip("Log Agent PII info specifies if the system should log Agent PII info. When enabled, the system logs Agent input parameters and result.")]
     public bool LogAgentPii => GetValue<bool>("LogAgentPii", false);
+
+    [Category(CategoryAttribute.ConfigCategoryEnum.Logging)]
+    [DataType(DataTypeAttribute.ConfigDataTypeEnum.Boolean)]
+    [Description("Log Nuget package load events")]
+    [Tooltip("Log Nuget package load specifies if the system should log Nuget package load events. When enabled, the system logs information about Nuget package loads.")]
+    public bool LogNugetPackageLoad => GetValue<bool>("LogNugetPackageLoad", false);
 
     [Category(CategoryAttribute.ConfigCategoryEnum.KeyVaultStorage)]
     [DataType(DataTypeAttribute.ConfigDataTypeEnum.String)]
@@ -433,6 +451,30 @@ public class ExtendedConfig
     [Description("Use Git Storage")]
     [Tooltip("Specifies if the system should use Git Storage. When enabled, the system uses Git Storage to store Agents History.")]
     public bool UseGitStorage => GetValue<bool>("UseGitStorage", false);
+
+    [Category(CategoryAttribute.ConfigCategoryEnum.McpServer)]
+    [DataType(DataTypeAttribute.ConfigDataTypeEnum.Boolean)]
+    [Description("Enable MCP Server")]
+    [Tooltip("Specifies if the system should to use Agent and Tools via MCP Server.")]
+    public bool UseMcpServer => GetValue<bool>("UseMcpServer", false);
+
+    [Category(CategoryAttribute.ConfigCategoryEnum.McpServer)]
+    [DataType(DataTypeAttribute.ConfigDataTypeEnum.String)]
+    [Description("MCP Server calls acts as Login")]
+    [Tooltip("MCP Server calls will be executed in a context of this user.")]
+    public string McpServerUser => GetValue<string>("McpServerUser", "");
+
+    [Category(CategoryAttribute.ConfigCategoryEnum.PublicCalls)]
+    [DataType(DataTypeAttribute.ConfigDataTypeEnum.Boolean)]
+    [Description("Enable Public calls")]
+    [Tooltip("Specifies if the system should allow to use Agent and Tools via non-Authorized calls.")]
+    public bool UsePublicCalls => GetValue<bool>("UsePublicCalls", false);
+
+    [Category(CategoryAttribute.ConfigCategoryEnum.PublicCalls)]
+    [DataType(DataTypeAttribute.ConfigDataTypeEnum.String)]
+    [Description("Public calls acts as Login")]
+    [Tooltip("Agents and Tools will be executed in a context of this user.")]
+    public string PublicCallsUser => GetValue<string>("PublicCallsUser", "");
 }
 
 [AttributeUsage(AttributeTargets.Property)]
@@ -518,5 +560,9 @@ public class CategoryAttribute : Attribute, IAttributeHandler
         KeyVaultStorage,
         [System.ComponentModel.Description("Git Storage")]
         GitStorage,
+        [System.ComponentModel.Description("MCP Server")]
+        McpServer,
+        [System.ComponentModel.Description("Public Calls")]
+        PublicCalls,
     }
 }

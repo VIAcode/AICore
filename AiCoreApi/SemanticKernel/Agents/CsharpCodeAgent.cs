@@ -72,11 +72,11 @@ namespace AiCoreApi.SemanticKernel.Agents
             var quickMode = !csharpCode.Replace(" ", "").Contains("classAgent");
 
             return quickMode
-                ? await QuickCall(parameters, csharpCode)
-                : await Call(parameters, csharpCode);
+                ? await QuickCall(agent, parameters, csharpCode)
+                : await Call(agent, parameters, csharpCode);
         }
 
-        private async Task<string> Call(Dictionary<string, string> parameters, string csharpCode)
+        private async Task<string> Call(AgentModel agent, Dictionary<string, string> parameters, string csharpCode)
         {
             _responseAccessor.AddDebugMessage(_debugMessageSenderName, "Execute C# Code", csharpCode);
 
@@ -99,7 +99,7 @@ namespace AiCoreApi.SemanticKernel.Agents
                 _assemblyPaths.TryGetValue(assemblyPathsCacheKey, out var assemblyPaths);
                 if (assemblyPaths == null)
                 {
-                    assemblyPaths = await ResolveNuGetPackages(nugetDirectives);
+                    assemblyPaths = await ResolveNuGetPackages(agent, nugetDirectives);
                     _assemblyPaths.TryAdd(assemblyPathsCacheKey, assemblyPaths);
                 }
 
@@ -166,7 +166,7 @@ namespace AiCoreApi.SemanticKernel.Agents
         }
 
         // Quick mode – interpret the snippet directly with Roslyn's C# scripting
-        private async Task<string> QuickCall(Dictionary<string, string> parameters, string csharpCode)
+        private async Task<string> QuickCall(AgentModel agent, Dictionary<string, string> parameters, string csharpCode)
         {
             _responseAccessor.AddDebugMessage(_debugMessageSenderName, "Execute C# Code (quick)", csharpCode);
 
@@ -198,7 +198,7 @@ namespace AiCoreApi.SemanticKernel.Agents
                 _assemblyPaths.TryGetValue(assemblyPathsCacheKey, out var assemblyPaths);
                 if (assemblyPaths == null)
                 {
-                    assemblyPaths = await ResolveNuGetPackages(nugetDirectives);
+                    assemblyPaths = await ResolveNuGetPackages(agent, nugetDirectives);
                     _assemblyPaths.TryAdd(assemblyPathsCacheKey, assemblyPaths);
                 }
 
@@ -268,7 +268,7 @@ namespace AiCoreApi.SemanticKernel.Agents
         }
 
         // Resolves the given set of packages (plus all dependencies) to local DLL files
-        private async Task<List<string>> ResolveNuGetPackages(List<(string packageName, string version)> packages)
+        private async Task<List<string>> ResolveNuGetPackages(AgentModel agent, List<(string packageName, string version)> packages)
         {
             var packagePaths = new List<string>();
             var cache = new SourceCacheContext();
@@ -301,20 +301,25 @@ namespace AiCoreApi.SemanticKernel.Agents
             if (_extendedConfig.UseNugetOrgFallback || repositories.Count == 0)
             {
                 var nugetSource = new PackageSource("https://api.nuget.org/v3/index.json");
-                repositories.Add(new SourceRepository(nugetSource, providers));
+                if(_extendedConfig.UseNugetOrgAsPrimaryFeed)
+                    repositories.Insert(0, new SourceRepository(nugetSource, providers));
+                else
+                    repositories.Add(new SourceRepository(nugetSource, providers));
             }
 
             var processedPackages = new HashSet<string>();
             foreach (var (packageName, version) in packages)
             {
                 await ResolvePackageAndDependencies(
+                    agent,
                     packageName,
                     version,
                     repositories,
                     cache,
                     logger,
                     packagePaths,
-                    processedPackages
+                    processedPackages,
+                    passSystemPackages: true
                 );
             }
             return packagePaths;
@@ -334,7 +339,6 @@ namespace AiCoreApi.SemanticKernel.Agents
         {
             FindPackageByIdResource? resource = null;
             NuGetVersion? selectedVersion = null;
-
             foreach (var repository in repositories)
             {
                 resource = await repository.GetResourceAsync<FindPackageByIdResource>();
@@ -360,13 +364,15 @@ namespace AiCoreApi.SemanticKernel.Agents
         }
 
         private async Task ResolvePackageAndDependencies(
+            AgentModel agent,
             string packageName,
             string version,
             List<SourceRepository> repositories,
             SourceCacheContext cache,
             ILogger logger,
             List<string> packagePaths,
-            HashSet<string> processedPackages)
+            HashSet<string> processedPackages,
+            bool passSystemPackages)
         {
             var currentFramework = NuGetFramework.ParseFolder($"net{Environment.Version.Major}.{Environment.Version.Minor}");
 
@@ -375,10 +381,15 @@ namespace AiCoreApi.SemanticKernel.Agents
             if (resource == null || selectedVersion == null)
                 throw new Exception($"NuGet package '{packageName}' not found in any repository");
 
+            if (!passSystemPackages && _extendedConfig.SkipNonExplicitSystemPackageLoad && packageName.StartsWith("System."))
+                return; // Skip System packages
 
             var packageKey = $"{packageName}.{selectedVersion}";
             if (processedPackages.Contains(packageKey))
                 return; // Already handled
+
+            if(_extendedConfig.LogNugetPackageLoad)
+                _logger.LogCritical("[{DateTime}][Nuget Package Load] Agent: {Agent}, Package: {Login}", agent.Name, DateTime.UtcNow.ToString("g"), packageKey);
 
             processedPackages.Add(packageKey);
 
@@ -485,13 +496,15 @@ namespace AiCoreApi.SemanticKernel.Agents
                     try
                     {
                         await ResolvePackageAndDependencies(
+                            agent,
                             depPackageName,
                             depSelectedVersion.ToNormalizedString(),
                             repositories,
                             cache,
                             logger,
                             packagePaths,
-                            processedPackages
+                            processedPackages,
+                            passSystemPackages: false
                         );
                     }
                     catch (Exception e)
