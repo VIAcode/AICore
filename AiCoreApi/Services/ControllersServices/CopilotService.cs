@@ -165,17 +165,48 @@ namespace AiCoreApi.Services.ControllersServices
         {
             if (!(_httpContextAccessor.HttpContext?.User.Identity is ClaimsIdentity claimsIdentity) || !claimsIdentity.IsAuthenticated)
             {
-                if(!_extendedConfig.UsePublicCalls)
-                    throw new ExceptionHandlingMiddleware.AiCoreAuthException("Public access is not configured in the system.");
-                var publicCallsUser = _extendedConfig.PublicCallsUser;
-                var publicLogin = await _loginProcessor.GetByLogin(publicCallsUser, LoginTypeEnum.Password);
-                if (publicLogin == null)
-                    throw new ExceptionHandlingMiddleware.AiCoreAuthException($"Public login '{publicCallsUser}' not found.");
-                _requestAccessor.IsPublicCall = true;
-                _requestAccessor.Login = publicLogin.Login;
-                _requestAccessor.LoginTypeString = LoginTypeEnum.Password.ToString();
-                _requestAccessor.UserContext.SetLoginId(publicLogin.LoginId);
-                _requestAccessor.UserContext.SetTags(publicLogin.Tags);
+                var authHeader = _httpContextAccessor.HttpContext?.Request.Headers["Authorization"].FirstOrDefault();
+                // Public Access
+                if (string.IsNullOrEmpty(authHeader) || !authHeader.StartsWith("Basic "))
+                {
+                    if (!_extendedConfig.UsePublicCalls)
+                        throw new ExceptionHandlingMiddleware.AiCoreAuthException("Public access is not configured in the system.");
+                    var publicCallsUser = _extendedConfig.PublicCallsUser;
+                    var publicLogin = await _loginProcessor.GetByLogin(publicCallsUser, LoginTypeEnum.Password);
+                    if (publicLogin == null)
+                        throw new ExceptionHandlingMiddleware.AiCoreAuthException($"Public login '{publicCallsUser}' not found.");
+                    _requestAccessor.IsPublicCall = true;
+                    _requestAccessor.Login = publicLogin.Login;
+                    _requestAccessor.LoginTypeString = LoginTypeEnum.Password.ToString();
+                    _requestAccessor.UserContext.SetLoginId(publicLogin.LoginId);
+                    _requestAccessor.UserContext.SetTags(publicLogin.Tags);
+                }
+                // Basic Authentication
+                else
+                {
+                    if (!_extendedConfig.AllowBasicAuth)
+                        throw new ExceptionHandlingMiddleware.AiCoreAuthException("Basic Authentication is not allowed.");
+
+                    var encodedCredentials = authHeader.Substring("Basic ".Length).Trim();
+                    var decodedCredentials = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(encodedCredentials));
+                    var credentialsParts = decodedCredentials.Split(':', 2);
+
+                    if (credentialsParts.Length != 2)
+                        throw new ExceptionHandlingMiddleware.AiCoreAuthException("Invalid Basic Authentication credentials format.");
+
+                    var login = credentialsParts[0];
+                    var password = credentialsParts[1];
+
+                    var loginModel = await _loginProcessor.GetByLogin(login, LoginTypeEnum.Password);
+                    if (loginModel == null || loginModel.LoginType != LoginTypeEnum.Password || loginModel.PasswordHash != password.GetHash())
+                        throw new ExceptionHandlingMiddleware.AiCoreAuthException("Invalid login or password.");
+
+                    _requestAccessor.IsPublicCall = false;
+                    _requestAccessor.Login = login;
+                    _requestAccessor.LoginTypeString = LoginTypeEnum.Password.ToString();
+                    _requestAccessor.UserContext.SetLoginId(loginModel.LoginId);
+                    _requestAccessor.UserContext.SetTags(await _loginProcessor.GetTagsByLogin(login, LoginTypeEnum.Password));
+                }
             }
         }
     }
