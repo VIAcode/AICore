@@ -19,7 +19,7 @@ public class AgentsProcessor : IAgentsProcessor
         var qry = _db.Agents.Include(e => e.Tags).AsNoTracking();
         if (workspaceId == 0)
         {
-            qry = qry.Where(e => e.WorkspaceId == null);
+            qry = qry.Where(e => e.WorkspaceId == null || e.WorkspaceId == 0);
         }
         else if(workspaceId != null && workspaceId > 0)
         {
@@ -38,7 +38,7 @@ public class AgentsProcessor : IAgentsProcessor
     {
         var qry = _db.Agents.Include(e => e.Tags).AsNoTracking();
         if (workspaceId == 0)
-            qry = qry.Where(item => item.WorkspaceId == null);
+            qry = qry.Where(item => item.WorkspaceId == null || item.WorkspaceId == 0);
         else if (workspaceId != null)
             qry = qry.Where(item => item.WorkspaceId == workspaceId);
         return await qry.FirstOrDefaultAsync(e => e.Name == agentName);

@@ -106,7 +106,7 @@ namespace AiCoreApi.Data.Processors
                 .OrderByDescending(t => t.Updated)
                 .AsNoTracking();
             qry = workspaceId == 0 
-                ? qry.Where(t => t.Ingestion.WorkspaceId == null) 
+                ? qry.Where(t => t.Ingestion.WorkspaceId == null || t.Ingestion.WorkspaceId == 0) 
                 : qry.Where(t => t.Ingestion.WorkspaceId == workspaceId);
 
             return await qry.ToListAsync();

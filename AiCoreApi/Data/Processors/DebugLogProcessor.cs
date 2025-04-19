@@ -21,10 +21,7 @@ namespace AiCoreApi.Data.Processors
 
         public async Task<List<DebugLogModel>> List(DebugLogFilterModel filter, int workspaceId)
         {
-            var result = _db.DebugLog.AsNoTracking()
-                .OrderByDescending(item => item.DebugLogId)
-                .Skip(filter.Skip)
-                .Take(filter.Take);
+            var result = _db.DebugLog.AsNoTracking();
             if (!string.IsNullOrEmpty(filter.Login))
                 result = result.Where(item => item.Login.Contains(filter.Login));
             if (!string.IsNullOrEmpty(filter.Result))
@@ -36,8 +33,11 @@ namespace AiCoreApi.Data.Processors
             if (workspaceId != 0)
                 result = result.Where(item => item.WorkspaceId == workspaceId);
             else
-                result = result.Where(item => item.WorkspaceId == null);
+                result = result.Where(item => item.WorkspaceId == null || item.WorkspaceId == 0);
             return await result
+                .OrderByDescending(item => item.DebugLogId)
+                .Skip(filter.Skip)
+                .Take(filter.Take)
                 .ToListAsync();
         }
 
@@ -55,7 +55,7 @@ namespace AiCoreApi.Data.Processors
             if (workspaceId != 0)
                 result = result.Where(item => item.WorkspaceId == workspaceId);
             else
-                result = result.Where(item => item.WorkspaceId == null);
+                result = result.Where(item => item.WorkspaceId == null || item.WorkspaceId == 0);
             var itemsCount = await result.CountAsync();
             return itemsCount % filter.Take == 0 ? itemsCount / filter.Take : itemsCount / filter.Take + 1;
         }
