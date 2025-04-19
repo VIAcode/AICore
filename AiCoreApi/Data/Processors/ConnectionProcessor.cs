@@ -21,7 +21,7 @@ namespace AiCoreApi.Data.Processors
             var qry = _db.Connections.OrderBy(item => item.ConnectionId).AsNoTracking();
             if (workspaceId == 0)
             {
-                qry = qry.Where(e => e.WorkspaceId == null);
+                qry = qry.Where(e => e.WorkspaceId == null || e.WorkspaceId == 0);
             }
             else if (workspaceId != null && workspaceId > 0)
             {

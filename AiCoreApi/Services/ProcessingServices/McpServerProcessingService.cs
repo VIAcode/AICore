@@ -91,6 +91,7 @@ namespace AiCoreApi.Services.ProcessingServices
                 var plannerHelpers = scope.ServiceProvider.GetRequiredService<IPlannerHelpers>();
                 var agents = await plannerHelpers.GetAgentsList();
                 var agent = agents.FirstOrDefault(agentItem => GetAlias(agentItem.Name) == agentName);
+                var requestAccessor = scope.ServiceProvider.GetRequiredService<RequestAccessor>();
                 if (agent == null)
                 {
                     result = $"Agent {agentName} not found.";
@@ -116,9 +117,9 @@ namespace AiCoreApi.Services.ProcessingServices
                             .ToList();
                     }
 
-                    result = await plannerHelpers.ExecuteAgent(agentName, parameters);
+                    requestAccessor.WorkspaceId = agent.WorkspaceId;
+                    result = await plannerHelpers.ExecuteAgent(agent.Name, parameters);
                 }
-                var requestAccessor = scope.ServiceProvider.GetRequiredService<RequestAccessor>();
                 var message = $"MCP Server call, Agent: {agentName}, Parameters: {string.Join(", ", parameters)}.";
                 await _debugLogProcessor.Add(requestAccessor.Login, message, requestAccessor.MessageDialog, agent.WorkspaceId ?? 0);
 
