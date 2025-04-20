@@ -36,7 +36,7 @@ public class BasicUserValidationService : IBasicUserValidationService
             var result = login != null;
             if (result && _httpContextAccessor.HttpContext != null)
             {
-                _httpContextAccessor.HttpContext.Items.Add(ClaimTypes.Role, nameof(login.Role));
+                _httpContextAccessor.HttpContext.Items.Add(ClaimTypes.Role, login.Role.ToString());
             }
             return result;
         }
