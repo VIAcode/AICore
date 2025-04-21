@@ -20,7 +20,11 @@
 
     public enum IngestionType
     {
-        SharePoint = 1
+        SharePoint = 1,
+        WebUrl = 2,
+        UploadFile = 3,
+        AzDoWiki = 4,
+
     }
 
     public enum IngestionStatus

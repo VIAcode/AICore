@@ -27,6 +27,7 @@ namespace AiCoreApi.Models.DbModels
     {
         SharePoint = 1,
         WebUrl = 2,
-        UploadFile = 3
+        UploadFile = 3,
+        AzDoWiki = 4,
     }
 }
