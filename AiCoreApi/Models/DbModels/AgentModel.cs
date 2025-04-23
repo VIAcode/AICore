@@ -67,5 +67,6 @@ namespace AiCoreApi.Models.DbModels
         StabilityAiImages = 33,
         OcrBuildClassifierAgent = 34,
         AzureLogAnalytics = 35,
+        GoogleSearchApi = 36,
     }
 }

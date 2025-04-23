@@ -2,18 +2,18 @@ using Microsoft.SemanticKernel;
 using AiCoreApi.Models.DbModels;
 using System.Web;
 using AiCoreApi.Common;
-using AiCoreApi.Common.Extensions;
 using AiCoreApi.Data.Processors;
 using HtmlAgilityPack;
 using System.Text.Json;
+using AiCoreApi.Common.Extensions;
 using System.Text.Encodings.Web;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
-    public class BingSearchAgent : BaseAgent, IBingSearchAgent
+    public class GoogleSearchApiAgent : BaseAgent, IGoogleSearchApiAgent
     {
-        private string _debugMessageSenderName = "BingSearchAgent";
-        private readonly Uri? _uri = new("https://api.bing.microsoft.com/v7.0/search?q");
+        private readonly string _googleSearchUrl = "https://www.googleapis.com/customsearch/v1";
+        private string _debugMessageSenderName = "GoogleSearchApiAgent";
 
         public static class AgentPromptPlaceholders
         {
@@ -25,9 +25,10 @@ namespace AiCoreApi.SemanticKernel.Agents
         private static class AgentContentParameters
         {
             public const string QueryString = "queryString";
-            public const string BingConnection = "bingConnection";
+            public const string GoogleConnection = "googleSearchApiConnection";
             public const string MaxContentLength = "maxContentLength";
-            public const string Count = "count";
+            public const string Count = "count"; 
+            public const string Offset = "offset"; 
             public const string OutputType = "outputType";
         }
 
@@ -36,13 +37,13 @@ namespace AiCoreApi.SemanticKernel.Agents
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly IConnectionProcessor _connectionProcessor;
 
-        public BingSearchAgent(
+        public GoogleSearchApiAgent(
             RequestAccessor requestAccessor,
             ResponseAccessor responseAccessor,
             IHttpClientFactory httpClientFactory,
             IConnectionProcessor connectionProcessor,
             ExtendedConfig extendedConfig,
-            ILogger<BingSearchAgent> logger) : base(responseAccessor, requestAccessor, extendedConfig, logger)
+            ILogger<GoogleSearchApiAgent> logger) : base(responseAccessor, requestAccessor, extendedConfig, logger)
         {
             _requestAccessor = requestAccessor;
             _responseAccessor = responseAccessor;
@@ -58,22 +59,25 @@ namespace AiCoreApi.SemanticKernel.Agents
             var queryString = ApplyParameters(agent.Content[AgentContentParameters.QueryString].Value, parameters);
             var maxContentLength = agent.Content.ContainsKey(AgentContentParameters.MaxContentLength)
                 ? ApplyParameters(agent.Content[AgentContentParameters.MaxContentLength].Value, parameters)
-                : "16384"; // default value
+                : "16384";
+
             queryString = ApplyParameters(queryString, new Dictionary<string, string>
             {
-                {AgentPromptPlaceholders.HasFilesPlaceholder, _requestAccessor.MessageDialog.Messages.Last().HasFiles().ToString()},
-                {AgentPromptPlaceholders.FilesDataPlaceholder, _requestAccessor.MessageDialog.Messages.Last().GetFileContents()},
-                {AgentPromptPlaceholders.FilesNamesPlaceholder, _requestAccessor.MessageDialog.Messages.Last().GetFileNames()}
+                { AgentPromptPlaceholders.HasFilesPlaceholder, _requestAccessor.MessageDialog.Messages.Last().HasFiles().ToString() },
+                { AgentPromptPlaceholders.FilesDataPlaceholder, _requestAccessor.MessageDialog.Messages.Last().GetFileContents() },
+                { AgentPromptPlaceholders.FilesNamesPlaceholder, _requestAccessor.MessageDialog.Messages.Last().GetFileNames() }
             });
+
             _responseAccessor.AddDebugMessage(_debugMessageSenderName, "Execute Query String", queryString);
 
-            var bingConnectionName = agent.Content[AgentContentParameters.BingConnection].Value;
+            var googleConnectionName = agent.Content[AgentContentParameters.GoogleConnection].Value;
             var connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
-            var bingConnection = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.BingApi, _debugMessageSenderName, connectionName: bingConnectionName);
+            var googleConnection = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.GoogleSearchApi, _debugMessageSenderName, connectionName: googleConnectionName);
 
-            var count = int.Parse(agent.Content[AgentContentParameters.Count].Value);
+            var count = int.Parse(ApplyParameters(agent.Content[AgentContentParameters.Count].Value, parameters));
+            var offset = int.Parse(ApplyParameters(agent.Content[AgentContentParameters.Offset].Value, parameters));
             var outputType = agent.Content.TryGetValue(AgentContentParameters.OutputType, out var ot) ? ot.Value : "snippetTexts";
-            var results = await DoSearchAsync(queryString, bingConnection.Content["bingApiKey"], count);
+            var results = await DoSearchAsync(queryString, googleConnection.Content["apiKey"], googleConnection.Content["googleCxId"], count, offset);
 
             string result;
             if (outputType == "snippetJson")
@@ -87,20 +91,49 @@ namespace AiCoreApi.SemanticKernel.Agents
                 foreach (var page in results)
                 {
                     var text = await CrawlPageTextAsync(page.Url);
-                    if(text.Length > int.Parse(maxContentLength))
+                    if (text.Length > int.Parse(maxContentLength))
                         text = text.Substring(0, int.Parse(maxContentLength));
-                    
+
                     pages.Add(new Dictionary<string, string> { { "url", page.Url }, { "text", text } });
                 }
                 result = JsonSerializer.Serialize(pages, new JsonSerializerOptions { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping });
             }
-            else // default: snippetTexts
+            else
             {
                 result = JsonSerializer.Serialize(results.Select(r => r.Snippet).ToList(), new JsonSerializerOptions { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping });
             }
 
             _responseAccessor.AddDebugMessage(_debugMessageSenderName, "Execute Query String Result", result);
             return result;
+        }
+
+        private async Task<List<WebPage>> DoSearchAsync(string query, string apiKey, string cx, int count = 1, int offset = 0, CancellationToken cancellationToken = default)
+        {
+            if (count <= 0 || count > 10)
+                throw new ExceptionHandlingMiddleware.AiCoreUiException($"Google Search API only allows up to 10 results per request. Now: {count}");
+
+            var start = offset + 1;
+            var uri = new Uri($"{_googleSearchUrl}?key={apiKey}&cx={cx}&q={Uri.EscapeDataString(query)}&num={count}&start={start}");
+
+            using var response = await SendGetRequestAsync(uri, cancellationToken);
+            var json = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+
+            using var doc = JsonDocument.Parse(json);
+            if (!doc.RootElement.TryGetProperty("items", out var items))
+                return new List<WebPage>();
+
+            var results = new List<WebPage>();
+            foreach (var item in items.EnumerateArray())
+            {
+                results.Add(new WebPage
+                {
+                    Name = item.GetProperty("title").GetString() ?? "",
+                    Url = item.GetProperty("link").GetString() ?? "",
+                    Snippet = item.GetProperty("snippet").GetString() ?? ""
+                });
+            }
+
+            return results;
         }
 
         private async Task<string> CrawlPageTextAsync(string url)
@@ -111,17 +144,22 @@ namespace AiCoreApi.SemanticKernel.Agents
                 var html = await client.GetCompressedStringAsync(url);
                 var doc = new HtmlDocument();
                 doc.LoadHtml(html);
-
                 doc.DocumentNode.Descendants()
                     .Where(n => n.Name == "script" || n.Name == "style")
                     .ToList()
                     .ForEach(n => n.Remove());
+                var rawText = HtmlEntity.DeEntitize(doc.DocumentNode.InnerText);
+                var cleaned = new string(
+                    rawText
+                        .Where(c => !char.IsControl(c) || c == '\n' || c == '\r' || c == '\t')
+                        .ToArray()
+                );
+                var lines = cleaned
+                    .Split('\n')
+                    .Select(l => l.Trim())
+                    .Where(l => !string.IsNullOrWhiteSpace(l));
 
-                var text = HtmlEntity.DeEntitize(doc.DocumentNode.InnerText);
-                return string.Join("\n",
-                    text.Split('\n')
-                        .Select(l => l.Trim())
-                        .Where(l => !string.IsNullOrWhiteSpace(l)));
+                return string.Join("\n", lines);
             }
             catch (Exception ex)
             {
@@ -130,26 +168,11 @@ namespace AiCoreApi.SemanticKernel.Agents
             }
         }
 
-        private async Task<List<WebPage>> DoSearchAsync(string query, string apiKey, int count = 1, int offset = 0, CancellationToken cancellationToken = default)
-        {
-            if (count is <= 0 or >= 50)
-                throw new ArgumentOutOfRangeException(nameof(count), count, $"{nameof(count)} value must be greater than 0 and less than 50.");
 
-            var uri = new Uri($"{_uri}={Uri.EscapeDataString(query.Trim())}&count={count}&offset={offset}");
-            using var response = await SendGetRequestAsync(uri, apiKey, cancellationToken).ConfigureAwait(false);
-            var json = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-            var webPages = json.JsonGet<List<WebPage>>("webPages.value");
-            return webPages ?? new List<WebPage>();
-        }
-
-        private async Task<HttpResponseMessage> SendGetRequestAsync(Uri uri, string apiKey, CancellationToken cancellationToken = default)
+        private async Task<HttpResponseMessage> SendGetRequestAsync(Uri uri, CancellationToken cancellationToken = default)
         {
-            using var httpRequestMessage = new HttpRequestMessage(HttpMethod.Get, uri);
-            if (!string.IsNullOrEmpty(apiKey))
-                httpRequestMessage.Headers.Add("Ocp-Apim-Subscription-Key", apiKey);
-            else
-                throw new InvalidOperationException("Bing API key is not set.");
-            using var httpClient = _httpClientFactory.CreateClient("RetryClient");
+            var httpClient = _httpClientFactory.CreateClient("RetryClient");
+            var httpRequestMessage = new HttpRequestMessage(HttpMethod.Get, uri);
             return await httpClient.SendAsync(httpRequestMessage, cancellationToken).ConfigureAwait(false);
         }
 
@@ -161,7 +184,7 @@ namespace AiCoreApi.SemanticKernel.Agents
         }
     }
 
-    public interface IBingSearchAgent
+    public interface IGoogleSearchApiAgent
     {
         Task AddAgent(AgentModel agent, Kernel kernel, List<string> pluginsInstructions);
     }

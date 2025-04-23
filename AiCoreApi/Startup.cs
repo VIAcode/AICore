@@ -101,7 +101,8 @@ public class Startup
             .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
             {
                 Proxy = string.IsNullOrEmpty(extendedConfig.Proxy) ? null : new WebProxy(new Uri(extendedConfig.Proxy)),
-                ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
+                ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator,
+                AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate | DecompressionMethods.Brotli
             })
             .ConfigurePrimaryHttpMessageHandler<OpenAiHttpCallHandler>();
 
@@ -113,7 +114,8 @@ public class Startup
             .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
             {
                 Proxy = string.IsNullOrEmpty(extendedConfig.Proxy) ? null : new WebProxy(new Uri(extendedConfig.Proxy)),
-                ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
+                ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator,
+                AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate | DecompressionMethods.Brotli
             })
             .ConfigurePrimaryHttpMessageHandler<OpenAiHttpCallHandler>();
 

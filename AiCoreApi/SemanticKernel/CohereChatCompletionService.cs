@@ -46,10 +46,22 @@ public sealed class CohereChatCompletionService : IChatCompletionService
                 Role = ch.Role.Label.ToLower().Replace("assistant", "chatbot"),
                 Message = ch.Content ?? ""
             }).ToList();
+        var temperature = 0.0;
+        var topP = 1.0;
+        if (executionSettings is Microsoft.SemanticKernel.Connectors.OpenAI.OpenAIPromptExecutionSettings openAiPromptExecutionSettings
+            && openAiPromptExecutionSettings.ResponseFormat != null)
+        {
+            if (openAiPromptExecutionSettings.Temperature.HasValue)
+                temperature = openAiPromptExecutionSettings.Temperature.Value;
+            
+            if (openAiPromptExecutionSettings.TopP.HasValue)
+                topP = openAiPromptExecutionSettings.TopP.Value;
+        }
         var message = new CohereRequestMessage
         {
             ChatHistory = cohereMessageHistory.Take(cohereMessageHistory.Count - 1).ToList(),
-            Temperature = 0,
+            Temperature = temperature,
+            TopP = topP,
             Message = cohereMessageHistory.Last().Message,
             Model = _modelId,
             Connectors = _connectors,
@@ -90,6 +102,8 @@ public sealed class CohereChatCompletionService : IChatCompletionService
         public string Message { get; set; } = "";
         [JsonProperty("temperature")]
         public double Temperature { get; set; }
+        [JsonProperty("top_p")]
+        public double TopP { get; set; }
         [JsonProperty("chat_history")]
         public List<CohereMessageHistory> ChatHistory { get; set; } = new();
         [JsonProperty("model")]

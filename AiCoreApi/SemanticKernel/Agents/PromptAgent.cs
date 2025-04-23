@@ -6,6 +6,7 @@ using AiCoreApi.Data.Processors;
 using Microsoft.SemanticKernel.ChatCompletion;
 using Microsoft.SemanticKernel.Connectors.OpenAI;
 using OpenAI.Chat;
+using Microsoft.KernelMemory.AI;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
@@ -27,6 +28,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             public const string SystemMessage = "systemMessage";
             public const string StrictMode = "strictMode";
             public const string Temperature = "temperature";
+            public const string TopP = "top_p";
         }
 
         private readonly ISemanticKernelProvider _semanticKernelProvider;
@@ -67,18 +69,48 @@ namespace AiCoreApi.SemanticKernel.Agents
             var outputType = agent.Content.ContainsKey(AgentContentParameters.OutputType) ? agent.Content[AgentContentParameters.OutputType].Value : string.Empty;
             var jsonSchema = agent.Content.ContainsKey(AgentContentParameters.JsonSchema) ? ApplyParameters(agent.Content[AgentContentParameters.JsonSchema].Value, parameters) : string.Empty;
             var systemMessage = agent.Content.ContainsKey(AgentContentParameters.SystemMessage) ? agent.Content[AgentContentParameters.SystemMessage].Value : string.Empty;
-            var temperature = agent.Content.ContainsKey(AgentContentParameters.Temperature) ? Convert.ToDouble(agent.Content[AgentContentParameters.Temperature].Value) : 0;
             var strictMode = !agent.Content.ContainsKey(AgentContentParameters.StrictMode) || agent.Content[AgentContentParameters.StrictMode].Value == "true";
 
             var connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
             var llmConnection = GetConnection(_requestAccessor, _responseAccessor, connections,
                 new[] { ConnectionType.AzureOpenAiLlm, ConnectionType.OpenAiLlm, ConnectionType.CohereLlm, ConnectionType.AzureOpenAiLlmCarousel, ConnectionType.DeepSeekLlm }, _debugMessageSenderName, agent.LlmType);
 
+            var temperature = llmConnection.Content.ContainsKey("temperature") ? Convert.ToDouble(llmConnection.Content["temperature"]) : 0;
+            if (agent.Content.ContainsKey(AgentContentParameters.Temperature))
+            {
+                var isCorrect = double.TryParse(agent.Content[AgentContentParameters.Temperature].Value, out var agentTemperature);
+                if (isCorrect)
+                    temperature = agentTemperature;
+            }
+
+            var topP = (double)0;
+            if (agent.Content.ContainsKey(AgentContentParameters.TopP))
+            {
+                var isCorrect = double.TryParse(agent.Content[AgentContentParameters.TopP].Value, out var agentTopP);
+                if (isCorrect)
+                    topP = agentTopP;
+            }
+
             var kernel = _semanticKernelProvider.GetKernel(llmConnection);
             var chat = kernel.GetRequiredService<IChatCompletionService>();
             var history = new ChatHistory();
             if (!string.IsNullOrEmpty(systemMessage))
                 history.AddSystemMessage(systemMessage);
+            if (llmConnection.Content.ContainsKey("maxRequestTokens") && Int32.TryParse(llmConnection.Content["maxRequestTokens"], out var maxRequestTokens))
+            {
+                var requestTokensCount = new O200KTokenizer().CountTokens(templateText); // Default Tokenizer for gpt-4o-* models
+                if (requestTokensCount > maxRequestTokens - 4000)
+                {
+                    // take the first maxRequestTokens - 4000 tokens
+                    var tokens = new O200KTokenizer().GetTokens(templateText);
+                    var tokensToTake = maxRequestTokens - 4000;
+                    var tokensToTakeList = tokens.Take(tokensToTake).ToList();
+                    var tokensToTakeString = string.Join(" ", tokensToTakeList);
+                    templateText = tokensToTakeString;
+                    _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Request", $"Request tokens count: {requestTokensCount}, maxRequestTokens: {maxRequestTokens}. Template text was truncated.");
+                }
+            }
+
             var message = new ChatMessageContentItemCollection
             {
                 new TextContent(templateText),
@@ -87,6 +119,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             var executionSettings = new OpenAIPromptExecutionSettings
             {
                 Temperature = temperature,
+                TopP = topP,
             };
 
 
