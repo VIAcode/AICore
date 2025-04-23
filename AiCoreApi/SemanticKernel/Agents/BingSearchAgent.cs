@@ -50,6 +50,8 @@ namespace AiCoreApi.SemanticKernel.Agents
             _connectionProcessor = connectionProcessor;
         }
 
+        private const int DefaultMaxContentLength = 16384;
+
         public override async Task<string> DoCall(AgentModel agent, Dictionary<string, string> parameters)
         {
             parameters.ToList().ForEach(p => parameters[p.Key] = HttpUtility.HtmlDecode(p.Value));
@@ -58,7 +60,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             var queryString = ApplyParameters(agent.Content[AgentContentParameters.QueryString].Value, parameters);
             var maxContentLength = agent.Content.ContainsKey(AgentContentParameters.MaxContentLength)
                 ? ApplyParameters(agent.Content[AgentContentParameters.MaxContentLength].Value, parameters)
-                : "16384"; // default value
+                : DefaultMaxContentLength.ToString();
             queryString = ApplyParameters(queryString, new Dictionary<string, string>
             {
                 {AgentPromptPlaceholders.HasFilesPlaceholder, _requestAccessor.MessageDialog.Messages.Last().HasFiles().ToString()},

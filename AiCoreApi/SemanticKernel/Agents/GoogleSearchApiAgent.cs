@@ -32,6 +32,8 @@ namespace AiCoreApi.SemanticKernel.Agents
             public const string OutputType = "outputType";
         }
 
+        private const int DefaultMaxContentLength = 16384;
+
         private readonly RequestAccessor _requestAccessor;
         private readonly ResponseAccessor _responseAccessor;
         private readonly IHttpClientFactory _httpClientFactory;
@@ -59,7 +61,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             var queryString = ApplyParameters(agent.Content[AgentContentParameters.QueryString].Value, parameters);
             var maxContentLength = agent.Content.ContainsKey(AgentContentParameters.MaxContentLength)
                 ? ApplyParameters(agent.Content[AgentContentParameters.MaxContentLength].Value, parameters)
-                : "16384";
+                : DefaultMaxContentLength.ToString();
 
             queryString = ApplyParameters(queryString, new Dictionary<string, string>
             {
