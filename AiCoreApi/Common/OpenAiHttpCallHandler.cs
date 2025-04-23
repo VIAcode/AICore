@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text.RegularExpressions;
 using AiCoreApi.Common.Extensions;
+using AiCoreApi.Common.Monitoring;
 using AiCoreApi.Data.Processors;
 using AiCoreApi.Models.DbModels;
 using Microsoft.KernelMemory.AI;
@@ -28,6 +29,7 @@ namespace AiCoreApi.Common
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
+            var metricsService = _serviceProvider.GetService<ICommonMetricsService>();  
             var httpContext = _serviceProvider.GetService<IHttpContextAccessor>()?.HttpContext;
             var serviceProvider = httpContext?.RequestServices ?? _serviceProvider;
 
@@ -78,13 +80,18 @@ namespace AiCoreApi.Common
                 login.Login, "LLM", modelDeploymentName, currentRequestSpent.TokensIncoming, currentRequestSpent.TokensOutgoing);
             await spentProcessor.Update(spent);
 
+            if (metricsService != null)
+            {
+                metricsService.AddOutgoingTokens(currentRequestSpent.TokensIncoming, connection, login);
+                metricsService.AddIncomingTokens(currentRequestSpent.TokensOutgoing, connection, login);
+            }
+
             // update spent tokens in response accessor
             if (httpContext != null)
             {
                 var responseAccessor = serviceProvider.GetService<ResponseAccessor>();
                 if (responseAccessor != null)
                     responseAccessor.AddSpentTokens(connection.Name, currentRequestSpent.TokensOutgoing, currentRequestSpent.TokensIncoming);
-
             }
             return response;
         }

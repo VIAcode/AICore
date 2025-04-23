@@ -13,7 +13,12 @@ using AspNetCore.Authentication.Basic;
 using Polly;
 using Polly.Extensions.Http;
 using Microsoft.OpenApi.Models;
-using Prometheus;
+using OpenTelemetry.Trace;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Metrics;
+using Azure.Monitor.OpenTelemetry.AspNetCore;
+using AiCoreApi.Common.Monitoring;
+using OpenTelemetry.Logs;
 
 namespace AiCoreApi;
 
@@ -65,6 +70,7 @@ public class Startup
         services.AddTransient<Db>();
         services.AddHttpContextAccessor();
         services.AddSingleton(sp => sp);
+        services.AddSingleton<IMetricsAccessor, MetricsAccessor>();
         services.AddScoped<RequestAccessor>();
         services.AddScoped<UserContextAccessor>();
         services.AddScoped<ResponseAccessor>();
@@ -186,12 +192,27 @@ public class Startup
                 }
             });
         });
+
         services.AddLogging(loggingBuilder =>
         {
             loggingBuilder.ClearProviders();
+            loggingBuilder.AddOpenTelemetry();
             loggingBuilder.AddConsole(opt => opt.LogToStandardErrorThreshold = Enum.Parse<LogLevel>(extendedConfig.LogLevel));
             loggingBuilder.AddDebug();
         });
+        services.AddOpenTelemetry()
+            .ConfigureResource(r => r.AddService("AICoreAPI"))
+            .UseAzureMonitor() // includes AddAspNetCoreInstrumentation, AddHttpClientInstrumentation, AddHttpClientAndServerMetrics, AddAzureMonitorMetricExporter
+            .WithTracing(tracerProviderBuilder =>
+            {
+                tracerProviderBuilder.AddOtlpExporter();
+            })
+            .WithMetrics(metricsBuilder =>
+            {
+                metricsBuilder
+                    .AddMeter(MetricsAccessor.METRICS_PREFIX)
+                    .AddPrometheusExporter(); 
+            });
     }
 
     public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
@@ -214,8 +235,8 @@ public class Startup
         app.UseAuthorization();
         app.UseCors("CorsPolicy");
 
-        app.UseMetricServer();
-        app.UseHttpMetrics(); 
+        app.UseOpenTelemetryPrometheusScrapingEndpoint();
+
         app.UseMiddleware<ExceptionHandlingMiddleware>();
 
         app.UseEndpoints(endpoints =>
