@@ -38,6 +38,7 @@ public class CommonMetricsService: ICommonMetricsService
         ConnectionType.AzureOpenAiLlm => connection.Content["deploymentName"],
         ConnectionType.DeepSeekLlm => connection.Content["modelName"],
         ConnectionType.OpenAiLlm => connection.Content["modelName"],
+        ConnectionType.CohereLlm => connection.Content["modelName"],
         _ => "default"
     };
 }

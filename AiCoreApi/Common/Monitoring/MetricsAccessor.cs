@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics.Metrics;
+using static AiCoreApi.Common.ExceptionHandlingMiddleware;
 
 namespace AiCoreApi.Common.Monitoring;
 
@@ -44,6 +45,9 @@ public class MetricsAccessor : IMetricsAccessor
 
     private KeyValuePair<string, object?>[] NormalizeTags(string[]? tags)
     {
+        if (tags.Length % 2 != 0)
+            throw new AiCoreUiException("Tags must be provided in key-value pairs.");
+        
         return tags == null
             ? ([])
             : Enumerable.Range(0, tags.Length / 2)
