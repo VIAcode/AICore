@@ -10,7 +10,7 @@ namespace AiCoreApi.SemanticKernel.Agents
 {
     public class RedisAgent : BaseAgent, IRedisAgent
     {
-        private const string DebugMessageSenderName = "RedisAgent";
+        private string _debugMessageSenderName = "RedisAgent";
 
         private static class AgentContentParameters
         {
@@ -30,18 +30,17 @@ namespace AiCoreApi.SemanticKernel.Agents
             RequestAccessor requestAccessor,
             ResponseAccessor responseAccessor,
             ExtendedConfig extendedConfig,
-            ILogger<RedisAgent> logger) : base(requestAccessor, extendedConfig, logger)
+            ILogger<RedisAgent> logger) : base(responseAccessor, requestAccessor, extendedConfig, logger)
         {
             _connectionProcessor = connectionProcessor;
             _requestAccessor = requestAccessor;
             _responseAccessor = responseAccessor;
         }
 
-        public override async Task<string> DoCall(
-            AgentModel agent,
-            Dictionary<string, string> parameters)
+        public override async Task<string> DoCall(AgentModel agent, Dictionary<string, string> parameters)
         {
             parameters.ToList().ForEach(p => parameters[p.Key] = HttpUtility.HtmlDecode(p.Value));
+            _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
             var connectionName = agent.Content[AgentContentParameters.ConnectionName].Value;
             var action = ApplyParameters(agent.Content[AgentContentParameters.Action].Value, parameters);
@@ -49,9 +48,9 @@ namespace AiCoreApi.SemanticKernel.Agents
             var value = ApplyParameters(agent.Content[AgentContentParameters.Value].Value, parameters);
             var lifeTimeSeconds = ApplyParameters(agent.Content[AgentContentParameters.LifeTimeSeconds].Value, parameters);
 
-            _responseAccessor.AddDebugMessage(DebugMessageSenderName, "DoCall Request", $"Action: {action}, Cache Key: {cacheKey}, Value: {value}");
-            var connections = await _connectionProcessor.List();
-            var connection = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.Redis, DebugMessageSenderName, connectionName: connectionName);
+            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Request", $"Action: {action}, Cache Key: {cacheKey}, Value: {value}");
+            var connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
+            var connection = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.Redis, _debugMessageSenderName, connectionName: connectionName);
             var connectionString = connection.Content["connectionString"];
             var redis = ConnectionMultiplexer.Connect(connectionString);
             var db = redis.GetDatabase();
@@ -74,7 +73,7 @@ namespace AiCoreApi.SemanticKernel.Agents
                     result = "Unknown action.";
                     break;
             }
-            _responseAccessor.AddDebugMessage(DebugMessageSenderName, "DoCall Response", result);
+            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Response", result);
             return result;
         }
     }

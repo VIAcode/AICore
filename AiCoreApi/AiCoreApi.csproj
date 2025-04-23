@@ -49,6 +49,8 @@
     <PackageReference Include="Microsoft.SemanticKernel.Plugins.Web" Version="1.38.0-alpha" />
     <PackageReference Include="Microsoft.SharePointOnline.CSOM" Version="16.1.25513.12000" />
     <PackageReference Include="Microsoft.VisualStudio.Azure.Containers.Tools.Targets" Version="1.21.0" />
+    <PackageReference Include="ModelContextProtocol" Version="0.1.0-preview.9" />
+    <PackageReference Include="ModelContextProtocol.AspNetCore" Version="0.1.0-preview.9" />
     <PackageReference Include="NCrontab" Version="3.3.3" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.0.2" />

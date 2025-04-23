@@ -1,4 +1,4 @@
-﻿using AiCoreApi.Authorization;
+﻿using AiCoreApi.Authorization.Attributes;
 using AiCoreApi.Common.Extensions;
 using AiCoreApi.Models.ViewModels;
 using AiCoreApi.Services.ControllersServices;
@@ -19,7 +19,7 @@ public class IngestionController : ControllerBase
     }
 
     [HttpGet("{ingestionId}")]
-    [AdminAuthorize]
+    [RoleAuthorize(Role.Admin)]
     public async Task<IActionResult> GetIngestion(int ingestionId)
     {
         var currentUser = this.GetLogin();
@@ -30,34 +30,34 @@ public class IngestionController : ControllerBase
     }
 
     [HttpGet]
-    [AdminAuthorize]
-    public async Task<IActionResult> List()
+    [RoleAuthorize(Role.Admin)]
+    public async Task<IActionResult> List([FromQuery(Name = "workspace_id")] int workspaceId = 0)
     {
-        var ingestions = await _ingestionService.ListIngestions();
+        var ingestions = await _ingestionService.ListIngestions(workspaceId);
         return Ok(ingestions);
     }
 
     [HttpGet("tasks")]
-    [AdminAuthorize]
-    public async Task<IActionResult> TaskList()
+    [RoleAuthorize(Role.Admin)]
+    public async Task<IActionResult> TaskList([FromQuery(Name = "workspace_id")] int workspaceId = 0)
     {
-        var ingestionTasks = await _ingestionService.ListIngestionTasks();
+        var ingestionTasks = await _ingestionService.ListIngestionTasks(workspaceId);
         return Ok(ingestionTasks);
     }
 
     [HttpPost]
-    [AdminAuthorize]
-    public async Task<IActionResult> Add([FromBody] IngestionViewModel ingestionViewModel)
+    [RoleAuthorize(Role.Admin)]
+    public async Task<IActionResult> Add([FromBody] IngestionViewModel ingestionViewModel, [FromQuery(Name = "workspace_id")] int workspaceId = 0)
     {
         var currentUser = this.GetLogin();
         if (currentUser == null) return Unauthorized();
 
-        await _ingestionService.AddIngestion(ingestionViewModel, currentUser);
+        await _ingestionService.AddIngestion(ingestionViewModel, currentUser, workspaceId);
         return Ok(true);
     }
 
     [HttpPut("{ingestionId}")]
-    [AdminAuthorize]
+    [RoleAuthorize(Role.Admin)]
     public async Task<IActionResult> Update([FromBody] IngestionViewModel ingestionViewModel)
     {
         var currentUser = this.GetLogin();
@@ -68,7 +68,7 @@ public class IngestionController : ControllerBase
     }
 
     [HttpPost("{ingestionId}/sync")]
-    [AdminAuthorize]
+    [RoleAuthorize(Role.Admin)]
     public async Task<IActionResult> Sync(int ingestionId)
     {
         var currentUser = this.GetLogin();
@@ -78,7 +78,7 @@ public class IngestionController : ControllerBase
     }
 
     [HttpDelete("{ingestionId}")]
-    [AdminAuthorize]
+    [RoleAuthorize(Role.Admin)]
     public async Task<IActionResult> Delete(int ingestionId)
     {
         var currentUser = this.GetLogin();
@@ -88,7 +88,7 @@ public class IngestionController : ControllerBase
     }
 
     [HttpPost("autocomplete/{parameterName}")]
-    [AdminAuthorize]
+    [RoleAuthorize(Role.Admin)]
     public async Task<IActionResult> GetAutoComplete(string parameterName, [FromBody] IngestionViewModel ingestionViewModel)
     {
         var result = await _ingestionService.GetAutoComplete(parameterName, ingestionViewModel);

@@ -10,6 +10,7 @@
         public List<DebugMessageViewModel>? DebugMessages { get; set; } = new();
         public Dictionary<string, TokensSpentViewModel>? SpentTokens { get; set; }
         public List<string>? Files { get; set; }
+        public int? WorkspaceId { get; set; }
     }
 
     public class DebugMessageViewModel

@@ -12,7 +12,7 @@ namespace AiCoreApi.SemanticKernel.Agents
 {
     public class RagPromptAgent : BaseAgent, IRagPromptAgent
     {
-        private const string DebugMessageSenderName = "RagPromptAgent";
+        private string _debugMessageSenderName = "RagPromptAgent";
 
         private static class AgentContentParameters
         {
@@ -41,7 +41,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             ILoginProcessor loginProcessor,
             IFeatureFlags featureFlags,
             ExtendedConfig extendedConfig,
-            ILogger<RagPromptAgent> logger) : base(requestAccessor, extendedConfig, logger)
+            ILogger<RagPromptAgent> logger) : base(responseAccessor, requestAccessor, extendedConfig, logger)
         {
             _requestAccessor = requestAccessor;
             _responseAccessor = responseAccessor;
@@ -53,11 +53,10 @@ namespace AiCoreApi.SemanticKernel.Agents
             _extendedConfig = extendedConfig;
         }
 
-        public override async Task<string> DoCall(
-            AgentModel agent, 
-            Dictionary<string, string> parameters)
+        public override async Task<string> DoCall(AgentModel agent, Dictionary<string, string> parameters)
         {
             parameters.ToList().ForEach(p => parameters[p.Key] = HttpUtility.HtmlDecode(p.Value));
+            _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
             var question = ApplyParameters(agent.Content[AgentContentParameters.Question].Value, parameters);
             var embeddingConnectionName = agent.Content[AgentContentParameters.EmbeddingConnectionName].Value;
@@ -74,7 +73,7 @@ namespace AiCoreApi.SemanticKernel.Agents
                     ? agent.Content[AgentContentParameters.MinRelevance].Value 
                     : "0");
 
-            _responseAccessor.AddDebugMessage(DebugMessageSenderName, "DoCall Request", $"# Question: {question}\r\n# Prompt: {prompt}\r\n# Tags: {tags}\r\n# MinRelevance: {minRelevance}");
+            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Request", $"# Question: {question}\r\n# Prompt: {prompt}\r\n# Tags: {tags}\r\n# MinRelevance: {minRelevance}");
 
             var allUserTags = await _loginProcessor.GetTagsByLogin(_requestAccessor.Login, _requestAccessor.LoginType);
             var agentTags = string.IsNullOrEmpty(tags)
@@ -86,15 +85,15 @@ namespace AiCoreApi.SemanticKernel.Agents
                 .Select(e => MemoryFilters.ByTag(AiCoreConstants.TagName, e.Name))
                 .ToList();
 
-            var connections = await _connectionProcessor.List();
+            var connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
 
             var vectorDbConnection = (string.IsNullOrEmpty(vectorDbConnectionName) || vectorDbConnectionName == "Internal Qdrant")
                 ? null
-                : GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.AzureAiSearch, DebugMessageSenderName, connectionName: vectorDbConnectionName);
+                : GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.AzureAiSearch, _debugMessageSenderName, connectionName: vectorDbConnectionName);
             var embeddingConnection = GetConnection(_requestAccessor, _responseAccessor, connections, 
-                new[] { ConnectionType.AzureOpenAiEmbedding, ConnectionType.OpenAiEmbedding }, DebugMessageSenderName, connectionName: embeddingConnectionName);
+                new[] { ConnectionType.AzureOpenAiEmbedding, ConnectionType.OpenAiEmbedding }, _debugMessageSenderName, connectionName: embeddingConnectionName);
             var llmConnection = GetConnection(_requestAccessor, _responseAccessor, connections, 
-                new[] { ConnectionType.AzureOpenAiLlm, ConnectionType.OpenAiLlm, ConnectionType.CohereLlm }, DebugMessageSenderName, agent.LlmType);
+                new[] { ConnectionType.AzureOpenAiLlm, ConnectionType.OpenAiLlm, ConnectionType.CohereLlm }, _debugMessageSenderName, agent.LlmType);
             var vectorIndexName = embeddingConnection.Content.ContainsKey("indexName")
                 ? embeddingConnection.Content["indexName"]
                 : "default";
@@ -102,7 +101,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             var kernelMemory = _kernelMemoryProvider.GetKernelMemory(llmConnection, embeddingConnection, vectorDbConnection);
             if(filters.Count == 0 && _featureFlags.IsEnabled(FeatureFlags.Names.Tagging))
             {
-                _responseAccessor.AddDebugMessage(DebugMessageSenderName, "DoCall Response", $"{_extendedConfig.NoInformationFoundText} (filters)");
+                _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Response", $"{_extendedConfig.NoInformationFoundText} (filters)");
                 return _extendedConfig.NoInformationFoundText;
             }
 
@@ -111,7 +110,7 @@ namespace AiCoreApi.SemanticKernel.Agents
                 filters: _featureFlags.IsEnabled(FeatureFlags.Names.Tagging) ? filters : null);
             if (answer.NoResult)
             {
-                _responseAccessor.AddDebugMessage(DebugMessageSenderName, "DoCall Response", _extendedConfig.NoInformationFoundText);
+                _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Response", _extendedConfig.NoInformationFoundText);
                 return _extendedConfig.NoInformationFoundText;
             }
             _responseAccessor.CurrentMessage.Text = answer.Result;
@@ -136,7 +135,7 @@ namespace AiCoreApi.SemanticKernel.Agents
                 .GroupBy(x => $"{x.Url}|{x.Name}")
                 .Select(x => x.First())
                 .ToList();
-            _responseAccessor.AddDebugMessage(DebugMessageSenderName, "DoCall Response", _responseAccessor.CurrentMessage.Text);
+            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Response", _responseAccessor.CurrentMessage.Text);
             return _responseAccessor.CurrentMessage.Text;
         }
     }

@@ -2,7 +2,6 @@
 using AiCoreApi.Data.Processors;
 using AiCoreApi.Models.DbModels;
 using AutoMapper;
-using DnsClient;
 
 namespace AiCoreApi.Services.ControllersServices
 {
@@ -52,6 +51,12 @@ namespace AiCoreApi.Services.ControllersServices
             var tagsViewModelList = _mapper.Map<List<TagViewModel>>(tags);
             return tagsViewModelList;
         }
+
+        public async Task<bool> RemoveTag(int tagId)
+        {
+            var result = await _tagsProcessor.Remove(tagId);
+            return result;
+        }
     }
 
     public interface ITagsService
@@ -60,6 +65,7 @@ namespace AiCoreApi.Services.ControllersServices
         Task<TagViewModel> AddOrUpdateTag(TagViewModel tagViewModel);
         List<TagViewModel> ListTags();
         Task<List<TagViewModel>> ListUserTags(string login, LoginTypeEnum loginType);
+        Task<bool> RemoveTag(int tagId);
     }
 }
 

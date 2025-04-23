@@ -11,7 +11,7 @@ namespace AiCoreApi.SemanticKernel.Agents
 {
     public class AudioPromptAgent : BaseAgent, IAudioPromptAgent
     {
-        private const string DebugMessageSenderName = "AudioPromptAgent";
+        private string _debugMessageSenderName = "AudioPromptAgent";
 
         // Parameter keys in AgentModel.Content
         private static class AgentContentParameters
@@ -37,7 +37,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             ResponseAccessor responseAccessor,
             IHttpClientFactory httpClientFactory,
             ExtendedConfig extendedConfig,
-            ILogger<AudioPromptAgent> logger) : base(requestAccessor, extendedConfig, logger)
+            ILogger<AudioPromptAgent> logger) : base(responseAccessor, requestAccessor, extendedConfig, logger)
         {
             _connectionProcessor = connectionProcessor;
             _requestAccessor = requestAccessor;
@@ -49,6 +49,7 @@ namespace AiCoreApi.SemanticKernel.Agents
         {
             // Decode HTML-encoded parameters (same logic as WhisperAgent)
             parameters.ToList().ForEach(p => parameters[p.Key] = HttpUtility.HtmlDecode(p.Value));
+            _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
             // Read values from stored agent content or from passed-in parameters
             var prompt = ApplyParameters(agent.Content[AgentContentParameters.Prompt].Value, parameters);
@@ -92,14 +93,14 @@ namespace AiCoreApi.SemanticKernel.Agents
             string modalities,
             int? connectionId)
         {
-            var connections = await _connectionProcessor.List();
+            var connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
 
             var connection = GetConnection(
                 _requestAccessor,
                 _responseAccessor,
                 connections,
                 ConnectionType.AzureOpenAiLlm,
-                DebugMessageSenderName,
+                _debugMessageSenderName,
                 connectionId);
 
             var openAiApiKey = connection.Content["azureOpenAiKey"];
@@ -161,7 +162,7 @@ namespace AiCoreApi.SemanticKernel.Agents
 
             var jsonRequest = JsonSerializer.Serialize(requestBody);
 
-            _responseAccessor.AddDebugMessage(DebugMessageSenderName, "DoCall Request", $"URI: {requestUri}\r\nBody: {jsonRequest}");
+            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Request", $"URI: {requestUri}\r\nBody: {jsonRequest}");
 
             using var httpClient = _httpClientFactory.CreateClient("RetryClient");
             httpClient.DefaultRequestHeaders.Add("api-key", openAiApiKey);
@@ -175,7 +176,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             if (!response.IsSuccessStatusCode)
             {
                 _responseAccessor.AddDebugMessage(
-                    DebugMessageSenderName,
+                    _debugMessageSenderName,
                     "DoCall Error",
                     $"Failed to get chat completion with audio. Status code: {response.StatusCode}");
                 throw new Exception("Failed to get chat completion with audio.");
@@ -193,7 +194,7 @@ namespace AiCoreApi.SemanticKernel.Agents
                 var audio = responseElement.GetProperty("data").GetString();
                 _responseAccessor.CurrentMessage.AddFile("audio.mp3", audio);
             }
-            _responseAccessor.AddDebugMessage(DebugMessageSenderName, "DoCall Response", responseContent);
+            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Response", responseContent);
             return result;
         }
 

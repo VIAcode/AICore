@@ -8,15 +8,18 @@ namespace AiCoreApi.SemanticKernel.Agents
 {
     public abstract class BaseAgent
     {
+        private readonly ResponseAccessor _responseAccessor;
         private readonly RequestAccessor _requestAccessor;
         private readonly ExtendedConfig _extendedConfig;
         private readonly ILogger<BaseAgent> _logger;
 
         protected BaseAgent(
+            ResponseAccessor responseAccessor,
             RequestAccessor requestAccessor,
             ExtendedConfig extendedConfig,
             ILogger<BaseAgent> logger)
         {
+            _responseAccessor = responseAccessor;
             _requestAccessor = requestAccessor;
             _extendedConfig = extendedConfig;
             _logger = logger;
@@ -135,6 +138,19 @@ namespace AiCoreApi.SemanticKernel.Agents
 
         public async Task<string> DoCallWrapper(AgentModel agent, Dictionary<string, string> parameters)
         {
+            if (agent.Tags.Any())
+            {
+                var userTags = await _requestAccessor.UserContext.GetTagsAsync();
+                var userHasAnyTag = agent.Tags.Any(agentTag => userTags.Any(userTag => agentTag.Name == userTag.Name));
+                if (!userHasAnyTag)
+                {
+                    var agentTagsNames = string.Join(", ", agent.Tags.Select(t => t.Name));
+                    var noAccessText = $"NO ACCESS TAG [{agentTagsNames}]";
+                    _responseAccessor.AddDebugMessage($"{agent.Name} ({agent.Type})", "Access Error", noAccessText);
+                    _logger.LogWarning("User {Login} has no access to agent {AgentName} [{agentTagsNames}].", _requestAccessor.Login, agent.Name, agentTagsNames);
+                    return noAccessText;
+                }
+            }
             if (_extendedConfig.LogAgentRun)
             {
                 var parametersString = _extendedConfig.LogAgentPii
@@ -162,7 +178,6 @@ namespace AiCoreApi.SemanticKernel.Agents
             string? connectionName = "")
         {
             return GetConnection(requestAccessor, responseAccessor, connections, new[]{connectionType} , debugMessageSenderName, connectionId, connectionName);
-
         }
 
         protected ConnectionModel GetConnection(

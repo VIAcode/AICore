@@ -56,7 +56,7 @@ namespace AiCoreApi.Services.ProcessingServices.AgentsHandlers
                         UserContextAccessor.AsyncScheduledLoginId.Value = schedulerAgentTaskModel.LoginId;
                         schedulerAgentTaskModel.SchedulerAgentTaskState = SchedulerAgentTaskState.InProgress;
                         await _schedulerAgentTaskProcessor.Update(schedulerAgentTaskModel);
-                        var agentToCallModel = await _agentsProcessor.GetByName(schedulerAgentTaskModel.CompositeAgentName);
+                        var agentToCallModel = await _agentsProcessor.GetByName(schedulerAgentTaskModel.CompositeAgentName, requestAccessor.WorkspaceId);
                         if (agentToCallModel == null)
                         {
                             schedulerAgentTaskModel.Result = "Agent to call not found";
@@ -102,7 +102,7 @@ namespace AiCoreApi.Services.ProcessingServices.AgentsHandlers
                                             DebugMessages = responseAccessor.CurrentMessage.DebugMessages
                                         }
                                     }
-                                });
+                                }, agentToCallModel.WorkspaceId ?? 0);
                         }
                     }
                     catch (Exception e)

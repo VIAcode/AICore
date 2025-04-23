@@ -1,4 +1,5 @@
-﻿using Newtonsoft.Json;
+﻿using AiCoreApi.Models.DbModels;
+using Newtonsoft.Json;
 
 namespace AiCoreApi.Models.ViewModels;
 
@@ -10,9 +11,9 @@ public class LoginSummaryViewModel
     public string? Password { get; set; }
     public string? FullName { get; set; }
     public string? Email { get; set; }
-    public string? Role { get; set; } = "User";
+    public string? Role { get; set; } = nameof(RoleEnum.User);
     public bool IsEnabled { get; set; }
-    public string? LoginType { get; set; } = "Password";
+    public string? LoginType { get; set; } = nameof(LoginTypeEnum.Password);
     public List<TagViewModel> Tags { get; set; } = new();
     public List<GroupViewModel> Groups { get; set; } = new();
     public DateTime Created { get; set; } = DateTime.UtcNow;

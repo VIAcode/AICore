@@ -14,6 +14,7 @@ namespace AiCoreApi.Models.ViewModels
         public Dictionary<string, ConfigurableSettingView> Content { get; set; } = new();
         public List<TagViewModel> Tags { get; set; } = new();
         public int Version { get; set; } = 0;
+        public int? WorkspaceId { get; set; }
     }
 
     public class ConfigurableSettingView
@@ -65,6 +66,8 @@ namespace AiCoreApi.Models.ViewModels
         OcrClassifyDocument = 31,
         WebCrawler = 32,
         StabilityAiImages = 33,
-        OcrBuildClassifierAgent = 34
+        OcrBuildClassifierAgent = 34,
+        AzureLogAnalytics = 35,
+        GoogleSearchApi = 36,
     }
 }

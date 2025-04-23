@@ -20,6 +20,7 @@ namespace AiCoreApi.Models.DbModels
         public Dictionary<string, TokensSpent>? SpentTokens { get; set; }
         [Column(TypeName = "jsonb")]
         public List<string>? Files { get; set; }
+        public int? WorkspaceId { get; set; }
     }
 
     public class DebugMessage

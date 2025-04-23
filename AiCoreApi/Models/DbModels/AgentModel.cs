@@ -18,6 +18,7 @@ namespace AiCoreApi.Models.DbModels
         public Dictionary<string, ConfigurableSetting> Content { get; set; } = new();
         public List<TagModel> Tags { get; set; } = new();
         public int Version { get; set; } = 0;
+        public int? WorkspaceId { get; set; }
 
     }
 
@@ -66,5 +67,6 @@ namespace AiCoreApi.Models.DbModels
         StabilityAiImages = 33,
         OcrBuildClassifierAgent = 34,
         AzureLogAnalytics = 35,
+        GoogleSearchApi = 36,
     }
 }

@@ -13,6 +13,7 @@ using AspNetCore.Authentication.Basic;
 using Polly;
 using Polly.Extensions.Http;
 using Microsoft.OpenApi.Models;
+using AiCoreApi.Services.ProcessingServices;
 using OpenTelemetry.Trace;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Metrics;
@@ -93,7 +94,6 @@ public class Startup
             IssuerSigningKey = extendedConfig.AuthSecurityKey.GetSymmetricSecurityKey(),
             ClockSkew = TimeSpan.Zero,
         };
-
         services.AddSingleton(tokenValidationParameters);
         services.AddHttpContextAccessor();
         services.AddScoped<OpenAiHttpCallHandler>();
@@ -107,7 +107,8 @@ public class Startup
             .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
             {
                 Proxy = string.IsNullOrEmpty(extendedConfig.Proxy) ? null : new WebProxy(new Uri(extendedConfig.Proxy)),
-                ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
+                ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator,
+                AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate | DecompressionMethods.Brotli
             })
             .ConfigurePrimaryHttpMessageHandler<OpenAiHttpCallHandler>();
 
@@ -119,7 +120,8 @@ public class Startup
             .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
             {
                 Proxy = string.IsNullOrEmpty(extendedConfig.Proxy) ? null : new WebProxy(new Uri(extendedConfig.Proxy)),
-                ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
+                ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator,
+                AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate | DecompressionMethods.Brotli
             })
             .ConfigurePrimaryHttpMessageHandler<OpenAiHttpCallHandler>();
 
@@ -213,6 +215,20 @@ public class Startup
                     .AddMeter(MetricsAccessor.METRICS_PREFIX)
                     .AddPrometheusExporter(); 
             });
+        services.AddMcpServer()
+            .WithHttpTransport()
+            .WithListToolsHandler(async (listContext, listCancellationToken) =>
+            {
+                var mcpListCallServices = listContext.Services!.GetRequiredService<IMcpServerProcessingService>();
+                var result = await mcpListCallServices.ListTools(listContext, listCancellationToken);
+                return await result;
+            })
+            .WithCallToolHandler(async (execContext, execCancellationToken) =>
+            {
+                var mcpExecCallServices = execContext.Services!.GetRequiredService<IMcpServerProcessingService>();
+                var result = await mcpExecCallServices.CallTool(execContext, execCancellationToken);
+                return await result;
+            });
     }
 
     public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
@@ -246,6 +262,7 @@ public class Startup
             {
                 ResponseWriter = UIResponseWriter.WriteHealthCheckUIResponse
             });
+            endpoints.MapMcp("/mcp");
         });
     }
 
@@ -260,7 +277,7 @@ public class Startup
                 msg.StatusCode != HttpStatusCode.NoContent;
             if (nonSuccessRequest)
             {
-                _logger.LogTrace("Startup: {0}, url: {1}, request headers: {2}, code: {3}, body: {4}, response headers: {5}", "GetRetryPolicy",
+                _logger.LogWarning("Startup: {0}, url: {1}, request headers: {2}, code: {3}, body: {4}, response headers: {5}", "GetRetryPolicy",
                     msg.RequestMessage.RequestUri, msg.RequestMessage.Headers, msg.StatusCode, msg.Content.ReadAsStringAsync().Result, msg.Headers);
             }
             return nonSuccessRequest;

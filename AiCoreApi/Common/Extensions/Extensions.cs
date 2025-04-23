@@ -1,7 +1,9 @@
 ﻿using System.Globalization;
+using System.IO.Compression;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using JsonRepairUtils;
 using Microsoft.AspNetCore.Mvc;
@@ -42,6 +44,27 @@ public static class Extensions
         {
             return null;
         }
+    }
+
+    public static bool IsJson(this string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return false;
+        value = value.Trim();
+        if ((value.StartsWith("{") && value.EndsWith("}")) || // Object
+            (value.StartsWith("[") && value.EndsWith("]")))   // Array
+        {
+            try
+            {
+                JsonDocument.Parse(value);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+        return false;
     }
 
     public static string FromBase64(this string base64EncodedData)
@@ -199,5 +222,29 @@ public static class Extensions
 
         int index = Random.Next(list.Count);
         return list[index];
+    }
+
+    public static async Task<string> GetCompressedStringAsync(this HttpClient httpClient, HttpRequestMessage httpRequestMessage)
+    {
+        using var response = await httpClient.SendAsync(httpRequestMessage);
+        response.EnsureSuccessStatusCode();
+        var encoding = response.Content.Headers.ContentEncoding.FirstOrDefault()?.ToLowerInvariant();
+        await using var rawStream = await response.Content.ReadAsStreamAsync();
+        Stream decompressedStream = rawStream;
+        if (encoding == "gzip")
+            decompressedStream = new GZipStream(rawStream, CompressionMode.Decompress);
+        else if (encoding == "deflate")
+            decompressedStream = new DeflateStream(rawStream, CompressionMode.Decompress);
+        else if (encoding == "br")
+            decompressedStream = new BrotliStream(rawStream, CompressionMode.Decompress);
+        using var reader = new StreamReader(decompressedStream, Encoding.UTF8);
+        var responseBody = await reader.ReadToEndAsync();
+        return responseBody;
+    }
+
+    public static async Task<string> GetCompressedStringAsync(this HttpClient httpClient, string url)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, url);
+        return await GetCompressedStringAsync(httpClient, request);
     }
 }

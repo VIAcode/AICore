@@ -6,7 +6,7 @@ namespace AiCoreApi.SemanticKernel.Agents
 {
     public class HistoryAgent : BaseAgent, IHistoryAgent
     {
-        private const string DebugMessageSenderName = "HistoryAgent";
+        private string _debugMessageSenderName = "HistoryAgent";
 
         private static class AgentContentParameters
         {
@@ -19,20 +19,19 @@ namespace AiCoreApi.SemanticKernel.Agents
             RequestAccessor requestAccessor,
             ResponseAccessor responseAccessor,
             ExtendedConfig extendedConfig,
-            ILogger<HistoryAgent> logger) : base(requestAccessor, extendedConfig, logger)
+            ILogger<HistoryAgent> logger) : base(responseAccessor, requestAccessor, extendedConfig, logger)
         {
             _requestAccessor = requestAccessor;
             _responseAccessor = responseAccessor;
         }
 
-        public override async Task<string> DoCall(
-            AgentModel agent, 
-            Dictionary<string, string> parameters)
+        public override async Task<string> DoCall(AgentModel agent, Dictionary<string, string> parameters)
         {
+            _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
             var count = agent.Content[AgentContentParameters.Count].Value;
-            _responseAccessor.AddDebugMessage(DebugMessageSenderName, "Get Message History", count);
+            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "Get Message History", count);
             var result = _requestAccessor.MessageDialog!.GetHistory(Convert.ToInt32(count));
-            _responseAccessor.AddDebugMessage(DebugMessageSenderName, "Get Message History Result", result);
+            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "Get Message History Result", result);
             return result;
         }
     }

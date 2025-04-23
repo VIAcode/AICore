@@ -48,9 +48,17 @@ public sealed class DeepSeekChatCompletionService : IChatCompletionService
                 Role = ch.Role.Label.ToLower(),
                 Content = ch.Content ?? ""
             }).ToList();
+        var temperature = _temperature;
+        var topP = 1.0;
         if (executionSettings is Microsoft.SemanticKernel.Connectors.OpenAI.OpenAIPromptExecutionSettings _openAIPromptExecutionSettings 
             && _openAIPromptExecutionSettings.ResponseFormat != null)
         {
+            if(_openAIPromptExecutionSettings.Temperature.HasValue)
+                temperature = _openAIPromptExecutionSettings.Temperature.Value;
+            
+            if (_openAIPromptExecutionSettings.TopP.HasValue)
+                topP = _openAIPromptExecutionSettings.TopP.Value;
+            
             var responseFormat = _openAIPromptExecutionSettings.ResponseFormat;
             var jsonSchemaProperty = responseFormat.GetType().GetProperty("JsonSchema", BindingFlags.Public | BindingFlags.Instance);
             if (jsonSchemaProperty != null)
@@ -84,7 +92,8 @@ public sealed class DeepSeekChatCompletionService : IChatCompletionService
         }
         var message = new DeepSeekRequestMessage
         {
-            Temperature = _temperature,
+            Temperature = temperature,
+            TopP = topP,
             Messages = messages,
             Model = _modelName,
             ResponseFormat = outputFormat,
@@ -123,6 +132,8 @@ public sealed class DeepSeekChatCompletionService : IChatCompletionService
     {
         [JsonProperty("temperature")]
         public double Temperature { get; set; }
+        [JsonProperty("top_p")]
+        public double TopP { get; set; }
         [JsonProperty("messages")]
         public List<DeepSeekMessage> Messages { get; set; } = new();
         [JsonProperty("model")]

@@ -6,12 +6,13 @@ using AiCoreApi.Common.Extensions;
 using AiCoreApi.Data.Processors;
 using HtmlAgilityPack;
 using System.Text.Json;
+using System.Text.Encodings.Web;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
     public class BingSearchAgent : BaseAgent, IBingSearchAgent
     {
-        private const string DebugMessageSenderName = "BingSearchAgent";
+        private string _debugMessageSenderName = "BingSearchAgent";
         private readonly Uri? _uri = new("https://api.bing.microsoft.com/v7.0/search?q");
 
         public static class AgentPromptPlaceholders
@@ -25,6 +26,7 @@ namespace AiCoreApi.SemanticKernel.Agents
         {
             public const string QueryString = "queryString";
             public const string BingConnection = "bingConnection";
+            public const string MaxContentLength = "maxContentLength";
             public const string Count = "count";
             public const string OutputType = "outputType";
         }
@@ -40,7 +42,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             IHttpClientFactory httpClientFactory,
             IConnectionProcessor connectionProcessor,
             ExtendedConfig extendedConfig,
-            ILogger<BingSearchAgent> logger) : base(requestAccessor, extendedConfig, logger)
+            ILogger<BingSearchAgent> logger) : base(responseAccessor, requestAccessor, extendedConfig, logger)
         {
             _requestAccessor = requestAccessor;
             _responseAccessor = responseAccessor;
@@ -48,22 +50,28 @@ namespace AiCoreApi.SemanticKernel.Agents
             _connectionProcessor = connectionProcessor;
         }
 
+        private const int DefaultMaxContentLength = 16384;
+
         public override async Task<string> DoCall(AgentModel agent, Dictionary<string, string> parameters)
         {
             parameters.ToList().ForEach(p => parameters[p.Key] = HttpUtility.HtmlDecode(p.Value));
+            _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
             var queryString = ApplyParameters(agent.Content[AgentContentParameters.QueryString].Value, parameters);
+            var maxContentLength = agent.Content.ContainsKey(AgentContentParameters.MaxContentLength)
+                ? ApplyParameters(agent.Content[AgentContentParameters.MaxContentLength].Value, parameters)
+                : DefaultMaxContentLength.ToString();
             queryString = ApplyParameters(queryString, new Dictionary<string, string>
             {
                 {AgentPromptPlaceholders.HasFilesPlaceholder, _requestAccessor.MessageDialog.Messages.Last().HasFiles().ToString()},
                 {AgentPromptPlaceholders.FilesDataPlaceholder, _requestAccessor.MessageDialog.Messages.Last().GetFileContents()},
                 {AgentPromptPlaceholders.FilesNamesPlaceholder, _requestAccessor.MessageDialog.Messages.Last().GetFileNames()}
             });
-            _responseAccessor.AddDebugMessage(DebugMessageSenderName, "Execute Query String", queryString);
+            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "Execute Query String", queryString);
 
             var bingConnectionName = agent.Content[AgentContentParameters.BingConnection].Value;
-            var connections = await _connectionProcessor.List();
-            var bingConnection = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.BingApi, DebugMessageSenderName, connectionName: bingConnectionName);
+            var connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
+            var bingConnection = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.BingApi, _debugMessageSenderName, connectionName: bingConnectionName);
 
             var count = int.Parse(agent.Content[AgentContentParameters.Count].Value);
             var outputType = agent.Content.TryGetValue(AgentContentParameters.OutputType, out var ot) ? ot.Value : "snippetTexts";
@@ -81,16 +89,19 @@ namespace AiCoreApi.SemanticKernel.Agents
                 foreach (var page in results)
                 {
                     var text = await CrawlPageTextAsync(page.Url);
+                    if(text.Length > int.Parse(maxContentLength))
+                        text = text.Substring(0, int.Parse(maxContentLength));
+                    
                     pages.Add(new Dictionary<string, string> { { "url", page.Url }, { "text", text } });
                 }
-                result = JsonSerializer.Serialize(pages);
+                result = JsonSerializer.Serialize(pages, new JsonSerializerOptions { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping });
             }
             else // default: snippetTexts
             {
-                result = JsonSerializer.Serialize(results.Select(r => r.Snippet).ToList());
+                result = JsonSerializer.Serialize(results.Select(r => r.Snippet).ToList(), new JsonSerializerOptions { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping });
             }
 
-            _responseAccessor.AddDebugMessage(DebugMessageSenderName, "Execute Query String Result", result);
+            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "Execute Query String Result", result);
             return result;
         }
 
@@ -99,7 +110,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             try
             {
                 var client = _httpClientFactory.CreateClient("NoRetryClient");
-                var html = await client.GetStringAsync(url);
+                var html = await client.GetCompressedStringAsync(url);
                 var doc = new HtmlDocument();
                 doc.LoadHtml(html);
 
@@ -116,7 +127,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             }
             catch (Exception ex)
             {
-                _responseAccessor.AddDebugMessage(DebugMessageSenderName, "Error", $"Failed to crawl {url}, {ex.Message}");
+                _responseAccessor.AddDebugMessage(_debugMessageSenderName, "Error", $"Failed to crawl {url}, {ex.Message}");
                 return string.Empty;
             }
         }

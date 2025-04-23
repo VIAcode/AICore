@@ -10,7 +10,7 @@ namespace AiCoreApi.SemanticKernel.Agents
 {
     public class ContentSafetyAgent : BaseAgent, IContentSafetyAgent
     {
-        private const string DebugMessageSenderName = "ContentSafetyAgent";
+        private string _debugMessageSenderName = "ContentSafetyAgent";
         private static class AgentContentParameters
         {
             public const string ContentSafetyConnection = "contentSafetyConnection";
@@ -33,7 +33,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             ResponseAccessor responseAccessor,
             RequestAccessor requestAccessor,
             ExtendedConfig extendedConfig,
-            ILogger<ContentSafetyAgent> logger) : base(requestAccessor, extendedConfig, logger)
+            ILogger<ContentSafetyAgent> logger) : base(responseAccessor, requestAccessor, extendedConfig, logger)
         {
             _connectionProcessor = connectionProcessor;
             _httpClientFactory = httpClientFactory;
@@ -44,10 +44,11 @@ namespace AiCoreApi.SemanticKernel.Agents
         public override async Task<string> DoCall(AgentModel agent, Dictionary<string, string> parameters)
         {
             parameters.ToList().ForEach(p => parameters[p.Key] = HttpUtility.HtmlDecode(p.Value));
+            _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
             var connectionName = agent.Content[AgentContentParameters.ContentSafetyConnection].Value;
-            var connections = await _connectionProcessor.List();
-            var contentSafetyConnection = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.ContentSafety, DebugMessageSenderName, connectionName: connectionName);
+            var connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
+            var contentSafetyConnection = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.ContentSafety, _debugMessageSenderName, connectionName: connectionName);
             var apiKey = contentSafetyConnection.Content["apiKey"];
             var contentSafetyUrl = contentSafetyConnection.Content["contentSafetyUrl"].TrimEnd('/');
             var hate = Convert.ToInt32(agent.Content[AgentContentParameters.Hate].Value);
@@ -58,7 +59,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             var jailBreakAttack = Convert.ToBoolean(agent.Content[AgentContentParameters.JailBreakAttack].Value);
 
             var textToAnalyze = parameters["parameter1"];
-            _responseAccessor.AddDebugMessage(DebugMessageSenderName, "DoCall Request", 
+            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Request", 
                 $"Content Safety Analysis for: {textToAnalyze} \r\n\r\nAPI Url: {contentSafetyUrl} \r\nHate: {hate}\r\nSelfHarm: {selfHarm}\r\nSexual: {sexual}\r\nViolence: {violence}\r\nProtectedMaterial: {protectedMaterial}\r\nJailBreakAttack: {jailBreakAttack}");
 
             var foundContentSafetyIssues = new List<string>();
@@ -72,7 +73,7 @@ namespace AiCoreApi.SemanticKernel.Agents
                 using var response = await httpClient.SendAsync(httpRequestMessage);
                 response.EnsureSuccessStatusCode();
                 var responseBody = await response.Content.ReadAsStringAsync();
-                _responseAccessor.AddDebugMessage(DebugMessageSenderName, $"DoCall {debugMessage}", responseBody);
+                _responseAccessor.AddDebugMessage(_debugMessageSenderName, $"DoCall {debugMessage}", responseBody);
                 var detected = responseBody.JsonGet<bool>(jsonPath);
                 if (detected)
                 {
@@ -98,7 +99,7 @@ namespace AiCoreApi.SemanticKernel.Agents
                 using var response = await httpClient.SendAsync(httpRequestMessage);
                 response.EnsureSuccessStatusCode();
                 var responseBody = await response.Content.ReadAsStringAsync();
-                _responseAccessor.AddDebugMessage(DebugMessageSenderName, "DoCall Analyze", responseBody);
+                _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Analyze", responseBody);
                 var analysis = responseBody.JsonGet<CategoriesAnalysisResponse>();
                 foreach (var item in analysis.CategoriesAnalysis)
                 {
@@ -115,7 +116,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             var result = foundContentSafetyIssues.Count == 0
                 ? "True"
                 : $"False: {string.Join(", ", foundContentSafetyIssues)}";
-            _responseAccessor.AddDebugMessage(DebugMessageSenderName, "DoCall Response", result);
+            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Response", result);
             return result;
         }
 

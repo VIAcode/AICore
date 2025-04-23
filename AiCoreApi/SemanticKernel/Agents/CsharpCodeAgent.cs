@@ -28,7 +28,7 @@ namespace AiCoreApi.SemanticKernel.Agents
         private static ConcurrentDictionary<string, List<string>> _assemblyPaths = new();
         private static ConcurrentDictionary<string, Script<string>> _compiledScripts = new();
 
-        private const string DebugMessageSenderName = "CSharpCodeAgent";
+        private string _debugMessageSenderName = "CSharpCodeAgent";
 
         private static class AgentContentParameters
         {
@@ -50,7 +50,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             ExtendedConfig extendedConfig,
             ICacheAccessor cacheAccessor,
             ILogger<CsharpCodeAgent> logger,
-            IMetricsAccessor metricsAccessor) : base(requestAccessor, extendedConfig, logger)
+            IMetricsAccessor metricsAccessor) : base(responseAccessor, requestAccessor, extendedConfig, logger)
         {
             _plannerHelpers = plannerHelpers;
             _requestAccessor = requestAccessor;
@@ -64,14 +64,10 @@ namespace AiCoreApi.SemanticKernel.Agents
 
         public async Task<string> DoCallWrapper(AgentModel agent, Dictionary<string, string> parameters) => await base.DoCallWrapper(agent, parameters);
 
-        public override async Task<string> DoCall(
-            AgentModel agent,
-            Dictionary<string, string> parameters)
+        public override async Task<string> DoCall(AgentModel agent, Dictionary<string, string> parameters)
         {
-            // Ensure values are HTML-decoded
-            parameters
-                .ToList()
-                .ForEach(p => parameters[p.Key] = HttpUtility.HtmlDecode(p.Value));
+            parameters.ToList().ForEach(p => parameters[p.Key] = HttpUtility.HtmlDecode(p.Value));
+            _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
             // Insert user parameters into the code template
             var csharpCode = ApplyParameters(agent.Content[AgentContentParameters.CsharpCode].Value, parameters);
@@ -80,13 +76,13 @@ namespace AiCoreApi.SemanticKernel.Agents
             var quickMode = !csharpCode.Replace(" ", "").Contains("classAgent");
 
             return quickMode
-                ? await QuickCall(parameters, csharpCode)
-                : await Call(parameters, csharpCode);
+                ? await QuickCall(agent, parameters, csharpCode)
+                : await Call(agent, parameters, csharpCode);
         }
 
-        private async Task<string> Call(Dictionary<string, string> parameters, string csharpCode)
+        private async Task<string> Call(AgentModel agent, Dictionary<string, string> parameters, string csharpCode)
         {
-            _responseAccessor.AddDebugMessage(DebugMessageSenderName, "Execute C# Code", csharpCode);
+            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "Execute C# Code", csharpCode);
 
             // Clean the script code by removing #r "..." directives
             var cleanedCode = Regex.Replace(csharpCode, @"#r\s+""nuget:[^""]+""", "");
@@ -107,7 +103,7 @@ namespace AiCoreApi.SemanticKernel.Agents
                 _assemblyPaths.TryGetValue(assemblyPathsCacheKey, out var assemblyPaths);
                 if (assemblyPaths == null)
                 {
-                    assemblyPaths = await ResolveNuGetPackages(nugetDirectives);
+                    assemblyPaths = await ResolveNuGetPackages(agent, nugetDirectives);
                     _assemblyPaths.TryAdd(assemblyPathsCacheKey, assemblyPaths);
                 }
 
@@ -119,7 +115,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             var references = _assemblyPaths.FirstOrDefault(x => x.Key == assemblyPathsCacheKey).Value;
             try
             {
-                _responseAccessor.AddDebugMessage(DebugMessageSenderName, "C# Code Execution", "");
+                _responseAccessor.AddDebugMessage(_debugMessageSenderName, "C# Code Execution", "");
 
                 // Prepare delegate references for Agent calls
                 Func<string, List<string>?, string> executeAgent = ExecuteAgent;
@@ -163,13 +159,13 @@ namespace AiCoreApi.SemanticKernel.Agents
                 }
 
                 var result = executor.Execute(dllPath, "Agent", "Run", args, references)?.ToString();
-                _responseAccessor.AddDebugMessage(DebugMessageSenderName, "C# Code Result", result);
+                _responseAccessor.AddDebugMessage(_debugMessageSenderName, "C# Code Result", result);
                 return result;
             }
             catch (Exception e)
             {
                 _responseAccessor.AddDebugMessage(
-                    DebugMessageSenderName,
+                    _debugMessageSenderName,
                     "C# Code Error",
                     $"Exception: {e.Message}\r\n\r\nInner Exception: {e.InnerException?.Message}"
                 );
@@ -178,9 +174,9 @@ namespace AiCoreApi.SemanticKernel.Agents
         }
 
         // Quick mode – interpret the snippet directly with Roslyn's C# scripting
-        private async Task<string> QuickCall(Dictionary<string, string> parameters, string csharpCode)
+        private async Task<string> QuickCall(AgentModel agent, Dictionary<string, string> parameters, string csharpCode)
         {
-            _responseAccessor.AddDebugMessage(DebugMessageSenderName, "Execute C# Code (quick)", csharpCode);
+            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "Execute C# Code (quick)", csharpCode);
 
             var globals = new Globals
             {
@@ -211,7 +207,7 @@ namespace AiCoreApi.SemanticKernel.Agents
                 _assemblyPaths.TryGetValue(assemblyPathsCacheKey, out var assemblyPaths);
                 if (assemblyPaths == null)
                 {
-                    assemblyPaths = await ResolveNuGetPackages(nugetDirectives);
+                    assemblyPaths = await ResolveNuGetPackages(agent, nugetDirectives);
                     _assemblyPaths.TryAdd(assemblyPathsCacheKey, assemblyPaths);
                 }
 
@@ -229,15 +225,15 @@ namespace AiCoreApi.SemanticKernel.Agents
 
             try
             {
-                _responseAccessor.AddDebugMessage(DebugMessageSenderName, "C# Code Execution (quick)", "");
+                _responseAccessor.AddDebugMessage(_debugMessageSenderName, "C# Code Execution (quick)", "");
                 var result = await compiledScript.RunAsync(globals);
-                _responseAccessor.AddDebugMessage(DebugMessageSenderName, "C# Code Result (quick)", result.ReturnValue);
+                _responseAccessor.AddDebugMessage(_debugMessageSenderName, "C# Code Result (quick)", result.ReturnValue);
                 return result.ReturnValue;
             }
             catch (Exception e)
             {
                 _responseAccessor.AddDebugMessage(
-                    DebugMessageSenderName,
+                    _debugMessageSenderName,
                     "C# Code Error (quick)",
                     $"Exception: {e.Message}\r\n\r\nInner Exception: {e.InnerException?.Message}"
                 );
@@ -256,7 +252,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             catch (Exception e)
             {
                 _responseAccessor.AddDebugMessage(
-                    DebugMessageSenderName,
+                    _debugMessageSenderName,
                     "C# Code ExecuteAgent Error",
                     $"Agent: {agentName}\r\n\r\n Exception: {e.Message}\r\n\r\nInner Exception: {e.InnerException?.Message}"
                 );
@@ -281,7 +277,7 @@ namespace AiCoreApi.SemanticKernel.Agents
         }
 
         // Resolves the given set of packages (plus all dependencies) to local DLL files
-        private async Task<List<string>> ResolveNuGetPackages(List<(string packageName, string version)> packages)
+        private async Task<List<string>> ResolveNuGetPackages(AgentModel agent, List<(string packageName, string version)> packages)
         {
             var packagePaths = new List<string>();
             var cache = new SourceCacheContext();
@@ -314,20 +310,25 @@ namespace AiCoreApi.SemanticKernel.Agents
             if (_extendedConfig.UseNugetOrgFallback || repositories.Count == 0)
             {
                 var nugetSource = new PackageSource("https://api.nuget.org/v3/index.json");
-                repositories.Add(new SourceRepository(nugetSource, providers));
+                if(_extendedConfig.UseNugetOrgAsPrimaryFeed)
+                    repositories.Insert(0, new SourceRepository(nugetSource, providers));
+                else
+                    repositories.Add(new SourceRepository(nugetSource, providers));
             }
 
             var processedPackages = new HashSet<string>();
             foreach (var (packageName, version) in packages)
             {
                 await ResolvePackageAndDependencies(
+                    agent,
                     packageName,
                     version,
                     repositories,
                     cache,
                     logger,
                     packagePaths,
-                    processedPackages
+                    processedPackages,
+                    passSystemPackages: true
                 );
             }
             return packagePaths;
@@ -347,7 +348,6 @@ namespace AiCoreApi.SemanticKernel.Agents
         {
             FindPackageByIdResource? resource = null;
             NuGetVersion? selectedVersion = null;
-
             foreach (var repository in repositories)
             {
                 resource = await repository.GetResourceAsync<FindPackageByIdResource>();
@@ -361,7 +361,7 @@ namespace AiCoreApi.SemanticKernel.Agents
                     // If the exact version wasn't found, use the latest
                     selectedVersion = versions.Last();
                     _responseAccessor.AddDebugMessage(
-                        DebugMessageSenderName,
+                        _debugMessageSenderName,
                         "C# Code Warning",
                         $"NuGet package '{packageName}' version '{versionRange.ToString()}' not found. Using latest: {selectedVersion}"
                     );
@@ -373,13 +373,15 @@ namespace AiCoreApi.SemanticKernel.Agents
         }
 
         private async Task ResolvePackageAndDependencies(
+            AgentModel agent,
             string packageName,
             string version,
             List<SourceRepository> repositories,
             SourceCacheContext cache,
             ILogger logger,
             List<string> packagePaths,
-            HashSet<string> processedPackages)
+            HashSet<string> processedPackages,
+            bool passSystemPackages)
         {
             var currentFramework = NuGetFramework.ParseFolder($"net{Environment.Version.Major}.{Environment.Version.Minor}");
 
@@ -388,10 +390,15 @@ namespace AiCoreApi.SemanticKernel.Agents
             if (resource == null || selectedVersion == null)
                 throw new Exception($"NuGet package '{packageName}' not found in any repository");
 
+            if (!passSystemPackages && _extendedConfig.SkipNonExplicitSystemPackageLoad && packageName.StartsWith("System."))
+                return; // Skip System packages
 
             var packageKey = $"{packageName}.{selectedVersion}";
             if (processedPackages.Contains(packageKey))
                 return; // Already handled
+
+            if(_extendedConfig.LogNugetPackageLoad)
+                _logger.LogCritical("[{DateTime}][Nuget Package Load] Agent: {Agent}, Package: {Login}", agent.Name, DateTime.UtcNow.ToString("g"), packageKey);
 
             processedPackages.Add(packageKey);
 
@@ -498,13 +505,15 @@ namespace AiCoreApi.SemanticKernel.Agents
                     try
                     {
                         await ResolvePackageAndDependencies(
+                            agent,
                             depPackageName,
                             depSelectedVersion.ToNormalizedString(),
                             repositories,
                             cache,
                             logger,
                             packagePaths,
-                            processedPackages
+                            processedPackages,
+                            passSystemPackages: false
                         );
                     }
                     catch (Exception e)

@@ -1,4 +1,4 @@
-﻿using AiCoreApi.Authorization;
+﻿using AiCoreApi.Authorization.Attributes;
 using AiCoreApi.Common;
 using AiCoreApi.Common.Extensions;
 using AiCoreApi.Models.ViewModels;
@@ -32,7 +32,7 @@ namespace AiCoreApi.Controllers
             return Ok(login);
         }
 
-        [AdminAuthorize]
+        [RoleAuthorize(Role.Admin, Role.Developer)]
         [HttpGet]
         public async Task<IActionResult> GetUsers()
         {
@@ -40,7 +40,7 @@ namespace AiCoreApi.Controllers
             return Ok(logins);
         }
 
-        [AdminAuthorize]
+        [RoleAuthorize(Role.Admin)]
         [HttpPost("{loginId}/enable")]
         public async Task<IActionResult> EnableUser(int loginId)
         {
@@ -48,7 +48,7 @@ namespace AiCoreApi.Controllers
             return Ok(true);
         }
 
-        [AdminAuthorize]
+        [RoleAuthorize(Role.Admin)]
         [HttpPost("{loginId}/disable")]
         public async Task<IActionResult> DisableUser(int loginId)
         {
@@ -56,7 +56,7 @@ namespace AiCoreApi.Controllers
             return Ok(true);
         }
 
-        [AdminAuthorize]
+        [RoleAuthorize(Role.Admin)]
         [HttpPost]
         public async Task<IActionResult> AddUser([FromBody]LoginSummaryViewModel loginSummaryViewModel)
         {
@@ -69,7 +69,7 @@ namespace AiCoreApi.Controllers
             return Ok(model != null);
         }
 
-        [AdminAuthorize]
+        [RoleAuthorize(Role.Admin)]
         [HttpPut("{loginId}")]
         public async Task<IActionResult> UpdateUser(int loginId, [FromBody] EditLoginViewModel editLoginViewModel)
         {
@@ -81,7 +81,7 @@ namespace AiCoreApi.Controllers
             return Ok(saved);
         }
 
-        [AdminAuthorize]
+        [RoleAuthorize(Role.Admin)]
         [HttpDelete("{loginId}")]
         public async Task<IActionResult> DeleteUser(int loginId)
         {

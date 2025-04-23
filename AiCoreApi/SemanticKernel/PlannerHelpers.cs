@@ -5,6 +5,8 @@ using AiCoreApi.Data.Processors;
 using AiCoreApi.Models.DbModels;
 using AiCoreApi.SemanticKernel.Agents;
 using AgentType = AiCoreApi.Models.DbModels.AgentType;
+using static AiCoreApi.Common.ExceptionHandlingMiddleware;
+using AiCoreApi.Authorization;
 
 namespace AiCoreApi.SemanticKernel
 {
@@ -22,6 +24,7 @@ namespace AiCoreApi.SemanticKernel
         }
 
         private readonly RequestAccessor _requestAccessor;
+        private readonly ExtendedConfig _extendedConfig;
         private readonly IAgentsProcessor _agentsProcessor;
         private readonly IServiceProvider _serviceProvider;
         private readonly IPromptAgent _promptAgent;
@@ -52,9 +55,11 @@ namespace AiCoreApi.SemanticKernel
         private readonly IStabilityAiImagesAgent _stabilityAiImagesAgent;
         private readonly IOcrBuildClassifierAgent _ocrBuildClassifierAgent;
         private readonly IAzureLogAnalyticsAgent _azureLogAnalyticsAgent;
+        private readonly IGoogleSearchApiAgent _googleSearchApiAgent; 
 
         public PlannerHelpers(
             RequestAccessor requestAccessor,
+            ExtendedConfig extendedConfig,
             IAgentsProcessor agentsProcessor,
             IServiceProvider serviceProvider,
             IPromptAgent promptAgent,
@@ -84,10 +89,12 @@ namespace AiCoreApi.SemanticKernel
             IWebCrawlerAgent webCrawlerAgent,
             IStabilityAiImagesAgent stabilityAiImagesAgent,
             IOcrBuildClassifierAgent ocrBuildClassifierAgent,
-            IAzureLogAnalyticsAgent azureLogAnalyticsAgent
+            IAzureLogAnalyticsAgent azureLogAnalyticsAgent,
+            IGoogleSearchApiAgent googleSearchApiAgent
             )
         {
             _requestAccessor = requestAccessor;
+            _extendedConfig = extendedConfig;
             _agentsProcessor = agentsProcessor;
             _serviceProvider = serviceProvider;
             _promptAgent = promptAgent;
@@ -118,23 +125,37 @@ namespace AiCoreApi.SemanticKernel
             _stabilityAiImagesAgent = stabilityAiImagesAgent;
             _ocrBuildClassifierAgent = ocrBuildClassifierAgent;
             _azureLogAnalyticsAgent = azureLogAnalyticsAgent;
+            _googleSearchApiAgent = googleSearchApiAgent;
         }
 
         private List<AgentModel>? _agentsList;
-        public async Task<List<AgentModel>> GetAgentsList()
-        {
-            if(_agentsList != null)
-                return _agentsList;
+        public async Task<List<AgentModel>> GetAgentsList() => _agentsList ??= await _agentsProcessor.List(_requestAccessor.WorkspaceId);
 
-            return await _agentsProcessor.List();
-        }
-
-        public async Task<string> ExecuteAgent(string agentName, List<string>? parameters = null)
+        public async Task<string> ExecuteAgent(string agentName, List<string>? parameters = null, bool checkAgentCallType = false)
         {
-            var dbAgents = await _agentsProcessor.List();
+            var dbAgents = await _agentsProcessor.List(_requestAccessor.WorkspaceId);
             var agent = dbAgents.FirstOrDefault(item => item.Name.ToLower() == agentName.ToLower());
             if (agent == null)
-                throw new Exception($"Agent not found: {agentName}");
+                throw new AiCoreUiException($"Agent not found: {agentName}");
+            if (checkAgentCallType)
+            {
+                var callType = agent.Content.ContainsKey(AgentTypeCalls.AgentCallTypeFieldName)
+                    ? agent.Content[AgentTypeCalls.AgentCallTypeFieldName].Value
+                    : AgentTypeCalls.PrivateCall;
+                var agentCallTypePublic = callType.Contains(AgentTypeCalls.PublicCall) && _extendedConfig.UsePublicCalls;
+                var agentCallTypePrivate = callType.Contains(AgentTypeCalls.PrivateCall);
+
+                if (agentCallTypePublic && _requestAccessor.IsPublicCall)
+                {
+                    // public call
+                }
+                else if (agentCallTypePrivate && !_requestAccessor.IsPublicCall)
+                {
+                    // private call
+                }
+                else 
+                    throw new AiCoreAuthException($"Agent {agentName} cannot be called according to its call type ({callType}).");
+            }
             var parametersDictionary = parameters
                 .Select((value, i) => new KeyValuePair<string, string>("parameter" + (i + 1), value))
                 .ToDictionary(
@@ -145,7 +166,7 @@ namespace AiCoreApi.SemanticKernel
             if (!agentTypes.TryGetValue(agent.Type, out var agentType))
                 throw new Exception($"Agent type not found: {agent.Type}");
             var agentInstance = ((BaseAgent)agentType);
-            var result = await agentInstance.DoCall(agent, parametersDictionary);
+            var result = await agentInstance.DoCallWrapper(agent, parametersDictionary);
             return result;
         }
 
@@ -245,6 +266,7 @@ namespace AiCoreApi.SemanticKernel
                 { AgentType.StabilityAiImages, _stabilityAiImagesAgent },
                 { AgentType.OcrBuildClassifierAgent, _ocrBuildClassifierAgent },
                 { AgentType.AzureLogAnalytics, _azureLogAnalyticsAgent },
+                { AgentType.GoogleSearchApi, _googleSearchApiAgent }
             };
             return agentMapping;
         }
@@ -265,7 +287,7 @@ namespace AiCoreApi.SemanticKernel
     public interface IPlannerHelpers
     {
         Task<List<AgentModel>> GetAgentsList();
-        Task<string> ExecuteAgent(string agentName, List<string>? parameters = null);
+        Task<string> ExecuteAgent(string agentName, List<string>? parameters = null, bool checkAgentCallType = false);
         Task AddPlugin(AgentModel agent, Kernel kernel, List<string> pluginsInstructions);
         string ApplyPlaceholders(string plannerPrompt);
         string GetPlannerCacheKey(string plannerPrompt, Kernel kernel);

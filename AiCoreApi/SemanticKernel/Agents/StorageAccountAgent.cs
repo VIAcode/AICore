@@ -22,7 +22,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             { "latin1", Encoding.Latin1 }, //iso-8859-1
         };
 
-        private const string DebugMessageSenderName = "StorageAccountAgent";
+        private string _debugMessageSenderName = "StorageAccountAgent";
         public static class AgentPromptPlaceholders
         {
             public const string FileDataPlaceholder = "firstFileData";
@@ -49,7 +49,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             RequestAccessor requestAccessor,
             ResponseAccessor responseAccessor,
             ExtendedConfig extendedConfig,
-            ILogger<StorageAccountAgent> logger) : base(requestAccessor, extendedConfig, logger)
+            ILogger<StorageAccountAgent> logger) : base(responseAccessor, requestAccessor, extendedConfig, logger)
         {
             _entraTokenProvider = entraTokenProvider;
             _connectionProcessor = connectionProcessor;
@@ -57,20 +57,19 @@ namespace AiCoreApi.SemanticKernel.Agents
             _responseAccessor = responseAccessor;
         }
 
-        public override async Task<string> DoCall(
-            AgentModel agent,
-            Dictionary<string, string> parameters)
+        public override async Task<string> DoCall(AgentModel agent, Dictionary<string, string> parameters)
         {
             parameters.ToList().ForEach(p => parameters[p.Key] = HttpUtility.HtmlDecode(p.Value));
+            _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
             var action = agent.Content[AgentContentParameters.Action].Value;
             var connectionName = agent.Content[AgentContentParameters.ConnectionName].Value;
             var containerName = ApplyParameters(agent.Content.ContainsKey(AgentContentParameters.ContainerName) ? agent.Content[AgentContentParameters.ContainerName].Value : string.Empty, parameters);
             var fileName = ApplyParameters(agent.Content.ContainsKey(AgentContentParameters.FileName) ? agent.Content[AgentContentParameters.FileName].Value : string.Empty, parameters);
-            _responseAccessor.AddDebugMessage(DebugMessageSenderName, "DoCall Request", $"Action: {action}\r\nConnection: {connectionName}\r\nContainerName: {containerName}\r\nFileName: {fileName}");
+            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Request", $"Action: {action}\r\nConnection: {connectionName}\r\nContainerName: {containerName}\r\nFileName: {fileName}");
 
-            var connections = await _connectionProcessor.List();
-            var connection = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.StorageAccount, DebugMessageSenderName, connectionName: connectionName);
+            var connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
+            var connection = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.StorageAccount, _debugMessageSenderName, connectionName: connectionName);
 
             var accountName = connection.Content["accountName"];
             var accessType = connection.Content.ContainsKey("accessType") ? connection.Content["accessType"] : "apiKey";
@@ -142,7 +141,7 @@ namespace AiCoreApi.SemanticKernel.Agents
                     }
                 default: throw new InvalidDataException($"Wrong action: {action}");
             }
-            _responseAccessor.AddDebugMessage(DebugMessageSenderName, "DoCall Response", result);
+            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Response", result);
             return result;
         }
 

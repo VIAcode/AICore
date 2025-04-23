@@ -20,12 +20,14 @@ namespace AiCoreApi.Models.DbModels
         public DateTime Updated { get; set; } = DateTime.UtcNow;
         public List<TagModel> Tags { get; set; } = new();
         public DateTime LastSync { get; set; } = DateTime.UtcNow;
+        public int? WorkspaceId { get; set; }
     }
 
     public enum IngestionType
     {
         SharePoint = 1,
         WebUrl = 2,
-        UploadFile = 3
+        UploadFile = 3,
+        AzDoWiki = 4,
     }
 }

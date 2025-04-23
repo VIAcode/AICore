@@ -10,7 +10,7 @@ namespace AiCoreApi.SemanticKernel.Agents
 {
     public class AzureAiTranslatorAgent : BaseAgent, IAzureAiTranslatorAgent
     {
-        private const string DebugMessageSenderName = "AzureAiTranslatorAgent";
+        private string _debugMessageSenderName = "AzureAiTranslatorAgent";
 
         private static class AgentContentParameters
         {
@@ -33,7 +33,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             ResponseAccessor responseAccessor,
             RequestAccessor requestAccessor,
             ExtendedConfig extendedConfig,
-            ILogger<AzureAiTranslatorAgent> logger) : base(requestAccessor, extendedConfig, logger)
+            ILogger<AzureAiTranslatorAgent> logger) : base(responseAccessor, requestAccessor, extendedConfig, logger)
         {
             _connectionProcessor = connectionProcessor;
             _httpClientFactory = httpClientFactory;
@@ -44,10 +44,11 @@ namespace AiCoreApi.SemanticKernel.Agents
         public override async Task<string> DoCall(AgentModel agent, Dictionary<string, string> parameters)
         {
             parameters.ToList().ForEach(p => parameters[p.Key] = HttpUtility.HtmlDecode(p.Value));
+            _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
             var connectionName = agent.Content[AgentContentParameters.ConnectionName].Value;
-            var connections = await _connectionProcessor.List();
-            var connection = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.AzureAiTranslator, DebugMessageSenderName, connectionName: connectionName);
+            var connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
+            var connection = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.AzureAiTranslator, _debugMessageSenderName, connectionName: connectionName);
 
             var apiKey = connection.Content["apiKey"];
             var region = connection.Content["region"];
@@ -56,7 +57,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             var toLanguage = ApplyParameters(agent.Content[AgentContentParameters.To].Value, parameters);
             var text = ApplyParameters(agent.Content[AgentContentParameters.Text].Value, parameters);
 
-            _responseAccessor.AddDebugMessage(DebugMessageSenderName, "DoCall Request", $"Connection: {connectionName}\r\nFrom: {fromLanguage}.\r\nTo: {toLanguage}\r\nText: {text}");
+            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Request", $"Connection: {connectionName}\r\nFrom: {fromLanguage}.\r\nTo: {toLanguage}\r\nText: {text}");
             using var httpClient = _httpClientFactory.CreateClient("RetryClient");
             var route = $"/translate?api-version=3.0{(string.IsNullOrWhiteSpace(fromLanguage) ? "" : $"&from={fromLanguage}")}&to={toLanguage}";
             var uri = new Uri(Endpoint + route);
@@ -69,7 +70,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             var jsonResponse = await response.Content.ReadAsStringAsync();
             using var document = JsonDocument.Parse(jsonResponse);
             var translation = document.RootElement[0].GetProperty("translations")[0].GetProperty("text").GetString();
-            _responseAccessor.AddDebugMessage(DebugMessageSenderName, "DoCall Response", translation);
+            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Response", translation);
             return translation;
         }
     }

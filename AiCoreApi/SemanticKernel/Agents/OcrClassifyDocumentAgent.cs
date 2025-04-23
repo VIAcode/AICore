@@ -14,7 +14,7 @@ namespace AiCoreApi.SemanticKernel.Agents
 {
     public class OcrClassifyDocumentAgent : BaseAgent, IOcrClassifyDocumentAgent
     {
-        private const string DebugMessageSenderName = "OcrClassifyDocumentAgent";
+        private string _debugMessageSenderName = "OcrClassifyDocumentAgent";
 
         public static class AgentPromptPlaceholders
         {
@@ -43,7 +43,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             IHttpClientFactory httpClientFactory,
             IConnectionProcessor connectionProcessor,
             ExtendedConfig extendedConfig,
-            ILogger<OcrClassifyDocumentAgent> logger) : base(requestAccessor, extendedConfig, logger)
+            ILogger<OcrClassifyDocumentAgent> logger) : base(responseAccessor, requestAccessor, extendedConfig, logger)
         {
             _entraTokenProvider = entraTokenProvider;
             _requestAccessor = requestAccessor;
@@ -52,11 +52,10 @@ namespace AiCoreApi.SemanticKernel.Agents
             _connectionProcessor = connectionProcessor;
         }
 
-        public override async Task<string> DoCall(
-            AgentModel agent,
-            Dictionary<string, string> parameters)
+        public override async Task<string> DoCall(AgentModel agent, Dictionary<string, string> parameters)
         {
             parameters.ToList().ForEach(p => parameters[p.Key] = HttpUtility.HtmlDecode(p.Value));
+            _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
             var base64Image = ApplyParameters(agent.Content[AgentContentParameters.Base64Image].Value, parameters);
             if (_requestAccessor.MessageDialog != null && _requestAccessor.MessageDialog.Messages!.Last().HasFiles() && base64Image.Contains(AgentPromptPlaceholders.FileDataPlaceholder))
@@ -68,8 +67,8 @@ namespace AiCoreApi.SemanticKernel.Agents
             }
 
             var documentIntelligenceConnection = agent.Content[AgentContentParameters.DocumentIntelligenceConnection].Value;
-            var connections = await _connectionProcessor.List();
-            var connection = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.DocumentIntelligence, DebugMessageSenderName, connectionName: documentIntelligenceConnection);
+            var connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
+            var connection = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.DocumentIntelligence, _debugMessageSenderName, connectionName: documentIntelligenceConnection);
 
             var splitMode = GetParameterValueOrNull(agent, AgentContentParameters.SplitMode);
             var pages = ApplyParameters(GetParameterValueOrNull(agent, AgentContentParameters.Pages), parameters);
@@ -85,7 +84,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             var accessType = connection.Content.ContainsKey("accessType") ? connection.Content["accessType"] : "apiKey";
             var apiKey = connection.Content.ContainsKey("apiKey") ? connection.Content["apiKey"] : "";
 
-            _responseAccessor.AddDebugMessage(DebugMessageSenderName, "OCR Classifying", $"{endpoint}, {classifierId}, {apiKey} \r\nSplitMode:{splitMode} Pages:{pages}");
+            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "OCR Classifying", $"{endpoint}, {classifierId}, {apiKey} \r\nSplitMode:{splitMode} Pages:{pages}");
 
             var result = await ProcessFileAsync(
                 endpoint, 
@@ -97,7 +96,7 @@ namespace AiCoreApi.SemanticKernel.Agents
                 pages
                 );
 
-            _responseAccessor.AddDebugMessage(DebugMessageSenderName, "OCR Classifying Result", result);
+            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "OCR Classifying Result", result);
 
             return result;
         }

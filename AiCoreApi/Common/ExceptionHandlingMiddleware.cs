@@ -20,11 +20,19 @@
             catch (AiCoreUiException ex)
             {
                 _logger.LogError(ex, "AiCoreUiException exception occurred.");
-                await HandleExceptionAsync(context, ex);
+                await HandleUiExceptionAsync(context, ex);
+            }
+            catch (AiCoreAuthException ex)
+            {
+                await HandleAuthExceptionAsync(context, ex);
+            }
+            catch (OperationCanceledException ex)
+            {
+                // Do nothing. This is expected when the request is canceled.
             }
         }
 
-        private static Task HandleExceptionAsync(HttpContext context, AiCoreUiException exception)
+        private static Task HandleUiExceptionAsync(HttpContext context, AiCoreUiException exception)
         {
             var response = new { message = exception.Message };
             context.Response.ContentType = "application/json";
@@ -32,9 +40,24 @@
             return context.Response.WriteAsJsonAsync(response);
         }
 
-        public class AiCoreUiException: Exception
+        private static Task HandleAuthExceptionAsync(HttpContext context, AiCoreAuthException exception)
+        {
+            var response = new { message = exception.Message };
+            context.Response.ContentType = "application/json";
+            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            return context.Response.WriteAsJsonAsync(response);
+        }
+
+        public class AiCoreUiException : Exception
         {
             public AiCoreUiException(string message) : base(message)
+            {
+            }
+        }
+
+        public class AiCoreAuthException : Exception
+        {
+            public AiCoreAuthException(string message) : base(message)
             {
             }
         }

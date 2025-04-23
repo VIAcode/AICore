@@ -20,4 +20,5 @@ public class TagModel
     public List<IngestionModel> Ingestions { get; set; } = new();
     public List<RbacRoleSyncModel> RbacRoleSyncs { get; set; } = new();
     public List<AgentModel> Agents { get; set; } = new();
+    public List<WorkspaceModel> Workspaces { get; set; } = new();
 }

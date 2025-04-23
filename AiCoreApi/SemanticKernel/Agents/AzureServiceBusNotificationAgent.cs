@@ -10,7 +10,7 @@ namespace AiCoreApi.SemanticKernel.Agents
 {
     public class AzureServiceBusNotificationAgent : BaseAgent, IAzureServiceBusNotificationAgent
     {
-        private const string DebugMessageSenderName = "AzureServiceBusNotificationAgent";
+        private string _debugMessageSenderName = "AzureServiceBusNotificationAgent";
 
         private static class AgentContentParameters
         {
@@ -30,7 +30,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             RequestAccessor requestAccessor,
             ResponseAccessor responseAccessor,
             ExtendedConfig extendedConfig,
-            ILogger<AzureServiceBusNotificationAgent> logger) : base(requestAccessor, extendedConfig, logger)
+            ILogger<AzureServiceBusNotificationAgent> logger) : base(responseAccessor, requestAccessor, extendedConfig, logger)
         {
             _connectionProcessor = connectionProcessor;
             _entraTokenProvider = entraTokenProvider;
@@ -43,14 +43,15 @@ namespace AiCoreApi.SemanticKernel.Agents
             Dictionary<string, string> parameters)
         {
             parameters.ToList().ForEach(p => parameters[p.Key] = HttpUtility.HtmlDecode(p.Value));
+            _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
             var connectionName = agent.Content[AgentContentParameters.ConnectionName].Value;
             var queueOrTopicName = ApplyParameters(agent.Content[AgentContentParameters.QueueOrTopicName].Value, parameters);
             var notificationPayload = ApplyParameters(agent.Content[AgentContentParameters.NotificationPayload].Value, parameters);
 
-            _responseAccessor.AddDebugMessage(DebugMessageSenderName, "DoCall Request", notificationPayload);
-            var connections = await _connectionProcessor.List();
-            var connection = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.AzureServiceBus, DebugMessageSenderName, connectionName: connectionName);
+            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Request", notificationPayload);
+            var connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
+            var connection = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.AzureServiceBus, _debugMessageSenderName, connectionName: connectionName);
 
             var accessType = connection.Content.ContainsKey("accessType") ? connection.Content["accessType"] : "apiKey";
             ServiceBusClient serviceBusClient;
@@ -73,7 +74,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             await SendNotification(serviceBusClient, queueOrTopicName, notificationPayload);
 
             var responseMessage = $"Message sent to {queueOrTopicName}.";
-            _responseAccessor.AddDebugMessage(DebugMessageSenderName, "DoCall Response", responseMessage);
+            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Response", responseMessage);
             return responseMessage;
         }
 

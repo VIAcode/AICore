@@ -5,12 +5,14 @@ using HtmlAgilityPack;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Web;
+using AiCoreApi.Common.Extensions;
+using System.Text.Encodings.Web;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
     public class WebCrawlerAgent : BaseAgent, IWebCrawlerAgent
     {
-        private const string DebugMessageSenderName = "WebCrawlerAgent";
+        private string _debugMessageSenderName = "WebCrawlerAgent";
 
         private static class AgentContentParameters
         {
@@ -29,7 +31,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             ExtendedConfig extendedConfig,
             IHttpClientFactory httpClientFactory,
             ResponseAccessor responseAccessor,
-            RequestAccessor requestAccessor) : base(requestAccessor, extendedConfig, logger)
+            RequestAccessor requestAccessor) : base(responseAccessor, requestAccessor, extendedConfig, logger)
         {
             _httpClientFactory = httpClientFactory;
             _responseAccessor = responseAccessor;
@@ -38,6 +40,8 @@ namespace AiCoreApi.SemanticKernel.Agents
         public override async Task<string> DoCall(AgentModel agent, Dictionary<string, string> parameters)
         {
             parameters.ToList().ForEach(p => parameters[p.Key] = HttpUtility.HtmlDecode(p.Value));
+            _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
+
             var startUrl = ApplyParameters(agent.Content[AgentContentParameters.Url].Value, parameters);
             var crawlDepth = GetCrawlDepth(agent, parameters);
             var crawlRegex = GetCrawlRegex(agent, parameters);
@@ -78,8 +82,8 @@ namespace AiCoreApi.SemanticKernel.Agents
 
             await Crawl(startUrl, crawlDepth, crawlRegex);
 
-            var json = JsonSerializer.Serialize(allResults, new JsonSerializerOptions { WriteIndented = false });
-            _responseAccessor.AddDebugMessage(DebugMessageSenderName, "Final Extracted JSON", json);
+            var json = JsonSerializer.Serialize(allResults, new JsonSerializerOptions { WriteIndented = false, Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping });
+            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "Final Extracted JSON", json);
 
             return json;
         }
@@ -113,7 +117,7 @@ namespace AiCoreApi.SemanticKernel.Agents
                     }
                     catch (Exception ex)
                     {
-                        _responseAccessor.AddDebugMessage(DebugMessageSenderName, "Error", $"Regex pattern: {pattern}, {ex.Message}");
+                        _responseAccessor.AddDebugMessage(_debugMessageSenderName, "Error", $"Regex pattern: {pattern}, {ex.Message}");
                     }
                 }
             }
@@ -127,7 +131,7 @@ namespace AiCoreApi.SemanticKernel.Agents
 
             try
             {
-                var html = await client.GetStringAsync(url);
+                var html = await client.GetCompressedStringAsync(url);
                 var doc = new HtmlDocument();
                 doc.LoadHtml(html);
 
@@ -144,7 +148,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             }
             catch (Exception ex)
             {
-                _responseAccessor.AddDebugMessage(DebugMessageSenderName, "Error", $"Failed to crawl {url}, {ex.Message}");
+                _responseAccessor.AddDebugMessage(_debugMessageSenderName, "Error", $"Failed to crawl {url}, {ex.Message}");
                 return string.Empty;
             }
         }
@@ -157,7 +161,7 @@ namespace AiCoreApi.SemanticKernel.Agents
 
             try
             {
-                var html = await client.GetStringAsync(url);
+                var html = await client.GetCompressedStringAsync(url);
                 var doc = new HtmlDocument();
                 doc.LoadHtml(html);
                 var baseUri = new Uri(url);
@@ -178,7 +182,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             }
             catch (Exception ex)
             {
-                _responseAccessor.AddDebugMessage(DebugMessageSenderName, "Error", $"Failed to extract links from {url}, {ex.Message}");
+                _responseAccessor.AddDebugMessage(_debugMessageSenderName, "Error", $"Failed to extract links from {url}, {ex.Message}");
             }
 
             return links.Distinct().ToList();

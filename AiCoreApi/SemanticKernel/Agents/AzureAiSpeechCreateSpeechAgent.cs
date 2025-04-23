@@ -10,7 +10,7 @@ namespace AiCoreApi.SemanticKernel.Agents
 {
     public class AzureAiSpeechCreateSpeechAgent : BaseAgent, IAzureAiSpeechCreateSpeechAgent
     {
-        private const string DebugMessageSenderName = "AzureAiSpeechCreateSpeechAgent";
+        private string _debugMessageSenderName = "AzureAiSpeechCreateSpeechAgent";
 
         private static class AgentContentParameters
         {
@@ -30,7 +30,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             IHttpClientFactory httpClientFactory,
             IConnectionProcessor connectionProcessor,
             ExtendedConfig extendedConfig,
-            ILogger<AzureAiSpeechCreateSpeechAgent> logger) : base(requestAccessor, extendedConfig, logger)
+            ILogger<AzureAiSpeechCreateSpeechAgent> logger) : base(responseAccessor, requestAccessor, extendedConfig, logger)
         {
             _requestAccessor = requestAccessor;
             _responseAccessor = responseAccessor;
@@ -38,20 +38,19 @@ namespace AiCoreApi.SemanticKernel.Agents
             _connectionProcessor = connectionProcessor;
         }
 
-        public override async Task<string> DoCall(
-            AgentModel agent, 
-            Dictionary<string, string> parameters)
+        public override async Task<string> DoCall(AgentModel agent, Dictionary<string, string> parameters)
         {
             parameters.ToList().ForEach(p => parameters[p.Key] = HttpUtility.HtmlDecode(p.Value));
+            _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
             var voice = ApplyParameters(agent.Content[AgentContentParameters.Voice].Value, parameters);
             var text = ApplyParameters(agent.Content[AgentContentParameters.Text].Value, parameters);
             var speechConnectionName = agent.Content[AgentContentParameters.SpeechConnectionName].Value;
             var quality = agent.Content[AgentContentParameters.Quality].Value;
 
-            _responseAccessor.AddDebugMessage(DebugMessageSenderName, "DoCall", $"Connection: {speechConnectionName}\r\nVoice: {voice}\r\nText: {text}");
-            var connections = await _connectionProcessor.List();
-            var speechConnection = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.AzureAiSpeech, DebugMessageSenderName, connectionName: speechConnectionName);
+            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall", $"Connection: {speechConnectionName}\r\nVoice: {voice}\r\nText: {text}");
+            var connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
+            var speechConnection = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.AzureAiSpeech, _debugMessageSenderName, connectionName: speechConnectionName);
             var region = speechConnection.Content["region"];
             var apiKey = speechConnection.Content["apiKey"];
 
@@ -112,7 +111,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             var response = await httpClient.PostAsync(endpoint, content);
             if (!response.IsSuccessStatusCode)
             {
-                _responseAccessor.AddDebugMessage(DebugMessageSenderName, "DoCall Error", $"Failed to generate the audio file. Status code: {response.StatusCode}");
+                _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Error", $"Failed to generate the audio file. Status code: {response.StatusCode}");
                 throw new Exception("Failed to generate the audio file.");
             }
 
@@ -121,7 +120,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             await audioStream.CopyToAsync(memoryStream);
             var bytes = memoryStream.ToArray();
             var result = "Done";
-            _responseAccessor.AddDebugMessage(DebugMessageSenderName, "DoCall Result", result);
+            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Result", result);
             var fileName = "audio" + (quality.Contains("mp3") ? ".mp3" : ".wav");
             _responseAccessor.CurrentMessage.AddFile(fileName, Convert.ToBase64String(bytes), bytes.Length);
             return result;
@@ -138,7 +137,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             var response = await httpClient.PostAsync(tokenUri, new StringContent(string.Empty));
             if (!response.IsSuccessStatusCode)
             {
-                _responseAccessor.AddDebugMessage(DebugMessageSenderName, "DoCall Error", $"Failed to generate access token. Status code: {response.StatusCode}");
+                _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Error", $"Failed to generate access token. Status code: {response.StatusCode}");
                 throw new Exception("Failed to generate access token.");
             }
             return await response.Content.ReadAsStringAsync();

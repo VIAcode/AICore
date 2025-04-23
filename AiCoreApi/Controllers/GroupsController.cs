@@ -1,4 +1,4 @@
-﻿using AiCoreApi.Authorization;
+﻿using AiCoreApi.Authorization.Attributes;
 using AiCoreApi.Common.Extensions;
 using AiCoreApi.Models.ViewModels;
 using AiCoreApi.Services.ControllersServices;
@@ -41,7 +41,7 @@ public class GroupsController : ControllerBase
     }
 
     [HttpPost]
-    [AdminAuthorize]
+    [RoleAuthorize(Role.Admin)]
     public async Task<IActionResult> Add([FromBody] GroupViewModel groupViewModel)
     {
         var currentUser = this.GetLogin();
@@ -55,7 +55,7 @@ public class GroupsController : ControllerBase
     }
 
     [HttpPut("{groupId}")]
-    [AdminAuthorize]
+    [RoleAuthorize(Role.Admin)]
     public async Task<IActionResult> Update([FromBody] GroupViewModel groupViewModel)
     {
         var currentUser = this.GetLogin();

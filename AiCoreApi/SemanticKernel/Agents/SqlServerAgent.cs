@@ -10,7 +10,7 @@ namespace AiCoreApi.SemanticKernel.Agents
 {
     public class SqlServerAgent : BaseAgent, ISqlServerAgent
     {
-        private const string DebugMessageSenderName = "SqlServerAgent";
+        private string _debugMessageSenderName = "SqlServerAgent";
 
         private static class AgentContentParameters
         {
@@ -29,7 +29,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             RequestAccessor requestAccessor,
             ResponseAccessor responseAccessor,
             ExtendedConfig extendedConfig,
-            ILogger<SqlServerAgent> logger) : base(requestAccessor, extendedConfig, logger)
+            ILogger<SqlServerAgent> logger) : base(responseAccessor, requestAccessor, extendedConfig, logger)
         {
             _connectionProcessor = connectionProcessor;
             _entraTokenProvider = entraTokenProvider;
@@ -37,19 +37,18 @@ namespace AiCoreApi.SemanticKernel.Agents
             _responseAccessor = responseAccessor;
         }
 
-        public override async Task<string> DoCall(
-            AgentModel agent,
-            Dictionary<string, string> parameters)
+        public override async Task<string> DoCall(AgentModel agent, Dictionary<string, string> parameters)
         {
             parameters.ToList().ForEach(p => parameters[p.Key] = HttpUtility.HtmlDecode(p.Value));
+            _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
             var connectionName = agent.Content[AgentContentParameters.ConnectionName].Value;
             var sqlQuery = ApplyParameters(agent.Content[AgentContentParameters.SqlQuery].Value, parameters);
-            _responseAccessor.AddDebugMessage(DebugMessageSenderName, "DoCall Request", sqlQuery);
-            var connections = await _connectionProcessor.List();
-            var connection = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.SqlServer, DebugMessageSenderName, connectionName: connectionName);
+            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Request", sqlQuery);
+            var connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
+            var connection = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.SqlServer, _debugMessageSenderName, connectionName: connectionName);
             var result = await ExecuteScript(sqlQuery, connection);
-            _responseAccessor.AddDebugMessage(DebugMessageSenderName, "DoCall Response", result);
+            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Response", result);
             return result;
         }
 

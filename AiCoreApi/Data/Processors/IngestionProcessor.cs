@@ -42,9 +42,9 @@ namespace AiCoreApi.Data.Processors
             return result;
         }
 
-        public async Task<List<IngestionModel>> List()
+        public async Task<List<IngestionModel>> List(int? workspaceId)
         {
-            var result = await _db.Ingestions.Include(e => e.Tags)
+            var qry = _db.Ingestions.Include(e => e.Tags)
                 .Select(item => new IngestionModel
                 {
                     Content = item.Content,
@@ -57,8 +57,16 @@ namespace AiCoreApi.Data.Processors
                     Type = item.Type,
                     Tags = item.Tags,
                     LastSync = item.LastSync,
+                    WorkspaceId = item.WorkspaceId,
                 })
-                .AsNoTracking().ToListAsync(); ;
+                .AsNoTracking();
+
+            if (workspaceId == 0)
+                qry = qry.Where(t => t.WorkspaceId == null);
+            else if (workspaceId != null)
+                qry = qry.Where(t => t.WorkspaceId == workspaceId);
+
+            var result = await qry.ToListAsync();
             foreach (var item in result)
             {
                 if (item.Content.ContainsKey("File"))
@@ -67,7 +75,7 @@ namespace AiCoreApi.Data.Processors
             return result;
         }
 
-        public async Task<IngestionModel> Set(IngestionModel ingestionModel)
+        public async Task<IngestionModel> Set(IngestionModel ingestionModel, int? workspaceId)
         {
             IngestionModel? settingValue;
 
@@ -88,7 +96,9 @@ namespace AiCoreApi.Data.Processors
                     Name = ingestionModel.Name,
                     Type = ingestionModel.Type,
                     Content = ingestionModel.Content,
+                    WorkspaceId = workspaceId == 0 ? null : workspaceId,
                     Tags = tags,
+
                 };
                 await _db.Ingestions.AddAsync(settingValue);
             }
@@ -144,9 +154,9 @@ namespace AiCoreApi.Data.Processors
             await _db.SaveChangesAsync();
         }
 
-        public async Task<List<int>> GetActiveConnectionIds()
+        public async Task<List<int>> GetActiveConnectionIds(int? workspaceId)
         {
-            return (await List())
+            return (await List(workspaceId))
                 .Where(e => e.Content.ContainsKey("ConnectionId"))
                 .Select(e => Convert.ToInt32(e.Content["ConnectionId"]))
                 .Distinct()
@@ -156,12 +166,12 @@ namespace AiCoreApi.Data.Processors
 
     public interface IIngestionProcessor
     {
-        Task<List<IngestionModel>> List();
+        Task<List<IngestionModel>> List(int? workspaceId);
         Task<IngestionModel?> GetIngestionById(int ingestionId, bool excludeFile = false);
-        Task<IngestionModel> Set(IngestionModel ingestionModel);
+        Task<IngestionModel> Set(IngestionModel ingestionModel, int? workspaceId);
         Task<IngestionModel> SetSyncTime(int ingestionId, DateTime syncTime);
         List<IngestionModel> GetStale();
         Task Remove(int ingestionId);
-        Task<List<int>> GetActiveConnectionIds();
+        Task<List<int>> GetActiveConnectionIds(int? workspaceId);
     }
 }

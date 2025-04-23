@@ -1,7 +1,9 @@
+using System.Text;
 using AiCoreApi.Common;
 using AiCoreApi.Common.Extensions;
 using AiCoreApi.Data.Processors;
 using AiCoreApi.Models.DbModels;
+using Azure.Core.Amqp;
 using Azure.Messaging.ServiceBus;
 
 namespace AiCoreApi.Services.ProcessingServices.AgentsHandlers
@@ -31,7 +33,7 @@ namespace AiCoreApi.Services.ProcessingServices.AgentsHandlers
 
         public async Task ProcessTask()
         {
-            var agents = await _agentsProcessor.List();
+            var agents = await _agentsProcessor.List(null);
             var schedulerAgents = agents.Where(agent => agent.Type == AgentType.AzureServiceBusListener).ToList();
             var processedAgents = new List<string>();
             foreach (var agent in schedulerAgents)
@@ -54,7 +56,7 @@ namespace AiCoreApi.Services.ProcessingServices.AgentsHandlers
                 if (ServiceBusProcessors.ContainsKey(key))
                     continue;
 
-                var connections = await _connectionProcessor.List();
+                var connections = await _connectionProcessor.List(agent.WorkspaceId);
                 var connection = connections.FirstOrDefault(conn => conn.Type == ConnectionType.AzureServiceBus && conn.Name == connectionName);
                 if (connection == null)
                 {
@@ -121,7 +123,7 @@ namespace AiCoreApi.Services.ProcessingServices.AgentsHandlers
             using var scope = ServiceProvider.CreateScope();
             var agentsProcessor = scope.ServiceProvider.GetRequiredService<IAgentsProcessor>();
 
-            var agents = await agentsProcessor.List();
+            var agents = await agentsProcessor.List(null);
             var agent = agents.FirstOrDefault(item => item.Name == currentAgentName);
 
             agent.Content["lastResult"].Value = $"ProcessError: {args.Exception.Message}";
@@ -134,12 +136,51 @@ namespace AiCoreApi.Services.ProcessingServices.AgentsHandlers
             using var scope = ServiceProvider.CreateScope();
             var agentsProcessor = scope.ServiceProvider.GetRequiredService<IAgentsProcessor>();
 
-            var agents = await agentsProcessor.List();
+            var agents = await agentsProcessor.List(null);
             var agent = agents.FirstOrDefault(item => item.Name == currentAgentName);
+
+            if (agent == null)
+            {
+                // Log or skip if agent not found
+                return;
+            }
 
             try
             {
-                var body = System.Text.Encoding.UTF8.GetString(args.Message.Body.ToArray());
+                string body = string.Empty;
+                var rawMessage = args.Message.GetRawAmqpMessage();
+
+                switch (rawMessage.Body.BodyType)
+                {
+                    case AmqpMessageBodyType.Data:
+                        if (rawMessage.Body.TryGetData(out var data) && data != null)
+                        {
+                            var allBytes = data.SelectMany(m => m.ToArray()).ToArray();
+                            if (allBytes.Length > 0)
+                            {
+                                body = Encoding.UTF8.GetString(allBytes);
+                            }
+                        }
+                        break;
+
+                    case AmqpMessageBodyType.Value:
+                        if (rawMessage.Body.TryGetValue(out var valueObj))
+                        {
+                            body = valueObj?.ToString() ?? string.Empty;
+                        }
+                        break;
+
+                    case AmqpMessageBodyType.Sequence:
+                        if (rawMessage.Body.TryGetSequence(out var sequence) && sequence != null)
+                        {
+                            body = string.Join(", ", sequence.Select(s => s?.ToString() ?? ""));
+                        }
+                        break;
+
+                    default:
+                        throw new NotSupportedException($"Unsupported message body type: {rawMessage.Body.BodyType}");
+                }
+
                 var parametersValues = new Dictionary<string, string>
                 {
                     {"parameter1", body}
@@ -147,7 +188,8 @@ namespace AiCoreApi.Services.ProcessingServices.AgentsHandlers
 
                 var cts = new CancellationTokenSource();
                 var renewalTask = RenewLockAsync(args.Message, args, cts.Token);
-                await RunAgent("AzureServiceBus", agents, agent, agentToCallName, runAs, parametersValues);
+                var availableAgents = await _agentsProcessor.List(agent.WorkspaceId);
+                await RunAgent("AzureServiceBus", availableAgents, agent, agentToCallName, runAs, parametersValues);
                 await agentsProcessor.Update(agent);
                 await args.CompleteMessageAsync(args.Message);
                 cts.Cancel();

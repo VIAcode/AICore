@@ -10,14 +10,14 @@ namespace AiCoreApi.SemanticKernel.Agents
 {
     public class JsonTransformAgent : BaseAgent, IJsonTransformAgent
     {
-        private const string DebugMessageSenderName = "JsonTransformAgent";
+        private string _debugMessageSenderName = "JsonTransformAgent";
 
         private readonly ResponseAccessor _responseAccessor;
         public JsonTransformAgent(
             ResponseAccessor responseAccessor,
             RequestAccessor requestAccessor,
             ExtendedConfig extendedConfig,
-            ILogger<JsonTransformAgent> logger) : base(requestAccessor, extendedConfig, logger)
+            ILogger<JsonTransformAgent> logger) : base(responseAccessor, requestAccessor, extendedConfig, logger)
         {
             _responseAccessor = responseAccessor;
         }
@@ -27,16 +27,15 @@ namespace AiCoreApi.SemanticKernel.Agents
             public const string Transformer = "transformer";
         }
 
-        public override async Task<string> DoCall(
-            AgentModel agent,
-            Dictionary<string, string> parameters)
+        public override async Task<string> DoCall(AgentModel agent, Dictionary<string, string> parameters)
         {
             parameters.ToList().ForEach(p => parameters[p.Key] = HttpUtility.HtmlDecode(p.Value));
+            _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
             try
             {
                 var inputJson = parameters["parameter1"];
-                _responseAccessor.AddDebugMessage(DebugMessageSenderName, "DoCall Input", inputJson);
+                _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Input", inputJson);
                 inputJson = inputJson.FixJsonSyntax();
 
                 var transformer = agent.Content[AgentContentParameters.Transformer].Value;
@@ -53,12 +52,12 @@ namespace AiCoreApi.SemanticKernel.Agents
                     // take first child value
                     transformedString = JObject.Parse(transformedString).Cast<JProperty>().First().Value.ToString();
                 }
-                _responseAccessor.AddDebugMessage(DebugMessageSenderName, "DoCall Transformed", transformedString);
+                _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Transformed", transformedString);
                 return transformedString;
             }
             catch(Exception e)
             {
-                _responseAccessor.AddDebugMessage(DebugMessageSenderName, "DoCall Error", e.Message);
+                _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Error", e.Message);
                 // Suppress for invalid json
                 return string.Empty;
             }

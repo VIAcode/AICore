@@ -18,7 +18,7 @@ namespace AiCoreApi.SemanticKernel.Agents
     {
         private static readonly HashSet<string> SupportedFileFormats = new([".pdf", ".jpeg", ".jpg", ".png", ".bmp", ".tiff", ".heif"], StringComparer.InvariantCultureIgnoreCase);
 
-        private const string DebugMessageSenderName = "OcrBuildClassifierAgent";
+        private string _debugMessageSenderName = "OcrBuildClassifierAgent";
 
         private const string OcrModelName = "prebuilt-layout";
 
@@ -46,7 +46,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             ResponseAccessor responseAccessor,
             IConnectionProcessor connectionProcessor,
             ExtendedConfig extendedConfig, 
-            ILogger<OcrBuildClassifierAgent> logger) : base(requestAccessor, extendedConfig, logger)
+            ILogger<OcrBuildClassifierAgent> logger) : base(responseAccessor, requestAccessor, extendedConfig, logger)
         {
             _entraTokenProvider = entraTokenProvider;
             _requestAccessor = requestAccessor;
@@ -54,13 +54,12 @@ namespace AiCoreApi.SemanticKernel.Agents
             _connectionProcessor = connectionProcessor;
         }
 
-        public override async Task<string> DoCall(
-            AgentModel agent,
-            Dictionary<string, string> parameters)
+        public override async Task<string> DoCall(AgentModel agent, Dictionary<string, string> parameters)
         {
             parameters.ToList().ForEach(p => parameters[p.Key] = HttpUtility.HtmlDecode(p.Value));
+            _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
-            var connections = await _connectionProcessor.List();
+            var connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
             var action = agent.Content.ContainsKey(AgentContentParameters.Action)
                 ? agent.Content[AgentContentParameters.Action].Value
                 : "buildClassifier";
@@ -75,7 +74,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             Dictionary<string, string> parameters)
         {
             var diConnectionName = agent.Content[AgentContentParameters.DocumentIntelligenceConnection].Value;
-            var ocrConnection = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.DocumentIntelligence, DebugMessageSenderName, connectionName: diConnectionName);
+            var ocrConnection = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.DocumentIntelligence, _debugMessageSenderName, connectionName: diConnectionName);
             var classifierId = ApplyParameters(agent.Content[AgentContentParameters.ClassifierId].Value, parameters);
 
             var ocrEndpoint = ocrConnection.Content["endpoint"];
@@ -96,11 +95,11 @@ namespace AiCoreApi.SemanticKernel.Agents
             }
 
             var classifier = await adminClient.GetClassifierAsync(classifierId);
-            _responseAccessor.AddDebugMessage(DebugMessageSenderName, "OCR Build Classifier", $"Document Types: {ocrEndpoint}\nClassifier ID: {classifierId}");
+            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "OCR Build Classifier", $"Document Types: {ocrEndpoint}\nClassifier ID: {classifierId}");
 
             var documentTypes = classifier.Value.DocumentTypes.Select(docType => docType.Key).ToList();
             var result = documentTypes.ToJson() ?? "";
-            _responseAccessor.AddDebugMessage(DebugMessageSenderName, "OCR Build Classifier Result", $"Document Types: {result}");
+            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "OCR Build Classifier Result", $"Document Types: {result}");
             return result;
         }
 
@@ -111,8 +110,8 @@ namespace AiCoreApi.SemanticKernel.Agents
         {
             var diConnectionName = agent.Content[AgentContentParameters.DocumentIntelligenceConnection].Value;
             var saConnectionName = agent.Content[AgentContentParameters.StorageAccountConnection].Value;
-            var ocrConnection = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.DocumentIntelligence, DebugMessageSenderName, connectionName: diConnectionName);
-            var blobConnection = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.StorageAccount, DebugMessageSenderName, connectionName: saConnectionName);
+            var ocrConnection = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.DocumentIntelligence, _debugMessageSenderName, connectionName: diConnectionName);
+            var blobConnection = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.StorageAccount, _debugMessageSenderName, connectionName: saConnectionName);
             var classifierId = ApplyParameters(agent.Content[AgentContentParameters.ClassifierId].Value, parameters);
             if (string.IsNullOrWhiteSpace(classifierId))
             {
@@ -160,7 +159,7 @@ namespace AiCoreApi.SemanticKernel.Agents
                 ocrAccessType, 
                 ocrApiKey);
 
-            _responseAccessor.AddDebugMessage(DebugMessageSenderName, "OCR Build Classifier", $"Document Intelligence: {ocrEndpoint}\nClassifier ID: {classifierId}\nBase Classifier ID: {baseClassifierId}\nDocument Types: {JsonSerializer.Serialize(documentTypes)}\nStorage Account: {blobAccountName}\nContainer Name: {containerName}");
+            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "OCR Build Classifier", $"Document Intelligence: {ocrEndpoint}\nClassifier ID: {classifierId}\nBase Classifier ID: {baseClassifierId}\nDocument Types: {JsonSerializer.Serialize(documentTypes)}\nStorage Account: {blobAccountName}\nContainer Name: {containerName}");
 
             var buildWarnings = await BuildClassifier(
                 ocrEndpoint,
@@ -248,7 +247,7 @@ namespace AiCoreApi.SemanticKernel.Agents
                     catch (Exception ex)
                     {
                         // continue processing of the remaining blobs
-                        _responseAccessor.AddDebugMessage(DebugMessageSenderName, "PrepareBlobs Error",
+                        _responseAccessor.AddDebugMessage(_debugMessageSenderName, "PrepareBlobs Error",
                             $"Error processing blob {blob.Name}: {ex.Message}");
                     }
 

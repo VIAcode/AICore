@@ -64,6 +64,10 @@ namespace AiCoreApi.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("version");
 
+                    b.Property<int?>("WorkspaceId")
+                        .HasColumnType("integer")
+                        .HasColumnName("workspace_id");
+
                     b.HasKey("AgentId")
                         .HasName("pk_agents");
 
@@ -140,6 +144,10 @@ namespace AiCoreApi.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("type");
 
+                    b.Property<int?>("WorkspaceId")
+                        .HasColumnType("integer")
+                        .HasColumnName("workspace_id");
+
                     b.HasKey("ConnectionId")
                         .HasName("pk_connection");
 
@@ -185,6 +193,10 @@ namespace AiCoreApi.Migrations
                     b.Property<Dictionary<string, TokensSpent>>("SpentTokens")
                         .HasColumnType("jsonb")
                         .HasColumnName("spent_tokens");
+
+                    b.Property<int?>("WorkspaceId")
+                        .HasColumnType("integer")
+                        .HasColumnName("workspace_id");
 
                     b.HasKey("DebugLogId")
                         .HasName("pk_debug_log");
@@ -311,6 +323,10 @@ namespace AiCoreApi.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated");
 
+                    b.Property<int?>("WorkspaceId")
+                        .HasColumnType("integer")
+                        .HasColumnName("workspace_id");
+
                     b.HasKey("IngestionId")
                         .HasName("pk_ingestion");
 
@@ -428,7 +444,7 @@ namespace AiCoreApi.Migrations
                         new
                         {
                             LoginId = 1,
-                            Created = new DateTime(2025, 3, 7, 11, 37, 33, 611, DateTimeKind.Utc).AddTicks(4272),
+                            Created = new DateTime(2025, 4, 13, 17, 39, 39, 810, DateTimeKind.Utc).AddTicks(4300),
                             CreatedBy = "system",
                             Email = "admin@viacode.com",
                             FullName = "Admin",
@@ -730,6 +746,40 @@ namespace AiCoreApi.Migrations
                     b.ToTable("task");
                 });
 
+            modelBuilder.Entity("AiCoreApi.Models.DbModels.WorkspaceModel", b =>
+                {
+                    b.Property<int>("WorkspaceId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("workspace_id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("WorkspaceId"));
+
+                    b.Property<DateTime>("Created")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("created_by");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("description");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("name");
+
+                    b.HasKey("WorkspaceId")
+                        .HasName("pk_workspaces");
+
+                    b.ToTable("workspaces");
+                });
+
             modelBuilder.Entity("client_sso_x_groups", b =>
                 {
                     b.Property<int>("ClientSsoId")
@@ -863,6 +913,25 @@ namespace AiCoreApi.Migrations
                     b.ToTable("tags_x_rbac_role_sync");
                 });
 
+            modelBuilder.Entity("tags_x_workspaces", b =>
+                {
+                    b.Property<int>("TagsTagId")
+                        .HasColumnType("integer")
+                        .HasColumnName("tags_tag_id");
+
+                    b.Property<int>("WorkspacesWorkspaceId")
+                        .HasColumnType("integer")
+                        .HasColumnName("workspaces_workspace_id");
+
+                    b.HasKey("TagsTagId", "WorkspacesWorkspaceId")
+                        .HasName("pk_tags_x_workspaces");
+
+                    b.HasIndex("WorkspacesWorkspaceId")
+                        .HasDatabaseName("ix_tags_x_workspaces_workspaces_workspace_id");
+
+                    b.ToTable("tags_x_workspaces");
+                });
+
             modelBuilder.Entity("AiCoreApi.Models.DbModels.TaskModel", b =>
                 {
                     b.HasOne("AiCoreApi.Models.DbModels.IngestionModel", "Ingestion")
@@ -992,6 +1061,23 @@ namespace AiCoreApi.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_tags_x_rbac_role_sync_tags_tags_tag_id");
+                });
+
+            modelBuilder.Entity("tags_x_workspaces", b =>
+                {
+                    b.HasOne("AiCoreApi.Models.DbModels.TagModel", null)
+                        .WithMany()
+                        .HasForeignKey("TagsTagId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_tags_x_workspaces_tags_tags_tag_id");
+
+                    b.HasOne("AiCoreApi.Models.DbModels.WorkspaceModel", null)
+                        .WithMany()
+                        .HasForeignKey("WorkspacesWorkspaceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_tags_x_workspaces_workspaces_workspaces_workspace_id");
                 });
 #pragma warning restore 612, 618
         }
