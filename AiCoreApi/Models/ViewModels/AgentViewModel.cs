@@ -66,6 +66,8 @@ namespace AiCoreApi.Models.ViewModels
         OcrClassifyDocument = 31,
         WebCrawler = 32,
         StabilityAiImages = 33,
-        OcrBuildClassifierAgent = 34
+        OcrBuildClassifierAgent = 34,
+        AzureLogAnalytics = 35,
+        GoogleSearchApi = 36,
     }
 }

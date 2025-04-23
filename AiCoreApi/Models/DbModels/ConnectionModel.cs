@@ -44,6 +44,7 @@ namespace AiCoreApi.Models.DbModels
         DeepSeekLlm = 22,
         StabilityAi = 23,
         AzureLogAnalytics = 24,
+        GoogleSearchApi = 25,
     }
 
     public static class ConnectionTypeExtensions

@@ -5,6 +5,8 @@ using HtmlAgilityPack;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Web;
+using AiCoreApi.Common.Extensions;
+using System.Text.Encodings.Web;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
@@ -80,7 +82,7 @@ namespace AiCoreApi.SemanticKernel.Agents
 
             await Crawl(startUrl, crawlDepth, crawlRegex);
 
-            var json = JsonSerializer.Serialize(allResults, new JsonSerializerOptions { WriteIndented = false });
+            var json = JsonSerializer.Serialize(allResults, new JsonSerializerOptions { WriteIndented = false, Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping });
             _responseAccessor.AddDebugMessage(_debugMessageSenderName, "Final Extracted JSON", json);
 
             return json;
@@ -129,7 +131,7 @@ namespace AiCoreApi.SemanticKernel.Agents
 
             try
             {
-                var html = await client.GetStringAsync(url);
+                var html = await client.GetCompressedStringAsync(url);
                 var doc = new HtmlDocument();
                 doc.LoadHtml(html);
 
@@ -159,7 +161,7 @@ namespace AiCoreApi.SemanticKernel.Agents
 
             try
             {
-                var html = await client.GetStringAsync(url);
+                var html = await client.GetCompressedStringAsync(url);
                 var doc = new HtmlDocument();
                 doc.LoadHtml(html);
                 var baseUri = new Uri(url);

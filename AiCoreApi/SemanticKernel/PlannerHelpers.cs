@@ -55,6 +55,7 @@ namespace AiCoreApi.SemanticKernel
         private readonly IStabilityAiImagesAgent _stabilityAiImagesAgent;
         private readonly IOcrBuildClassifierAgent _ocrBuildClassifierAgent;
         private readonly IAzureLogAnalyticsAgent _azureLogAnalyticsAgent;
+        private readonly IGoogleSearchApiAgent _googleSearchApiAgent; 
 
         public PlannerHelpers(
             RequestAccessor requestAccessor,
@@ -88,7 +89,8 @@ namespace AiCoreApi.SemanticKernel
             IWebCrawlerAgent webCrawlerAgent,
             IStabilityAiImagesAgent stabilityAiImagesAgent,
             IOcrBuildClassifierAgent ocrBuildClassifierAgent,
-            IAzureLogAnalyticsAgent azureLogAnalyticsAgent
+            IAzureLogAnalyticsAgent azureLogAnalyticsAgent,
+            IGoogleSearchApiAgent googleSearchApiAgent
             )
         {
             _requestAccessor = requestAccessor;
@@ -123,6 +125,7 @@ namespace AiCoreApi.SemanticKernel
             _stabilityAiImagesAgent = stabilityAiImagesAgent;
             _ocrBuildClassifierAgent = ocrBuildClassifierAgent;
             _azureLogAnalyticsAgent = azureLogAnalyticsAgent;
+            _googleSearchApiAgent = googleSearchApiAgent;
         }
 
         private List<AgentModel>? _agentsList;
@@ -263,6 +266,7 @@ namespace AiCoreApi.SemanticKernel
                 { AgentType.StabilityAiImages, _stabilityAiImagesAgent },
                 { AgentType.OcrBuildClassifierAgent, _ocrBuildClassifierAgent },
                 { AgentType.AzureLogAnalytics, _azureLogAnalyticsAgent },
+                { AgentType.GoogleSearchApi, _googleSearchApiAgent }
             };
             return agentMapping;
         }

@@ -36,5 +36,7 @@
         AzureOpenAiLlmCarousel = 21,
         DeepSeekLlm = 22,
         StabilityAi = 23,
+        AzureLogAnalytics = 24,
+        GoogleSearchApi = 25,
     }
 }
