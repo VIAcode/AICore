@@ -54,6 +54,7 @@
     <PackageReference Include="NCrontab" Version="3.3.3" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.0.2" />
+    <PackageReference Include="Npgsql.OpenTelemetry" Version="9.0.3" />
     <PackageReference Include="NuGet.Packaging" Version="6.12.1" />
     <PackageReference Include="NuGet.Protocol" Version="6.12.1" />
     <PackageReference Include="NuGet.Versioning" Version="6.12.1" />

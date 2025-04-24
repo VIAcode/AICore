@@ -83,8 +83,11 @@ namespace AiCoreApi.Common
 
             if (metricsService != null)
             {
-                metricsService.AddOutgoingTokens(currentRequestSpent.TokensIncoming, connection, login);
-                metricsService.AddIncomingTokens(currentRequestSpent.TokensOutgoing, connection, login);
+                var workspace = await GetWorkspace(serviceProvider, requestAccessor);
+                var agent = await GetAgent(serviceProvider, requestAccessor);
+
+                metricsService.AddOutgoingTokens(currentRequestSpent.TokensIncoming, connection, login, workspace, agent);
+                metricsService.AddIncomingTokens(currentRequestSpent.TokensOutgoing, connection, login, workspace, agent);
             }
 
             // update spent tokens in response accessor
@@ -95,6 +98,32 @@ namespace AiCoreApi.Common
                     responseAccessor.AddSpentTokens(connection.Name, currentRequestSpent.TokensOutgoing, currentRequestSpent.TokensIncoming);
             }
             return response;
+        }
+
+        private async Task<WorkspaceModel?> GetWorkspace(IServiceProvider serviceProvider, RequestAccessor requestAccessor)
+        {
+            if (requestAccessor.WorkspaceId.HasValue)
+            {
+                var workspaceProcessor = serviceProvider.GetService<IWorkspaceProcessor>();
+                if (workspaceProcessor != null)
+                {
+                    return await workspaceProcessor.Get(requestAccessor.WorkspaceId.Value);
+                }
+            }
+            return null;
+        }
+
+        private async Task<AgentModel?> GetAgent(IServiceProvider serviceProvider, RequestAccessor requestAccessor)
+        {
+            if (requestAccessor.AgentId.HasValue)
+            {
+                var agentsProcessor = serviceProvider.GetService<IAgentsProcessor>();
+                if (agentsProcessor != null)
+                {
+                    return await agentsProcessor.GetById(requestAccessor.AgentId.Value);
+                }
+            }
+            return null;
         }
 
         private async Task<ConnectionModel> ApplyAzureOpenAiLlmCarousel(IServiceProvider serviceProvider, HttpRequestMessage request, List<ConnectionModel> connections, ConnectionModel connection, string modelDeploymentName)

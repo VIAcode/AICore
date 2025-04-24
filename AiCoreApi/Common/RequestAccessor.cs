@@ -85,6 +85,7 @@ namespace AiCoreApi.Common
         public string? LoginTypeString { get; set; }
         public string? Login { get; set; }
         public int? WorkspaceId { get; set; }
+        public int? AgentId { get; set; }
         public MessageDialogViewModel? MessageDialog { get; set; }
 
         public List<int> Tags => (TagsString ?? "")

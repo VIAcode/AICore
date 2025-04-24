@@ -20,6 +20,7 @@ using OpenTelemetry.Metrics;
 using Azure.Monitor.OpenTelemetry.AspNetCore;
 using AiCoreApi.Common.Monitoring;
 using OpenTelemetry.Logs;
+using Npgsql;
 
 namespace AiCoreApi;
 
@@ -208,6 +209,7 @@ public class Startup
             .WithTracing(tracerProviderBuilder =>
             {
                 tracerProviderBuilder.AddOtlpExporter();
+                tracerProviderBuilder.AddNpgsql();
             })
             .WithMetrics(metricsBuilder =>
             {

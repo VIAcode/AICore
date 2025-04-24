@@ -11,25 +11,29 @@ public class CommonMetricsService: ICommonMetricsService
         _metricsAccessor = metricsAccessor;
     }
 
-    public void AddIncomingTokens(long tokens, ConnectionModel connection, LoginModel login)
+    public void AddIncomingTokens(long tokens, ConnectionModel connection, LoginModel login, WorkspaceModel? workspace, AgentModel? agent)
     {
         string modelDeploymentName = GetModelDeployment(connection);
 
         _metricsAccessor.SetCounterValue("tokens_incoming", tokens, unit:"Token", description:"Tokens incoming",         
             "user", login.Login,
             "model", modelDeploymentName,
-            "connection", connection.Name
+            "connection", connection.Name,
+            "workspace", workspace?.Name ?? "default",
+            "agent", agent?.Name ?? "none"
         );
     }
 
-    public void AddOutgoingTokens(long tokens, ConnectionModel connection, LoginModel login)
+    public void AddOutgoingTokens(long tokens, ConnectionModel connection, LoginModel login, WorkspaceModel? workspace, AgentModel? agent)
     {
         string modelDeploymentName = GetModelDeployment(connection);
 
         _metricsAccessor.SetCounterValue("tokens_outgoing", tokens, unit: "Token", description: "Tokens outgoing",
             "user", login.Login,
             "model", modelDeploymentName,
-            "connection", connection.Name
+            "connection", connection.Name,
+            "workspace", workspace?.Name ?? "default",
+            "agent", agent?.Name ?? "none"
         );
     }
 
@@ -45,7 +49,7 @@ public class CommonMetricsService: ICommonMetricsService
 
 public interface ICommonMetricsService
 {
-    void AddIncomingTokens(long tokens, ConnectionModel connection, LoginModel login);
+    void AddIncomingTokens(long tokens, ConnectionModel connection, LoginModel login, WorkspaceModel? workspace, AgentModel? agent);
  
-    void AddOutgoingTokens(long tokens, ConnectionModel connection, LoginModel login);
+    void AddOutgoingTokens(long tokens, ConnectionModel connection, LoginModel login, WorkspaceModel? workspace, AgentModel? agent);
 }
