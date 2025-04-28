@@ -13,7 +13,6 @@
         public string LogoUrl { get; set; } = string.Empty;
         public bool AllowDebugMode { get; set; } = false; 
         public string FavIconUrl { get; set; } = string.Empty;
-        public bool UseSearchTab { get; set; } = false;
         public bool UseMicrosoftSso { get; set; } = false;
         public bool UseGoogleSso { get; set; } = false;
         public bool UseInternalUsers { get; set; } = false;
@@ -24,6 +23,7 @@
         public bool UseGitStorage { get; set; } = false;
         public bool UseMcpServer { get; set; } = false;
         public bool UsePublicCalls { get; set; } = false;
+        public string DefaultMessageViewer { get; set; } = string.Empty;
         public Dictionary<string, bool> FeatureFlags { get; set; } = new ();
     }
 }
