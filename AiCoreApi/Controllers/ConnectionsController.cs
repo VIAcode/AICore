@@ -22,7 +22,7 @@ public class ConnectionsController : ControllerBase
 
     [HttpGet]
     [CombinedAuthorize]
-    [RoleAuthorize(Role.Admin, Role.Developer)]
+    [RoleAuthorize(Role.Admin, Role.Developer, Role.User)]
     [Authorize]
     public async Task<IActionResult> ConnectionsList([FromQuery(Name = "workspace_id")] int workspaceId = 0)
     {

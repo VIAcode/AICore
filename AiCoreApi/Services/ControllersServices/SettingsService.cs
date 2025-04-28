@@ -44,7 +44,8 @@ namespace AiCoreApi.Services.ControllersServices
                     Tooltip = prop.GetCustomAttributes(false).OfType<TooltipAttribute>().FirstOrDefault()?.TooltipText ?? "",
                     DateType = prop.GetCustomAttributes(false).OfType<DataTypeAttribute>().FirstOrDefault()?.DataType.ToString() ?? DataTypeAttribute.ConfigDataTypeEnum.String.ToString(),
                     Description = prop.GetCustomAttributes(false).OfType<DescriptionAttribute>().FirstOrDefault()?.Description ?? "",
-                    Category = prop.GetCustomAttributes(false).OfType<CategoryAttribute>().FirstOrDefault()?.Category.GetDescription() ?? CategoryAttribute.ConfigCategoryEnum.Common.GetDescription()
+                    Category = prop.GetCustomAttributes(false).OfType<CategoryAttribute>().FirstOrDefault()?.Category.GetDescription() ?? CategoryAttribute.ConfigCategoryEnum.Common.GetDescription(),
+                    Options = prop.GetCustomAttributes(false).OfType<DataTypeAttribute>().FirstOrDefault()?.Options,
                 })
                 .ToList();
 
@@ -78,7 +79,6 @@ namespace AiCoreApi.Services.ControllersServices
                 MenuBackColor2 = _extendedConfig.MenuBackColor2,
                 BackgroundColor = _extendedConfig.BackgroundColor,
                 PageTitle = _extendedConfig.PageTitle,
-                UseSearchTab = _extendedConfig.UseSearchTab,
                 UseMicrosoftSso = _extendedConfig.UseMicrosoftSso,
                 UseGoogleSso = _extendedConfig.UseGoogleSso,
                 UseInternalUsers = _extendedConfig.UseInternalUsers,
@@ -89,6 +89,7 @@ namespace AiCoreApi.Services.ControllersServices
                 UseGitStorage = _extendedConfig.UseGitStorage,
                 UseMcpServer = _extendedConfig.UseMcpServer,
                 UsePublicCalls = _extendedConfig.UsePublicCalls,
+                DefaultMessageViewer = _extendedConfig.DefaultMessageViewer,    
                 FeatureFlags = _featureFlags.GetValues()
             };
         }

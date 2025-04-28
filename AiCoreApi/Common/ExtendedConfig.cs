@@ -58,12 +58,6 @@ public class ExtendedConfig
     }
 
     [Category(CategoryAttribute.ConfigCategoryEnum.Common)]
-    [DataType(DataTypeAttribute.ConfigDataTypeEnum.Boolean)]
-    [Description("Use Search tab in main menu")]
-    [Tooltip("Indicates if the Search tab should be visible in the main menu. In Search mode, we utilize a highly efficient vector search against the Qdrant database, avoiding the cost of token-based Chat.")]
-    public bool UseSearchTab => GetValue<bool>("UseSearchTab");
-
-    [Category(CategoryAttribute.ConfigCategoryEnum.Common)]
     [Description("Proxy")]
     [Tooltip("Proxy is used to route all requests through a proxy server. Can be used for debug purposes, i.e. to use Fiddler. Sample: http://host.docker.internal:8888")]
     public string Proxy => GetValue<string>("Proxy");
@@ -273,23 +267,11 @@ public class ExtendedConfig
     [Tooltip("The Favicon URL is the web address that points to the image file representing the application's favicon. This favicon is displayed in the browser tab, providing a visual identifier for the application.")]
     public string FavIconUrl => GetValue<string>("FavIconUrl", "/logo.ico");
 
-    [Category(CategoryAttribute.ConfigCategoryEnum.Jira)]
-    [DataType(DataTypeAttribute.ConfigDataTypeEnum.String)]
-    [Description("JIRA Connector url")]
-    [Tooltip("The JIRA Connector URL is used to specify the URL of the JIRA Connector. This URL is used to connect to the JIRA service.")]
-    public string JiraConnectorUrl => GetValue<string>("JiraConnectorUrl");
-
-    [Category(CategoryAttribute.ConfigCategoryEnum.Jira)]
-    [DataType(DataTypeAttribute.ConfigDataTypeEnum.Password)]
-    [Description("JIRA Connector Credentials")]
-    [Tooltip("The JIRA Connector Credentials are used to authenticate the JIRA Connector (Basic auth, login:password here). These credentials are used to connect to the JIRA service.")]
-    public string JiraConnectorCredentials => GetValue<string>("JiraConnectorCredentials");
-
-    [Category(CategoryAttribute.ConfigCategoryEnum.Jira)]
-    [DataType(DataTypeAttribute.ConfigDataTypeEnum.Link)]
-    [Description("Set credentials for JIRA")]
-    [Tooltip("Click here to set credentials for JIRA Connector.")]
-    public string JiraAuthUrl => GetValue<string>("JiraAuthUrl");
+    [Category(CategoryAttribute.ConfigCategoryEnum.UiTheme)]
+    [DataType(DataTypeAttribute.ConfigDataTypeEnum.Dropdown, new[] { "Markdown", "Html", "PlainText" })]
+    [Description("Default Message Viewer")]
+    [Tooltip("Default Message Viewer is used to specify the default message viewer for the application. This viewer is used to display messages in the chat window. The available options are: markdown, html, and text.")]
+    public string DefaultMessageViewer => GetValue<string>("DefaultMessageViewer", "Markdown");
 
     [Category(CategoryAttribute.ConfigCategoryEnum.Debug)]
     [DataType(DataTypeAttribute.ConfigDataTypeEnum.Boolean)]
@@ -483,9 +465,15 @@ public class DataTypeAttribute : Attribute, IAttributeHandler
     public DataTypeAttribute() { }
 
     public ConfigDataTypeEnum DataType { get; }
+    public string[]? Options { get; }
     public DataTypeAttribute(ConfigDataTypeEnum dataType)
     {
         DataType = dataType;
+    }
+
+    public DataTypeAttribute(ConfigDataTypeEnum dataType, string[] options) : this(dataType)
+    {
+        Options = options;
     }
 
     void IAttributeHandler.AddConstraints(SchemaGenerationContextBase context, Attribute attribute)
@@ -503,7 +491,8 @@ public class DataTypeAttribute : Attribute, IAttributeHandler
         Url,
         Color,
         Hidden,
-        Link
+        Link,
+        Dropdown
     }
 }
 
