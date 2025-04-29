@@ -24,10 +24,12 @@ namespace AiCoreApi.SemanticKernel.Agents
 {
     public class CsharpCodeAgent : BaseAgent, ICsharpCodeAgent
     {
-        private static ConcurrentDictionary<string, List<string>> _assemblyPaths = new();
-        private static ConcurrentDictionary<string, Script<string>> _compiledScripts = new();
+        private static readonly ConcurrentDictionary<string, List<string>> _assemblyPaths = new();
+        private static readonly ConcurrentDictionary<string, Script<string>> _compiledScripts = new(); 
+        private static readonly ConcurrentDictionary<string, Task> _compilationTasks = new();
 
         private string _debugMessageSenderName = "CSharpCodeAgent";
+        private string _keepContextAliveConstant = "// keep context alive";
 
         private static class AgentContentParameters
         {
@@ -79,6 +81,8 @@ namespace AiCoreApi.SemanticKernel.Agents
         private async Task<string> Call(AgentModel agent, Dictionary<string, string> parameters, string csharpCode)
         {
             _responseAccessor.AddDebugMessage(_debugMessageSenderName, "Execute C# Code", csharpCode);
+            // Check if the code contains a directive to not unload the agent 
+            var keepContextAlive = csharpCode.Contains(_keepContextAliveConstant, StringComparison.OrdinalIgnoreCase);
 
             // Clean the script code by removing #r "..." directives
             var cleanedCode = Regex.Replace(csharpCode, @"#r\s+""nuget:[^""]+""", "");
@@ -93,19 +97,37 @@ namespace AiCoreApi.SemanticKernel.Agents
             // If we haven't compiled a DLL for this code yet, do so
             if (!File.Exists(dllPath) || new FileInfo(dllPath).Length == 0 || (assemblyPathsCacheKey != "default" && !_assemblyPaths.ContainsKey(assemblyPathsCacheKey)))
             {
-                // Extract and resolve any NuGet directives
-
-                // See if we've already loaded & cached the assembly paths
-                _assemblyPaths.TryGetValue(assemblyPathsCacheKey, out var assemblyPaths);
-                if (assemblyPaths == null)
+                if (_compilationTasks.TryGetValue(dllPath, out var existingCompileTask))
                 {
-                    assemblyPaths = await ResolveNuGetPackages(agent, nugetDirectives);
-                    _assemblyPaths.TryAdd(assemblyPathsCacheKey, assemblyPaths);
+                    await existingCompileTask;
                 }
+                else
+                {
+                    var compileTask = Task.Run(async () =>
+                    {
+                        _assemblyPaths.TryGetValue(assemblyPathsCacheKey, out var assemblyPaths);
+                        if (assemblyPaths == null)
+                        {
+                            assemblyPaths = await ResolveNuGetPackages(agent, nugetDirectives);
+                            _assemblyPaths.TryAdd(assemblyPathsCacheKey, assemblyPaths);
+                        }
+                        var compiler = new DynamicCompiler();
+                        compiler.CompileCodeToDll(cleanedCode, dllPath, assemblyPaths, scriptCacheKey);
+                    });
 
-                // Compile the code into a DLL
-                var compiler = new DynamicCompiler();
-                dllPath = compiler.CompileCodeToDll(cleanedCode, dllPath, assemblyPaths, scriptCacheKey);
+                    if (!_compilationTasks.TryAdd(dllPath, compileTask))
+                    {
+                        compileTask = _compilationTasks[dllPath];
+                    }
+                    try
+                    {
+                        await compileTask;
+                    }
+                    finally
+                    {
+                        _compilationTasks.TryRemove(dllPath, out _);
+                    }
+                }
             }
 
             var references = _assemblyPaths.FirstOrDefault(x => x.Key == assemblyPathsCacheKey).Value;
@@ -120,7 +142,7 @@ namespace AiCoreApi.SemanticKernel.Agents
 
                 // Dynamically load and execute the compiled assembly
                 var executor = new DynamicAssemblyExecutor();
-                var methodInfo = executor.GetMethodInfo(dllPath, "Agent", "Run");
+                var methodInfo = executor.GetMethodInfo(dllPath, "Agent", "Run", keepContextAlive);
 
                 if (methodInfo == null)
                     throw new InvalidOperationException("The 'Run' method could not be found.");
@@ -150,7 +172,7 @@ namespace AiCoreApi.SemanticKernel.Agents
                     throw new InvalidOperationException("The 'Run' method has an unsupported parameter count.");
                 }
 
-                var result = executor.Execute(dllPath, "Agent", "Run", args, references)?.ToString();
+                var result = executor.Execute(dllPath, "Agent", "Run", args, references, keepContextAlive: keepContextAlive)?.ToString();
                 _responseAccessor.AddDebugMessage(_debugMessageSenderName, "C# Code Result", result);
                 return result;
             }
@@ -641,13 +663,18 @@ namespace AiCoreApi.SemanticKernel.Agents
         /// </summary>
         public class DynamicAssemblyExecutor
         {
-            public object Execute(string dllPath, string typeName, string methodName, object[] parameters, List<string>? references)
+            private static readonly ConcurrentDictionary<string, CustomAssemblyLoadContext> _persistentContexts = new();
+
+            public object Execute(string dllPath, string typeName, string methodName, object[] parameters, List<string>? references, bool keepContextAlive = false)
             {
-                using var alc = new CustomAssemblyLoadContext();
+                var alc = keepContextAlive 
+                    ? _persistentContexts.GetOrAdd(dllPath, path => new CustomAssemblyLoadContext()) 
+                    : new CustomAssemblyLoadContext();
+
                 try
                 {
-                    var loadedAssembly = alc.Assemblies.FirstOrDefault(a => a.Location == dllPath);
-                    var assembly = loadedAssembly ?? alc.LoadFromAssemblyPath(dllPath);
+                    var assembly = alc.Assemblies.FirstOrDefault(a => a.Location == dllPath) ?? alc.LoadFromAssemblyPath(dllPath);
+
                     if (references != null)
                     {
                         var processedFileNames = new List<string>();
@@ -661,32 +688,34 @@ namespace AiCoreApi.SemanticKernel.Agents
                             }
                         }
                     }
-                    var type = assembly.GetType(typeName);
-                    if (type == null)
-                        throw new Exception($"Type '{typeName}' not found in assembly {dllPath}.");
 
-                    var method = type.GetMethod(methodName);
-                    if (method == null)
-                        throw new Exception($"Method '{methodName}' not found on type '{typeName}'.");
-
+                    var type = assembly.GetType(typeName) ?? throw new Exception($"Type '{typeName}' not found.");
+                    var method = type.GetMethod(methodName) ?? throw new Exception($"Method '{methodName}' not found.");
                     var instance = Activator.CreateInstance(type);
+
                     return method.Invoke(instance, parameters);
                 }
                 finally
                 {
-                    alc.Unload();
-                    GC.Collect();
-                    GC.WaitForPendingFinalizers();
-                    GC.Collect();
+                    if (!keepContextAlive)
+                    {
+                        alc.Unload();
+                        GC.Collect();
+                        GC.WaitForPendingFinalizers();
+                        GC.Collect();
+                    }
                 }
             }
 
-            public MethodInfo? GetMethodInfo(string dllPath, string typeName, string methodName)
+            public MethodInfo? GetMethodInfo(string dllPath, string typeName, string methodName, bool keepContextAlive = false)
             {
-                using var alc = new CustomAssemblyLoadContext();
+                var alc = keepContextAlive 
+                    ? _persistentContexts.GetOrAdd(dllPath, path => new CustomAssemblyLoadContext()) 
+                    : new CustomAssemblyLoadContext();
+
                 try
                 {
-                    var assembly = alc.LoadFromAssemblyPath(dllPath);
+                    var assembly = alc.Assemblies.FirstOrDefault(a => a.Location == dllPath) ?? alc.LoadFromAssemblyPath(dllPath);
                     var type = assembly.GetType(typeName);
                     if (type == null) return null;
 
@@ -695,12 +724,16 @@ namespace AiCoreApi.SemanticKernel.Agents
                 }
                 finally
                 {
-                    alc.Unload();
-                    GC.Collect();
-                    GC.WaitForPendingFinalizers();
-                    GC.Collect();
+                    if (!keepContextAlive)
+                    {
+                        alc.Unload();
+                        GC.Collect();
+                        GC.WaitForPendingFinalizers();
+                        GC.Collect();
+                    }
                 }
             }
+
         }
     }
 
