@@ -29,6 +29,7 @@ namespace AiCoreApi.SemanticKernel.Agents
         private static readonly ConcurrentDictionary<string, Task> _compilationTasks = new();
 
         private string _debugMessageSenderName = "CSharpCodeAgent";
+        private string _keepContextAliveConstant = "// keep context alive";
 
         private static class AgentContentParameters
         {
@@ -81,7 +82,7 @@ namespace AiCoreApi.SemanticKernel.Agents
         {
             _responseAccessor.AddDebugMessage(_debugMessageSenderName, "Execute C# Code", csharpCode);
             // Check if the code contains a directive to not unload the agent 
-            var keepContextAlive = csharpCode.Contains("// keep context alive", StringComparison.OrdinalIgnoreCase);
+            var keepContextAlive = csharpCode.Contains(_keepContextAliveConstant, StringComparison.OrdinalIgnoreCase);
 
             // Clean the script code by removing #r "..." directives
             var cleanedCode = Regex.Replace(csharpCode, @"#r\s+""nuget:[^""]+""", "");
