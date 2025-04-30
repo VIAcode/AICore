@@ -122,9 +122,9 @@ SET aicore_session_context.login_type = '{1}';
             }
             catch (Exception ex)
             {
-                throw new ExceptionHandlingMiddleware.AiCoreUiException($"{ex.Message}, query:{Environment.NewLine}{script}");
+                _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Error:", $"{ex.Message}, query:{Environment.NewLine}{script}");
+                throw;
             }
-
         }
 
         string PrepareInitSessionQuery()

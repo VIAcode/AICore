@@ -90,7 +90,8 @@ namespace AiCoreApi.SemanticKernel.Agents
             }
             catch (Exception ex)
             {
-                throw new ExceptionHandlingMiddleware.AiCoreUiException($"{ex.Message}, query:{Environment.NewLine}{script}");
+                _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Error:", $"{ex.Message}, query:{Environment.NewLine}{script}");
+                throw;
             }
         }
     }
