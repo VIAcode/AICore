@@ -11,6 +11,10 @@ using Azure.AI.DocumentIntelligence;
 using Azure.Storage.Blobs;
 using System.Text.RegularExpressions;
 using AiCoreApi.Common.Extensions;
+using Azure.AI.FormRecognizer.DocumentAnalysis;
+using BlobContentSource = Azure.AI.DocumentIntelligence.BlobContentSource;
+using ClassifierDocumentTypeDetails = Azure.AI.DocumentIntelligence.ClassifierDocumentTypeDetails;
+using DocumentClassifierDetails = Azure.AI.DocumentIntelligence.DocumentClassifierDetails;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
@@ -33,6 +37,14 @@ namespace AiCoreApi.SemanticKernel.Agents
             public const string ContainerName = "containerName";
             public const string DocumentTypes = "documentTypes";
             public const string Action = "action";
+        }
+
+        private static class Actions
+        {
+            public const string BuildClassifier = "buildClassifier";
+            public const string ReturnDocumentTypes = "returnDocumentTypes";
+            public const string ReturnClassifiers = "returnClassifiers";
+            public const string ReturnModels = "returnModels";
         }
 
         private readonly IEntraTokenProvider _entraTokenProvider;
@@ -62,13 +74,82 @@ namespace AiCoreApi.SemanticKernel.Agents
             var connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
             var action = agent.Content.ContainsKey(AgentContentParameters.Action)
                 ? agent.Content[AgentContentParameters.Action].Value
-                : "buildClassifier";
-            if (action == "buildClassifier")
+                : Actions.BuildClassifier;
+            if (action == Actions.BuildClassifier)
                 return await BuildClassifier(connections, agent, parameters);
+            if (action == Actions.ReturnModels)
+                return await ReturnModels(connections, agent);
+            if (action == Actions.ReturnClassifiers)
+                return await ReturnClassifiers(connections, agent);
             return await ReturnDocumentTypes(connections, agent, parameters);
         }
 
-        public async Task<string> ReturnDocumentTypes(
+        private async Task<string> ReturnModels(
+            List<ConnectionModel> connections,
+            AgentModel agent)
+        {
+            var diConnectionName = agent.Content[AgentContentParameters.DocumentIntelligenceConnection].Value;
+            var ocrConnection = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.DocumentIntelligence, _debugMessageSenderName, connectionName: diConnectionName);
+            var ocrEndpoint = ocrConnection.Content["endpoint"];
+            var ocrEndpointUri = new Uri(ocrEndpoint);
+            var ocrAccessType = ocrConnection.Content.ContainsKey("accessType") ? ocrConnection.Content["accessType"] : "apiKey";
+            var ocrApiKey = ocrConnection.Content.ContainsKey("apiKey") ? ocrConnection.Content["apiKey"] : string.Empty;
+
+            DocumentModelAdministrationClient modelClient;
+            if (ocrAccessType == "apiKey")
+            {
+                modelClient = new DocumentModelAdministrationClient(ocrEndpointUri, new AzureKeyCredential(ocrApiKey));
+            }
+            else
+            {
+                var accessToken = await _entraTokenProvider.GetAccessTokenObjectAsync(ocrAccessType, "https://cognitiveservices.azure.com/.default");
+                modelClient = new DocumentModelAdministrationClient(ocrEndpointUri, new StaticTokenCredential(accessToken.Token, accessToken.ExpiresOn));
+            }
+
+            var models = new List<DocumentModelSummary>();
+            foreach (var model in modelClient.GetDocumentModels())
+            {
+                models.Add(model);
+            }
+
+            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "OCR Document Models", $"Models: {ocrEndpoint}\n");
+            var result = models.ToJson() ?? "";
+            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "OCR Document Models Result", $"Models: {result}");
+            return result;
+        }
+
+        private async Task<string> ReturnClassifiers(
+            List<ConnectionModel> connections,
+            AgentModel agent)
+        {
+            var diConnectionName = agent.Content[AgentContentParameters.DocumentIntelligenceConnection].Value;
+            var ocrConnection = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.DocumentIntelligence, _debugMessageSenderName, connectionName: diConnectionName);
+            var ocrEndpoint = ocrConnection.Content["endpoint"];
+            var ocrEndpointUri = new Uri(ocrEndpoint);
+            var ocrAccessType = ocrConnection.Content.ContainsKey("accessType") ? ocrConnection.Content["accessType"] : "apiKey";
+            var ocrApiKey = ocrConnection.Content.ContainsKey("apiKey") ? ocrConnection.Content["apiKey"] : string.Empty;
+            DocumentIntelligenceAdministrationClient adminClient;
+            if (ocrAccessType == "apiKey")
+            {
+                adminClient = new DocumentIntelligenceAdministrationClient(ocrEndpointUri, new AzureKeyCredential(ocrApiKey));
+            }
+            else
+            {
+                var accessToken = await _entraTokenProvider.GetAccessTokenObjectAsync(ocrAccessType, "https://cognitiveservices.azure.com/.default");
+                adminClient = new DocumentIntelligenceAdministrationClient(ocrEndpointUri, new StaticTokenCredential(accessToken.Token, accessToken.ExpiresOn));
+            }
+            var classifiers = new List<DocumentClassifierDetails>();
+            await foreach (var model in adminClient.GetClassifiersAsync())
+            {
+                classifiers.Add(model);
+            }
+            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "OCR Build Classifier", $"Classifiers: {ocrEndpoint}\n");
+            var result = classifiers.ToJson() ?? "";
+            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "OCR Build Classifier Result", $"Classifiers: {result}");
+            return result;
+        }
+
+        private async Task<string> ReturnDocumentTypes(
             List<ConnectionModel> connections,
             AgentModel agent,
             Dictionary<string, string> parameters)

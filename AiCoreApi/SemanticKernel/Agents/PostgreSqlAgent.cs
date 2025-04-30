@@ -96,27 +96,35 @@ SET aicore_session_context.login_type = '{1}';
             }
 
             await using var command = new NpgsqlCommand(script, pgConnection);
-            await using var reader = await command.ExecuteReaderAsync();
-            var tables = new List<List<Dictionary<string, object?>>>();
-            do
+            try
             {
-                var rows = new List<Dictionary<string, object?>>();
-                while (await reader.ReadAsync().ConfigureAwait(false))
+                await using var reader = await command.ExecuteReaderAsync();
+                var tables = new List<List<Dictionary<string, object?>>>();
+                do
                 {
-                    var row = new Dictionary<string, object?>();
-                    for (int i = 0; i < reader.FieldCount; i++)
+                    var rows = new List<Dictionary<string, object?>>();
+                    while (await reader.ReadAsync().ConfigureAwait(false))
                     {
-                        row[reader.GetName(i)] = reader.IsDBNull(i) ? null : reader.GetValue(i);
+                        var row = new Dictionary<string, object?>();
+                        for (int i = 0; i < reader.FieldCount; i++)
+                        {
+                            row[reader.GetName(i)] = reader.IsDBNull(i) ? null : reader.GetValue(i);
+                        }
+                        rows.Add(row);
                     }
-                    rows.Add(row);
-                }
-                if (rows.Count > 0)
-                {
-                    tables.Add(rows);
-                }
+                    if (rows.Count > 0)
+                    {
+                        tables.Add(rows);
+                    }
 
-            } while (await reader.NextResultAsync().ConfigureAwait(false));
-            return JsonSerializer.Serialize(tables);
+                } while (await reader.NextResultAsync().ConfigureAwait(false));
+                return JsonSerializer.Serialize(tables);
+            }
+            catch (Exception ex)
+            {
+                throw new ExceptionHandlingMiddleware.AiCoreUiException($"{ex.Message}, query:{Environment.NewLine}{script}");
+            }
+
         }
 
         string PrepareInitSessionQuery()
