@@ -46,6 +46,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             public const string ReturnClassifiers = "returnClassifiers";
             public const string ReturnModels = "returnModels";
         }
+        private const string AzureCognitiveScope = "https://cognitiveservices.azure.com/.default";
 
         private readonly IEntraTokenProvider _entraTokenProvider;
         private readonly RequestAccessor _requestAccessor;
@@ -75,119 +76,78 @@ namespace AiCoreApi.SemanticKernel.Agents
             var action = agent.Content.ContainsKey(AgentContentParameters.Action)
                 ? agent.Content[AgentContentParameters.Action].Value
                 : Actions.BuildClassifier;
-            if (action == Actions.BuildClassifier)
-                return await BuildClassifier(connections, agent, parameters);
-            if (action == Actions.ReturnModels)
-                return await ReturnModels(connections, agent);
-            if (action == Actions.ReturnClassifiers)
-                return await ReturnClassifiers(connections, agent);
-            return await ReturnDocumentTypes(connections, agent, parameters);
+            return action switch
+            {
+                Actions.BuildClassifier => await BuildClassifier(connections, agent, parameters),
+                Actions.ReturnModels => await ReturnModels(connections, agent),
+                Actions.ReturnClassifiers => await ReturnClassifiers(connections, agent),
+                _ => await ReturnDocumentTypes(connections, agent, parameters)
+            };
         }
 
-        private async Task<string> ReturnModels(
-            List<ConnectionModel> connections,
-            AgentModel agent)
+        private async Task<T> CreateOcrClientAsync<T>(ConnectionModel conn, Func<Uri, TokenCredential, T> tokenFactory, Func<Uri, AzureKeyCredential, T> keyFactory)
         {
-            var diConnectionName = agent.Content[AgentContentParameters.DocumentIntelligenceConnection].Value;
-            var ocrConnection = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.DocumentIntelligence, _debugMessageSenderName, connectionName: diConnectionName);
-            var ocrEndpoint = ocrConnection.Content["endpoint"];
-            var ocrEndpointUri = new Uri(ocrEndpoint);
-            var ocrAccessType = ocrConnection.Content.ContainsKey("accessType") ? ocrConnection.Content["accessType"] : "apiKey";
-            var ocrApiKey = ocrConnection.Content.ContainsKey("apiKey") ? ocrConnection.Content["apiKey"] : string.Empty;
-
-            DocumentModelAdministrationClient modelClient;
-            if (ocrAccessType == "apiKey")
+            var endpoint = new Uri(conn.Content["endpoint"]);
+            var accessType = conn.Content.TryGetValue("accessType", out var at) ? at : "apiKey";
+            if (accessType == "apiKey")
             {
-                modelClient = new DocumentModelAdministrationClient(ocrEndpointUri, new AzureKeyCredential(ocrApiKey));
+                var key = conn.Content["apiKey"];
+                return keyFactory(endpoint, new AzureKeyCredential(key));
             }
-            else
-            {
-                var accessToken = await _entraTokenProvider.GetAccessTokenObjectAsync(ocrAccessType, "https://cognitiveservices.azure.com/.default");
-                modelClient = new DocumentModelAdministrationClient(ocrEndpointUri, new StaticTokenCredential(accessToken.Token, accessToken.ExpiresOn));
-            }
-
-            var models = new List<DocumentModelSummary>();
-            foreach (var model in modelClient.GetDocumentModels())
-            {
-                models.Add(model);
-            }
-
-            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "OCR Document Models", $"Models: {ocrEndpoint}\n");
-            var result = models.ToJson() ?? "";
-            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "OCR Document Models Result", $"Models: {result}");
-            return result;
+            var token = await _entraTokenProvider.GetAccessTokenObjectAsync(accessType, AzureCognitiveScope);
+            return tokenFactory(endpoint, new StaticTokenCredential(token.Token, token.ExpiresOn));
         }
 
-        private async Task<string> ReturnClassifiers(
-            List<ConnectionModel> connections,
-            AgentModel agent)
+        private async Task<string> ReturnModels(List<ConnectionModel> connections, AgentModel agent)
         {
-            var diConnectionName = agent.Content[AgentContentParameters.DocumentIntelligenceConnection].Value;
-            var ocrConnection = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.DocumentIntelligence, _debugMessageSenderName, connectionName: diConnectionName);
-            var ocrEndpoint = ocrConnection.Content["endpoint"];
-            var ocrEndpointUri = new Uri(ocrEndpoint);
-            var ocrAccessType = ocrConnection.Content.ContainsKey("accessType") ? ocrConnection.Content["accessType"] : "apiKey";
-            var ocrApiKey = ocrConnection.Content.ContainsKey("apiKey") ? ocrConnection.Content["apiKey"] : string.Empty;
-            DocumentIntelligenceAdministrationClient adminClient;
-            if (ocrAccessType == "apiKey")
-            {
-                adminClient = new DocumentIntelligenceAdministrationClient(ocrEndpointUri, new AzureKeyCredential(ocrApiKey));
-            }
-            else
-            {
-                var accessToken = await _entraTokenProvider.GetAccessTokenObjectAsync(ocrAccessType, "https://cognitiveservices.azure.com/.default");
-                adminClient = new DocumentIntelligenceAdministrationClient(ocrEndpointUri, new StaticTokenCredential(accessToken.Token, accessToken.ExpiresOn));
-            }
+            var conn = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.DocumentIntelligence, _debugMessageSenderName, connectionName: agent.Content["documentIntelligenceConnection"].Value);
+            var client = await CreateOcrClientAsync(conn,
+                (uri, cred) => new DocumentModelAdministrationClient(uri, cred),
+                (uri, cred) => new DocumentModelAdministrationClient(uri, cred));
+
+
+            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "OCR Document Models", string.Empty);
+            var models = client.GetDocumentModels().ToList();
+            var json = models.ToJson() ?? "";
+
+            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "OCR Document Models Result", $"Models: {json}");
+            return json;
+        }
+
+        private async Task<string> ReturnClassifiers(List<ConnectionModel> connections, AgentModel agent)
+        {
+            var conn = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.DocumentIntelligence, _debugMessageSenderName, connectionName: agent.Content["documentIntelligenceConnection"].Value);
+            var client = await CreateOcrClientAsync(conn,
+                (uri, cred) => new DocumentIntelligenceAdministrationClient(uri, cred),
+                (uri, cred) => new DocumentIntelligenceAdministrationClient(uri, cred));
+
+            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "OCR Document Models", string.Empty);
             var classifiers = new List<DocumentClassifierDetails>();
-            await foreach (var model in adminClient.GetClassifiersAsync())
-            {
-                classifiers.Add(model);
-            }
-            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "OCR Build Classifier", $"Classifiers: {ocrEndpoint}\n");
-            var result = classifiers.ToJson() ?? "";
-            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "OCR Build Classifier Result", $"Classifiers: {result}");
-            return result;
+            await foreach (var c in client.GetClassifiersAsync()) classifiers.Add(c);
+
+            var json = classifiers.ToJson() ?? "";
+            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "OCR Document Models Result", json);
+            return json;
         }
 
-        private async Task<string> ReturnDocumentTypes(
-            List<ConnectionModel> connections,
-            AgentModel agent,
-            Dictionary<string, string> parameters)
+        private async Task<string> ReturnDocumentTypes(List<ConnectionModel> connections, AgentModel agent, Dictionary<string, string> parameters)
         {
-            var diConnectionName = agent.Content[AgentContentParameters.DocumentIntelligenceConnection].Value;
-            var ocrConnection = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.DocumentIntelligence, _debugMessageSenderName, connectionName: diConnectionName);
-            var classifierId = ApplyParameters(agent.Content[AgentContentParameters.ClassifierId].Value, parameters);
+            var classifierId = ApplyParameters(agent.Content["classifierId"].Value, parameters);
+            var conn = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.DocumentIntelligence, _debugMessageSenderName, connectionName: agent.Content["documentIntelligenceConnection"].Value);
+            var client = await CreateOcrClientAsync(conn,
+                (uri, cred) => new DocumentIntelligenceAdministrationClient(uri, cred),
+                (uri, cred) => new DocumentIntelligenceAdministrationClient(uri, cred));
 
-            var ocrEndpoint = ocrConnection.Content["endpoint"];
-            var ocrEndpointUri = new Uri(ocrEndpoint);
+            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "OCR Document Types", string.Empty);
+            var classifier = await client.GetClassifierAsync(classifierId);
+            var types = classifier.Value.DocumentTypes.Select(dt => dt.Key).ToList();
 
-            var ocrAccessType = ocrConnection.Content.ContainsKey("accessType") ? ocrConnection.Content["accessType"] : "apiKey";
-            var ocrApiKey = ocrConnection.Content.ContainsKey("apiKey") ? ocrConnection.Content["apiKey"] : string.Empty;
-
-            DocumentIntelligenceAdministrationClient adminClient;
-            if (ocrAccessType == "apiKey")
-            {
-                adminClient = new DocumentIntelligenceAdministrationClient(ocrEndpointUri, new AzureKeyCredential(ocrApiKey));
-            }
-            else
-            {
-                var accessToken = await _entraTokenProvider.GetAccessTokenObjectAsync(ocrAccessType, "https://cognitiveservices.azure.com/.default");
-                adminClient = new DocumentIntelligenceAdministrationClient(ocrEndpointUri, new StaticTokenCredential(accessToken.Token, accessToken.ExpiresOn));
-            }
-
-            var classifier = await adminClient.GetClassifierAsync(classifierId);
-            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "OCR Build Classifier", $"Document Types: {ocrEndpoint}\nClassifier ID: {classifierId}");
-
-            var documentTypes = classifier.Value.DocumentTypes.Select(docType => docType.Key).ToList();
-            var result = documentTypes.ToJson() ?? "";
-            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "OCR Build Classifier Result", $"Document Types: {result}");
-            return result;
+            var json = types.ToJson() ?? "";
+            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "OCR Document Types Result", json);
+            return json;
         }
 
-        public async Task<string> BuildClassifier(
-            List<ConnectionModel> connections,
-            AgentModel agent,
-            Dictionary<string, string> parameters)
+        public async Task<string> BuildClassifier(List<ConnectionModel> connections, AgentModel agent, Dictionary<string, string> parameters)
         {
             var diConnectionName = agent.Content[AgentContentParameters.DocumentIntelligenceConnection].Value;
             var saConnectionName = agent.Content[AgentContentParameters.StorageAccountConnection].Value;
