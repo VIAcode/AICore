@@ -14,13 +14,8 @@ using Polly;
 using Polly.Extensions.Http;
 using Microsoft.OpenApi.Models;
 using AiCoreApi.Services.ProcessingServices;
-using OpenTelemetry.Trace;
-using OpenTelemetry.Resources;
-using OpenTelemetry.Metrics;
-using Azure.Monitor.OpenTelemetry.AspNetCore;
 using AiCoreApi.Common.Monitoring;
-using OpenTelemetry.Logs;
-using Npgsql;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace AiCoreApi;
 
@@ -77,6 +72,7 @@ public class Startup
         services.AddScoped<UserContextAccessor>();
         services.AddScoped<ResponseAccessor>();
         services.AddSingleton<ExtendedConfig>();
+        services.AddSingleton<MonitoringConfig>();
         // TODO: avoid mixing IoC strategies https://learn.microsoft.com/en-us/dotnet/core/extensions/dependency-injection-guidelines#recommendations
         var serviceProvider = services.BuildServiceProvider();
         _logger = serviceProvider.GetRequiredService<ILogger<Startup>>();
@@ -100,9 +96,9 @@ public class Startup
         services.AddScoped<OpenAiHttpCallHandler>();
         //services.AddTransient(sp => new OpenAiHttpCallHandler(extendedConfig, sp));
         services.AddHttpClient("RetryClient", httpClient =>
-            {
-                httpClient.Timeout = TimeSpan.FromMinutes(3); // wait 3 min instead of 100 sec by default
-            })
+        {
+            httpClient.Timeout = TimeSpan.FromMinutes(3); // wait 3 min instead of 100 sec by default
+        })
             .SetHandlerLifetime(TimeSpan.FromMinutes(4))
             .AddPolicyHandler(GetRetryPolicy())
             .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
@@ -114,9 +110,9 @@ public class Startup
             .ConfigurePrimaryHttpMessageHandler<OpenAiHttpCallHandler>();
 
         services.AddHttpClient("NoRetryClient", httpClient =>
-            {
-                httpClient.Timeout = TimeSpan.FromMinutes(3); // wait 3 min instead of 100 sec by default
-            })
+        {
+            httpClient.Timeout = TimeSpan.FromMinutes(3); // wait 3 min instead of 100 sec by default
+        })
             .SetHandlerLifetime(TimeSpan.FromMinutes(4))
             .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
             {
@@ -128,11 +124,11 @@ public class Startup
 
         var combinedAuthenticationScheme = "Combined";
         services.AddAuthentication(options =>
-            {
-                options.DefaultAuthenticateScheme = combinedAuthenticationScheme;
-                options.DefaultChallengeScheme = combinedAuthenticationScheme;
-                options.DefaultScheme = combinedAuthenticationScheme;
-            })
+        {
+            options.DefaultAuthenticateScheme = combinedAuthenticationScheme;
+            options.DefaultChallengeScheme = combinedAuthenticationScheme;
+            options.DefaultScheme = combinedAuthenticationScheme;
+        })
             .AddPolicyScheme(combinedAuthenticationScheme, "Bearer / Basic", options =>
             {
                 options.ForwardDefaultSelector = context =>
@@ -161,7 +157,7 @@ public class Startup
                 Description = "API to work with AI Core. Most endpoints are for administration and configuration. Its required to use Auth Code Flow + PKCE to use them.\n\n" +
                     "Endpoint for API integration using Basic Authentication:\n\n" +
                     "/api/v1/agents/{agentName}/isEnabled\n\n" +
-                    "/api/v1/tags/my\n\n" + 
+                    "/api/v1/tags/my\n\n" +
                     "/api/v1/copilot/chat\n\n" +
                     "/api/v1/copilot/search\n\n" +
                     "/api/v1/copilot/transcript",
@@ -196,27 +192,9 @@ public class Startup
             });
         });
 
-        services.AddLogging(loggingBuilder =>
-        {
-            loggingBuilder.ClearProviders();
-            loggingBuilder.AddOpenTelemetry();
-            loggingBuilder.AddConsole(opt => opt.LogToStandardErrorThreshold = Enum.Parse<LogLevel>(extendedConfig.LogLevel));
-            loggingBuilder.AddDebug();
-        });
-        services.AddOpenTelemetry()
-            .ConfigureResource(r => r.AddService("AICoreAPI"))
-            .UseAzureMonitor() // includes AddAspNetCoreInstrumentation, AddHttpClientInstrumentation, AddHttpClientAndServerMetrics, AddAzureMonitorMetricExporter
-            .WithTracing(tracerProviderBuilder =>
-            {
-                tracerProviderBuilder.AddOtlpExporter();
-                tracerProviderBuilder.AddNpgsql();
-            })
-            .WithMetrics(metricsBuilder =>
-            {
-                metricsBuilder
-                    .AddMeter(MetricsAccessor.METRICS_PREFIX)
-                    .AddPrometheusExporter(); 
-            });
+        var monitoringConfig = serviceProvider.GetRequiredService<MonitoringConfig>();
+        services.AddMonitoring(monitoringConfig);
+
         services.AddMcpServer()
             .WithHttpTransport()
             .WithListToolsHandler(async (listContext, listCancellationToken) =>
@@ -253,7 +231,11 @@ public class Startup
         app.UseAuthorization();
         app.UseCors("CorsPolicy");
 
-        app.UseOpenTelemetryPrometheusScrapingEndpoint();
+        var monitoringConfig = app.ApplicationServices.GetRequiredService<MonitoringConfig>();
+        if (monitoringConfig.EnablePrometheusExporter)
+        {
+            app.UseOpenTelemetryPrometheusScrapingEndpoint();
+        }
 
         app.UseMiddleware<ExceptionHandlingMiddleware>();
 

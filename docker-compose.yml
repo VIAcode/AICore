@@ -6,7 +6,6 @@ services:
     environment:
       - ASPNETCORE_URLS=http://+:80
       - AUTOCOMPACTLARGEOBJECTHEAP=true  
-      - APPLICATIONINSIGHTS_CONNECTION_STRING=
       - DBSERVER=host.docker.internal
       - DBPORT=5439
       - DBNAME=aicoredb

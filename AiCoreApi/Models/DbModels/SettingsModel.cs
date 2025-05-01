@@ -21,5 +21,7 @@ namespace AiCoreApi.Models.DbModels
         Common = 1,
         Version = 2,
         EntraCredentials = 3,
+        OpenTelemetry = 4,
+        LogLevel = 5
     }
 }
