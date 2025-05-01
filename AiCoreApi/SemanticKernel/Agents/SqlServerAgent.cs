@@ -63,28 +63,36 @@ namespace AiCoreApi.SemanticKernel.Agents
                 sqlServerConnection.AccessToken = accessToken;
             }
             sqlServerConnection.Open();
-            using var command = new SqlCommand(script, sqlServerConnection);
-            using var reader = await command.ExecuteReaderAsync();
-            var tables = new List<List<Dictionary<string, object>>>();
-            do
+            await using var command = new SqlCommand(script, sqlServerConnection);
+            try
             {
-                var rows = new List<Dictionary<string, object>>();
-                while (reader.Read())
+                await using var reader = await command.ExecuteReaderAsync();
+                var tables = new List<List<Dictionary<string, object>>>();
+                do
                 {
-                    var row = new Dictionary<string, object>();
-                    for (int i = 0; i < reader.FieldCount; i++)
+                    var rows = new List<Dictionary<string, object>>();
+                    while (reader.Read())
                     {
-                        row[reader.GetName(i)] = reader.IsDBNull(i) ? null : reader.GetValue(i);
+                        var row = new Dictionary<string, object>();
+                        for (var i = 0; i < reader.FieldCount; i++)
+                        {
+                            row[reader.GetName(i)] = reader.IsDBNull(i) ? null : reader.GetValue(i);
+                        }
+                        rows.Add(row);
                     }
-                    rows.Add(row);
-                }
-                if (rows.Count > 0)
-                {
-                    tables.Add(rows);
-                }
+                    if (rows.Count > 0)
+                    {
+                        tables.Add(rows);
+                    }
 
-            } while (reader.NextResult());
-            return JsonSerializer.Serialize(tables);
+                } while (reader.NextResult());
+                return JsonSerializer.Serialize(tables);
+            }
+            catch (Exception ex)
+            {
+                _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Error:", $"{ex.Message}, query:{Environment.NewLine}{script}");
+                throw;
+            }
         }
     }
 
