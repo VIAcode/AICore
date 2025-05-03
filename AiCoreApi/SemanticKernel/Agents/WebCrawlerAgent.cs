@@ -56,31 +56,39 @@ namespace AiCoreApi.SemanticKernel.Agents
 
             async Task Crawl(string url, int depth, Regex? filter)
             {
-                url = url.TrimEnd(' ', '/', '#', '?');
-                if (depth < 1 || visited.Contains(url) || (maxUrls > 0 && visited.Count >= maxUrls)) return;
-                visited.Add(url);
-
-                var text = await GetPageTextAsync(url, agent, userAgent, parameters);
-                if (!string.IsNullOrWhiteSpace(text))
+                try
                 {
-                    allResults.Add(new Dictionary<string, string>
-                    {
-                        { "url", url },
-                        { "text", text }
-                    });
-                }
+                    url = url.TrimEnd(' ', '/', '#', '?');
+                    if (depth < 1 || visited.Contains(url) || (maxUrls > 0 && visited.Count >= maxUrls)) return;
+                    visited.Add(url);
 
-                if (depth > 1)
-                {
-                    var links = await ExtractLinksAsync(url, agent, userAgent, parameters);
-                    foreach (var link in links)
+                    var text = await GetPageTextAsync(url, agent, userAgent, parameters);
+                    if (!string.IsNullOrWhiteSpace(text))
                     {
-                        if (!visited.Contains(link) && (filter == null || filter.IsMatch(link)))
+                        allResults.Add(new Dictionary<string, string>
                         {
-                            await Crawl(link, depth - 1, filter);
-                            if (maxUrls > 0 && visited.Count >= maxUrls) break;
+                            { "url", url },
+                            { "text", text }
+                        });
+                    }
+
+                    if (depth > 1)
+                    {
+                        var links = await ExtractLinksAsync(url, agent, userAgent, parameters);
+                        foreach (var link in links)
+                        {
+                            if (!visited.Contains(link) && (filter == null || filter.IsMatch(link)))
+                            {
+                                await Crawl(link, depth - 1, filter);
+                                if (maxUrls > 0 && visited.Count >= maxUrls) break;
+                            }
                         }
                     }
+                }
+                catch (Exception ex)
+                {
+                    // Suppress errors as links can be broken or inaccessible
+                    _responseAccessor.AddDebugMessage(_debugMessageSenderName, "Error", $"Failed to crawl {url}, {ex.Message}");
                 }
             }
 
