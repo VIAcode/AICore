@@ -20,6 +20,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             public const string CustomHeaders = "customHeaders";
             public const string CrawlDepth = "crawlDepth";
             public const string CrawlUrlRegex = "crawlUrlRegex";
+            public const string UserAgent = "userAgent";
             public const string MaxUrlsCount = "maxUrlsCount";
         }
 
@@ -46,6 +47,9 @@ namespace AiCoreApi.SemanticKernel.Agents
             var crawlDepth = GetCrawlDepth(agent, parameters);
             var crawlRegex = GetCrawlRegex(agent, parameters);
             var maxUrls = GetMaxUrlsCount(agent, parameters);
+            var userAgent = agent.Content.ContainsKey(AgentContentParameters.UserAgent)
+                ? ApplyParameters(agent.Content[AgentContentParameters.UserAgent].Value, parameters)
+                : "";
 
             var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var allResults = new List<Dictionary<string, string>>();
@@ -56,7 +60,7 @@ namespace AiCoreApi.SemanticKernel.Agents
                 if (depth < 1 || visited.Contains(url) || (maxUrls > 0 && visited.Count >= maxUrls)) return;
                 visited.Add(url);
 
-                var text = await GetPageTextAsync(url, agent, parameters);
+                var text = await GetPageTextAsync(url, agent, userAgent, parameters);
                 if (!string.IsNullOrWhiteSpace(text))
                 {
                     allResults.Add(new Dictionary<string, string>
@@ -68,7 +72,7 @@ namespace AiCoreApi.SemanticKernel.Agents
 
                 if (depth > 1)
                 {
-                    var links = await ExtractLinksAsync(url, agent, parameters);
+                    var links = await ExtractLinksAsync(url, agent, userAgent, parameters);
                     foreach (var link in links)
                     {
                         if (!visited.Contains(link) && (filter == null || filter.IsMatch(link)))
@@ -124,10 +128,10 @@ namespace AiCoreApi.SemanticKernel.Agents
             return null;
         }
 
-        private async Task<string> GetPageTextAsync(string url, AgentModel agent, Dictionary<string, string> parameters)
+        private async Task<string> GetPageTextAsync(string url, AgentModel agent, string userAgent, Dictionary<string, string> parameters)
         {
             using var client = _httpClientFactory.CreateClient("NoRetryClient");
-            ApplyCustomHeaders(client, agent, parameters);
+            ApplyCustomHeaders(client, agent, userAgent, parameters);
 
             try
             {
@@ -153,10 +157,10 @@ namespace AiCoreApi.SemanticKernel.Agents
             }
         }
 
-        private async Task<List<string>> ExtractLinksAsync(string url, AgentModel agent, Dictionary<string, string> parameters)
+        private async Task<List<string>> ExtractLinksAsync(string url, AgentModel agent, string userAgent, Dictionary<string, string> parameters)
         {
             using var client = _httpClientFactory.CreateClient("NoRetryClient");
-            ApplyCustomHeaders(client, agent, parameters);
+            ApplyCustomHeaders(client, agent, userAgent, parameters);
             var links = new List<string>();
 
             try
@@ -188,8 +192,11 @@ namespace AiCoreApi.SemanticKernel.Agents
             return links.Distinct().ToList();
         }
 
-        private void ApplyCustomHeaders(HttpClient client, AgentModel agent, Dictionary<string, string> parameters)
+        private void ApplyCustomHeaders(HttpClient client, AgentModel agent, string userAgent, Dictionary<string, string> parameters)
         {
+            if (!string.IsNullOrEmpty(userAgent))
+                client.DefaultRequestHeaders.Add("User-Agent", userAgent);
+
             if (!agent.Content.TryGetValue(AgentContentParameters.CustomHeaders, out var headerValue))
                 return;
 

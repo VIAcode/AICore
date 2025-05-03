@@ -68,5 +68,8 @@ namespace AiCoreApi.Models.DbModels
         OcrBuildClassifierAgent = 34,
         AzureLogAnalytics = 35,
         GoogleSearchApi = 36,
+        Smtp = 37,
+        Imap = 38,
+        GraphMail = 39,
     }
 }
