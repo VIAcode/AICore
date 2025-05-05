@@ -7,6 +7,7 @@ using System.Text.RegularExpressions;
 using System.Web;
 using AiCoreApi.Common.Extensions;
 using System.Text.Encodings.Web;
+using AiCoreApi.Common.Monitoring;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
@@ -28,10 +29,10 @@ namespace AiCoreApi.SemanticKernel.Agents
 
         public WebCrawlerAgent(
             ILogger<WebCrawlerAgent> logger,
-            ExtendedConfig extendedConfig,
+            MonitoringConfig monitoringConfig,
             IHttpClientFactory httpClientFactory,
             ResponseAccessor responseAccessor,
-            RequestAccessor requestAccessor) : base(responseAccessor, requestAccessor, extendedConfig, logger)
+            RequestAccessor requestAccessor) : base(responseAccessor, requestAccessor, monitoringConfig, logger)
         {
             _httpClientFactory = httpClientFactory;
             _responseAccessor = responseAccessor;

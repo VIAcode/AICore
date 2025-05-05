@@ -45,9 +45,9 @@ namespace AiCoreApi.SemanticKernel.Agents
             RequestAccessor requestAccessor,
             ResponseAccessor responseAccessor,
             ICacheAccessor cacheAccessor,
-            ExtendedConfig extendedConfig,
+            MonitoringConfig monitoringConfig,
             ILogger<PythonCodeAgent> logger,
-            IMetricsAccessor metricsAccessor) : base(responseAccessor, requestAccessor, extendedConfig, logger)
+            IMetricsAccessor metricsAccessor) : base(responseAccessor, requestAccessor, monitoringConfig, logger)
         {
             _plannerHelpers = plannerHelpers;
             _requestAccessor = requestAccessor;

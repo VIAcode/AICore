@@ -7,6 +7,7 @@ using AiCoreApi.Common.Extensions;
 using AiCoreApi.Data.Processors;
 using Azure.Storage.Blobs;
 using Azure.Storage;
+using AiCoreApi.Common.Monitoring;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
@@ -48,8 +49,8 @@ namespace AiCoreApi.SemanticKernel.Agents
             IConnectionProcessor connectionProcessor,
             RequestAccessor requestAccessor,
             ResponseAccessor responseAccessor,
-            ExtendedConfig extendedConfig,
-            ILogger<StorageAccountAgent> logger) : base(responseAccessor, requestAccessor, extendedConfig, logger)
+            MonitoringConfig monitoringConfig,
+            ILogger<StorageAccountAgent> logger) : base(responseAccessor, requestAccessor, monitoringConfig, logger)
         {
             _entraTokenProvider = entraTokenProvider;
             _connectionProcessor = connectionProcessor;

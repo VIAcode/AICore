@@ -39,6 +39,7 @@ namespace AiCoreApi.SemanticKernel.Agents
         private readonly RequestAccessor _requestAccessor;
         private readonly ResponseAccessor _responseAccessor;
         private readonly ExtendedConfig _extendedConfig;
+        private readonly MonitoringConfig _monitoringConfig;
         private readonly ICacheAccessor _cacheAccessor;
         private readonly ILogger<CsharpCodeAgent> _logger;
         private readonly IMetricsAccessor _metricsAccessor;
@@ -50,7 +51,8 @@ namespace AiCoreApi.SemanticKernel.Agents
             ExtendedConfig extendedConfig,
             ICacheAccessor cacheAccessor,
             ILogger<CsharpCodeAgent> logger,
-            IMetricsAccessor metricsAccessor) : base(responseAccessor, requestAccessor, extendedConfig, logger)
+            IMetricsAccessor metricsAccessor,
+            MonitoringConfig monitoringConfig) : base(responseAccessor, requestAccessor, monitoringConfig, logger)
         {
             _plannerHelpers = plannerHelpers;
             _requestAccessor = requestAccessor;
@@ -60,6 +62,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             _cacheAccessor.KeyPrefix = "AgentExecution-";
             _logger = logger;
             _metricsAccessor = metricsAccessor;
+            _monitoringConfig = monitoringConfig;
         }
 
         public async Task<string> DoCallWrapper(AgentModel agent, Dictionary<string, string> parameters) => await base.DoCallWrapper(agent, parameters);
@@ -397,7 +400,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             if (processedPackages.Contains(packageKey))
                 return; // Already handled
 
-            if(_extendedConfig.LogNugetPackageLoad)
+            if(_monitoringConfig.LogNugetPackageLoad)
                 _logger.LogCritical("[{DateTime}][Nuget Package Load] Agent: {Agent}, Package: {Login}", agent.Name, DateTime.UtcNow.ToString("g"), packageKey);
 
             processedPackages.Add(packageKey);

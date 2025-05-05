@@ -5,6 +5,7 @@ using AiCoreApi.Models.DbModels;
 using AiCoreApi.Common;
 using System.Web;
 using AiCoreApi.Data.Processors;
+using AiCoreApi.Common.Monitoring;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
@@ -29,8 +30,8 @@ namespace AiCoreApi.SemanticKernel.Agents
             IEntraTokenProvider entraTokenProvider,
             RequestAccessor requestAccessor,
             ResponseAccessor responseAccessor,
-            ExtendedConfig extendedConfig,
-            ILogger<AzureServiceBusNotificationAgent> logger) : base(responseAccessor, requestAccessor, extendedConfig, logger)
+            MonitoringConfig monitoringConfig,
+            ILogger<AzureServiceBusNotificationAgent> logger) : base(responseAccessor, requestAccessor, monitoringConfig, logger)
         {
             _connectionProcessor = connectionProcessor;
             _entraTokenProvider = entraTokenProvider;

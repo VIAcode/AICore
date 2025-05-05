@@ -4,7 +4,6 @@ using Json.Schema.Generation;
 using Json.Schema.Generation.Intents;
 using Newtonsoft.Json.Linq;
 using System.Collections.Concurrent;
-using DescriptionAttribute = Json.Schema.Generation.DescriptionAttribute;
 
 namespace AiCoreApi.Common.Monitoring;
 
@@ -14,6 +13,7 @@ public class MonitoringConfig
     private DateTime _nextRefresh = DateTime.MinValue;
     private ConcurrentDictionary<string, string> _logLevelConfigValues = new();
     private ConcurrentDictionary<string, string> _openTelemetryConfigValues = new();
+    private ConcurrentDictionary<string, string> _loggingConfigValues = new();
     private readonly ISettingsProcessor _settingsProcessor;
     private const int RefreshTimeSec = 15;
     private readonly object _lock = new();
@@ -34,6 +34,7 @@ public class MonitoringConfig
             {
                 _openTelemetryConfigValues = new ConcurrentDictionary<string, string>(_settingsProcessor.Get(SettingType.OpenTelemetry));
                 _logLevelConfigValues = new ConcurrentDictionary<string, string>(_settingsProcessor.Get(SettingType.LogLevel));
+                _loggingConfigValues = new ConcurrentDictionary<string, string>(_settingsProcessor.Get(SettingType.Logging));
 
                 _nextRefresh = DateTime.Now.AddSeconds(RefreshTimeSec);
             }
@@ -41,8 +42,8 @@ public class MonitoringConfig
     }
 
 
-    private T GetValue<T>(string key) => GetValue(key, default(T));
-    private T GetValue<T>(string key, T defaultValue)
+    private T GetOtelValue<T>(string key) => GetOtelValue(key, default(T));
+    private T GetOtelValue<T>(string key, T defaultValue)
     {
         if (DateTime.Now > _nextRefresh)
             Reset();
@@ -62,7 +63,29 @@ public class MonitoringConfig
         return default;
     }
 
-    private Dictionary<string, LogLevel> GetLogLevelValue()
+
+    private T GetLoggingValue<T>(string key) => GetLoggingValue(key, default(T));
+    private T GetLoggingValue<T>(string key, T defaultValue)
+    {
+        if (DateTime.Now > _nextRefresh)
+            Reset();
+
+        if (!_loggingConfigValues.TryGetValue(key, out var value))
+        {
+            value = Environment.GetEnvironmentVariable($"{MONITORING_SETTINGS_PREFIX}_{key}".ToUpper());
+        }
+        if (value != null)
+            return (T)Convert.ChangeType(value, typeof(T));
+
+        var val = JObject.Parse(_appSettings).SelectToken($"{MONITORING_SETTINGS_PREFIX}{key}");
+        if (val != null)
+            return val.ToObject<T>()!;
+        if (defaultValue != null)
+            return defaultValue;
+        return default;
+    }
+
+    private Dictionary<string, LogLevel> GetLogLevelsValue()
     {
         if (DateTime.Now > _nextRefresh)
             Reset();
@@ -71,68 +94,120 @@ public class MonitoringConfig
             kv => Enum.TryParse<LogLevel>(kv.Value, out var result) ? result : Microsoft.Extensions.Logging.LogLevel.None);
     }
 
+    [MonitoringCategory(MonitoringCategoryAttribute.ConfigCategoryEnum.Common)]
+    [DataType(DataTypeAttribute.ConfigDataTypeEnum.Boolean)]
+    [Description("OpenTelemetry")]
+    [Tooltip("Enable OpenTelemetry tracing and metrics.")]
+    public bool EnableOpenTelemetry => GetOtelValue<bool>(nameof(EnableAppInsights), false);
 
     [MonitoringCategory(MonitoringCategoryAttribute.ConfigCategoryEnum.Instrumentation)]
-    [Description("Enable or disable Azure Application Insights for monitoring and telemetry.")]
-    [Tooltip("When enabled, Azure Application Insights collects and analyzes telemetry data to monitor application performance and usage.")]
-    public bool EnableAppInsights => GetValue<bool>(nameof(EnableAppInsights), true);
+    [DataType(DataTypeAttribute.ConfigDataTypeEnum.Boolean)]
+    [Description("Azure Application Insights")]
+    [Tooltip("Send telemetry to Azure Application Insights.")]
+    public bool EnableAppInsights => GetOtelValue<bool>(nameof(EnableAppInsights), false);
 
     [MonitoringCategory(MonitoringCategoryAttribute.ConfigCategoryEnum.Instrumentation)]
-    [Description("Specifies the connection string for Azure Application Insights.")]
-    [Tooltip("Provide the connection string to connect your application to Azure Application Insights for telemetry data collection.")]
-    public string? AppInsightsConnectionString => GetValue<string?>(nameof(AppInsightsConnectionString), "InstrumentationKey=50e7c903-c15a-4b46-b9f5-1919d0688856;IngestionEndpoint=https://eastus-8.in.applicationinsights.azure.com/;LiveEndpoint=https://eastus.livediagnostics.monitor.azure.com/;ApplicationId=087833e8-6d07-4090-bbaa-f633a9239950");
+    [DataType(DataTypeAttribute.ConfigDataTypeEnum.String)]
+    [Description("App Insights Connection String")]
+    [Tooltip("Connection string for Azure Application Insights.")]
+    public string? AppInsightsConnectionString => GetOtelValue<string?>(nameof(AppInsightsConnectionString));
 
     [MonitoringCategory(MonitoringCategoryAttribute.ConfigCategoryEnum.Instrumentation)]
-    [Description("Enable or disable PostgreSQL instrumentation for tracing and metrics.")]
-    [Tooltip("When enabled, collects traces and metrics for PostgreSQL database interactions.")]
-    public bool EnableNpgsqlInstrumentation => GetValue<bool>(nameof(EnableNpgsqlInstrumentation), false);
+    [DataType(DataTypeAttribute.ConfigDataTypeEnum.Boolean)]
+    [Description("PostgreSQL")]
+    [Tooltip("Trace and monitor PostgreSQL interactions.")]
+    public bool EnableNpgsqlInstrumentation => GetOtelValue<bool>(nameof(EnableNpgsqlInstrumentation), false);
 
     [MonitoringCategory(MonitoringCategoryAttribute.ConfigCategoryEnum.Instrumentation)]
-    [Description("Enable or disable ASP.NET Core instrumentation for tracing and metrics.")]
-    [Tooltip("When enabled, collects traces and metrics for ASP.NET Core applications. Ignored if Azure Application Insights is enabled.")]
-    public bool EnableAspNetCoreInstrumentation => GetValue<bool>(nameof(EnableAspNetCoreInstrumentation), false);
+    [DataType(DataTypeAttribute.ConfigDataTypeEnum.Boolean)]
+    [Description("ASP.NET Core")]
+    [Tooltip("Trace and monitor ASP.NET Core requests.")]
+    public bool EnableAspNetCoreInstrumentation => GetOtelValue<bool>(nameof(EnableAspNetCoreInstrumentation), false);
 
     [MonitoringCategory(MonitoringCategoryAttribute.ConfigCategoryEnum.Instrumentation)]
-    [Description("Enable or disable HTTP Client instrumentation for tracing and metrics.")]
-    [Tooltip("When enabled, collects traces and metrics for HTTP Client requests. Ignored if Azure Application Insights is enabled.")]
-    public bool EnableHttpClientInstrumentation => GetValue<bool>(nameof(EnableHttpClientInstrumentation), false);
+    [DataType(DataTypeAttribute.ConfigDataTypeEnum.Boolean)]
+    [Description("HTTP Client")]
+    [Tooltip("Trace and monitor HTTP Client calls.")]
+    public bool EnableHttpClientInstrumentation => GetOtelValue<bool>(nameof(EnableHttpClientInstrumentation), false);
+
+    [MonitoringCategory(MonitoringCategoryAttribute.ConfigCategoryEnum.Filters)]
+    [DataType(DataTypeAttribute.ConfigDataTypeEnum.String)]
+    [Description("Activity Sources Filter")]
+    [Tooltip("Comma-separated list of activity sources to include.")]
+    public string? ActivitySourcesFilter => GetOtelValue<string?>(nameof(ActivitySourcesFilter));
+
+    [MonitoringCategory(MonitoringCategoryAttribute.ConfigCategoryEnum.Filters)]
+    [DataType(DataTypeAttribute.ConfigDataTypeEnum.String)]
+    [Description("Metrics Filter")]
+    [Tooltip("Comma-separated list of metrics to include.")]
+    public string? MetricsFilter => GetOtelValue<string?>(nameof(MetricsFilter));
+
+    [MonitoringCategory(MonitoringCategoryAttribute.ConfigCategoryEnum.Exporters)]
+    [DataType(DataTypeAttribute.ConfigDataTypeEnum.Boolean)]
+    [Description("OTLP Exporter")]
+    [Tooltip("Export telemetry via OpenTelemetry Protocol.")]
+    public bool EnableOtlpExporter => GetOtelValue<bool>(nameof(EnableOtlpExporter), false);
+
+    [MonitoringCategory(MonitoringCategoryAttribute.ConfigCategoryEnum.Exporters)]
+    [DataType(DataTypeAttribute.ConfigDataTypeEnum.Boolean)]
+    [Description("Console Exporter")]
+    [Tooltip("Write telemetry to the console.")]
+    public bool EnableConsoleExporter => GetOtelValue<bool>(nameof(EnableConsoleExporter), false);
+
+    [MonitoringCategory(MonitoringCategoryAttribute.ConfigCategoryEnum.Exporters)]
+    [DataType(DataTypeAttribute.ConfigDataTypeEnum.Boolean)]
+    [Description("Prometheus Exporter")]
+    [Tooltip("Expose metrics in Prometheus format.")]
+    public bool EnablePrometheusExporter => GetOtelValue<bool>(nameof(EnablePrometheusExporter), false);
+
+
+    [MonitoringCategory(MonitoringCategoryAttribute.ConfigCategoryEnum.Logging)]
+    [DataType(DataTypeAttribute.ConfigDataTypeEnum.String)]
+    [Description("Console Log Level")]
+    [Tooltip("Set minimum log level for console output.")]
+    public string LogLevelConsole => GetLoggingValue<string>(nameof(LogLevelConsole), "Information");
+
+    [MonitoringCategory(MonitoringCategoryAttribute.ConfigCategoryEnum.Logging)]
+    [DataType(DataTypeAttribute.ConfigDataTypeEnum.Boolean)]
+    [Description("Log Login/Logout")]
+    [Tooltip("Log user login and logout events.")]
+    public bool LogLoginLogout => GetLoggingValue<bool>("LogLoginLogout", false);
+
+    [MonitoringCategory(MonitoringCategoryAttribute.ConfigCategoryEnum.Logging)]
+    [DataType(DataTypeAttribute.ConfigDataTypeEnum.Boolean)]
+    [Description("Log Access Token Checks")]
+    [Tooltip("Log access token validation events.")]
+    public bool LogAccessTokenCheck => GetLoggingValue<bool>("LogAccessTokenCheck", false);
+
+    [MonitoringCategory(MonitoringCategoryAttribute.ConfigCategoryEnum.Logging)]
+    [DataType(DataTypeAttribute.ConfigDataTypeEnum.Boolean)]
+    [Description("Log Agent Runs")]
+    [Tooltip("Log Agent execution events.")]
+    public bool LogAgentRun => GetLoggingValue<bool>("LogAgentRun", false);
+
+    [MonitoringCategory(MonitoringCategoryAttribute.ConfigCategoryEnum.Logging)]
+    [DataType(DataTypeAttribute.ConfigDataTypeEnum.Boolean)]
+    [Description("Log Agent Results")]
+    [Tooltip("Log Agent result outputs.")]
+    public bool LogAgentResult => GetLoggingValue<bool>("LogAgentResult", false);
+
+    [MonitoringCategory(MonitoringCategoryAttribute.ConfigCategoryEnum.Logging)]
+    [DataType(DataTypeAttribute.ConfigDataTypeEnum.Boolean)]
+    [Description("Log Agent PII")]
+    [Tooltip("Log Agent input/output with PII data.")]
+    public bool LogAgentPii => GetLoggingValue<bool>("LogAgentPii", false);
+
+    [MonitoringCategory(MonitoringCategoryAttribute.ConfigCategoryEnum.Logging)]
+    [DataType(DataTypeAttribute.ConfigDataTypeEnum.Boolean)]
+    [Description("Log NuGet Loads")]
+    [Tooltip("Log NuGet package load events.")]
+    public bool LogNugetPackageLoad => GetLoggingValue<bool>("LogNugetPackageLoad", false);
+
 
     [MonitoringCategory(MonitoringCategoryAttribute.ConfigCategoryEnum.LogLevels)]
-    [Description("Specifies the log levels for different components.")]
-    [Tooltip("Define the logging levels (e.g., Debug, Information, Warning, Error, Critical) for various components in the application.")]
-    public Dictionary<string, LogLevel> LogLevel => GetLogLevelValue();
-
-    [MonitoringCategory(MonitoringCategoryAttribute.ConfigCategoryEnum.Filters)]
-    [Description("Log Level Threshold for Standard Output")]
-    [Tooltip("Log Level is used to specify the level of logging that the system should use. The log level determines the amount of information that is logged by the system. The available log levels are: Debug, Information, Warning, Error, and Critical.")]
-    public string LogLevelConsole => GetValue<string>(nameof(LogLevelConsole), "Information");
-
-
-    [MonitoringCategory(MonitoringCategoryAttribute.ConfigCategoryEnum.Filters)]
-    [Description("Filter activity sources for tracing.")]
-    [Tooltip("Specify a comma-separated list of activity sources to include into tracing.")]
-    public string? ActivitySourcesFilter => GetValue<string?>(nameof(ActivitySourcesFilter), "AiCoreApi.SemanticKernel.Agents.*");
-
-    [MonitoringCategory(MonitoringCategoryAttribute.ConfigCategoryEnum.Filters)]
-    [Description("Filter metrics for monitoring.")]
-    [Tooltip("Specify a comma-separated list of metrics to include or exclude from monitoring.")]
-    public string? MetricsFilter => GetValue<string?>(nameof(MetricsFilter), "aicore.*");
-
-    [MonitoringCategory(MonitoringCategoryAttribute.ConfigCategoryEnum.Exporters)]
-    [Description("Enable or disable the OpenTelemetry Protocol (OTLP) exporter.")]
-    [Tooltip("When enabled, exports telemetry data using the OpenTelemetry Protocol (OTLP).")]
-    public bool EnableOtlpExporter => GetValue<bool>(nameof(EnableOtlpExporter), false);
-
-    [MonitoringCategory(MonitoringCategoryAttribute.ConfigCategoryEnum.Exporters)]
-    [Description("Enable or disable the Console exporter.")]
-    [Tooltip("When enabled, exports telemetry data to the console for debugging and analysis.")]
-    public bool EnableConsoleExporter => GetValue<bool>(nameof(EnableConsoleExporter), false);
-
-    [MonitoringCategory(MonitoringCategoryAttribute.ConfigCategoryEnum.Exporters)]
-    [Description("Enable or disable the Prometheus exporter.")]
-    [Tooltip("When enabled, exports telemetry data in a format compatible with Prometheus for monitoring.")]
-    public bool EnablePrometheusExporter => GetValue<bool>(nameof(EnablePrometheusExporter), false);
-
+    [Description("Component Log Levels")]
+    [Tooltip("Set log levels for individual components.")]
+    public Dictionary<string, LogLevel> LogLevels => GetLogLevelsValue();
 }
 
 
@@ -154,15 +229,17 @@ public class MonitoringCategoryAttribute : Attribute, IAttributeHandler
 
     public enum ConfigCategoryEnum
     {
-        [Description("Common")]
+        [System.ComponentModel.Description("Common")]
         Common,
-        [Description("Instrumentation")]
+        [System.ComponentModel.Description("Instrumentation")]
         Instrumentation,
-        [Description("Filters")]
+        [System.ComponentModel.Description("Filters")]
         Filters,
-        [Description("Exporters")]
+        [System.ComponentModel.Description("Exporters")]
         Exporters,
-        [Description("Log Levels")]
-        LogLevels
+        [System.ComponentModel.Description("Log Levels")]
+        LogLevels,
+        [System.ComponentModel.Description("Logging")]
+        Logging
     }
 }

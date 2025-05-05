@@ -22,6 +22,7 @@ namespace AiCoreApi.Models.DbModels
         Version = 2,
         EntraCredentials = 3,
         OpenTelemetry = 4,
-        LogLevel = 5
+        LogLevel = 5,
+        Logging = 6,
     }
 }

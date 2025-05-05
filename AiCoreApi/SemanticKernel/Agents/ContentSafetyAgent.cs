@@ -5,6 +5,7 @@ using AiCoreApi.Common;
 using AiCoreApi.Common.Extensions;
 using AiCoreApi.Data.Processors;
 using System.Web;
+using AiCoreApi.Common.Monitoring;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
@@ -32,8 +33,8 @@ namespace AiCoreApi.SemanticKernel.Agents
             IHttpClientFactory httpClientFactory, 
             ResponseAccessor responseAccessor,
             RequestAccessor requestAccessor,
-            ExtendedConfig extendedConfig,
-            ILogger<ContentSafetyAgent> logger) : base(responseAccessor, requestAccessor, extendedConfig, logger)
+            MonitoringConfig monitoringConfig,
+            ILogger<ContentSafetyAgent> logger) : base(responseAccessor, requestAccessor, monitoringConfig, logger)
         {
             _connectionProcessor = connectionProcessor;
             _httpClientFactory = httpClientFactory;

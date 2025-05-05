@@ -10,6 +10,7 @@ using Azure;
 using Azure.AI.DocumentIntelligence;
 using Newtonsoft.Json;
 using Azure.Core;
+using AiCoreApi.Common.Monitoring;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
@@ -73,8 +74,8 @@ namespace AiCoreApi.SemanticKernel.Agents
             ResponseAccessor responseAccessor,
             IHttpClientFactory httpClientFactory,
             IConnectionProcessor connectionProcessor,
-            ExtendedConfig extendedConfig,
-            ILogger<OcrAgent> logger) : base(responseAccessor, requestAccessor, extendedConfig, logger)
+            MonitoringConfig monitoringConfig,
+            ILogger<OcrAgent> logger) : base(responseAccessor, requestAccessor, monitoringConfig, logger)
         {
             _entraTokenProvider = entraTokenProvider;
             _requestAccessor = requestAccessor;

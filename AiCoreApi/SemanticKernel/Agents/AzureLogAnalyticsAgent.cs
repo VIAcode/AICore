@@ -6,6 +6,7 @@ using AiCoreApi.Common;
 using AiCoreApi.Data.Processors;
 using Azure.Monitor.Query;
 using System.Text.RegularExpressions;
+using AiCoreApi.Common.Monitoring;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
@@ -35,8 +36,8 @@ namespace AiCoreApi.SemanticKernel.Agents
             IEntraTokenProvider entraTokenProvider,
             RequestAccessor requestAccessor,
             ResponseAccessor responseAccessor,
-            ExtendedConfig extendedConfig,
-            ILogger<SqlServerAgent> logger) : base(responseAccessor, requestAccessor, extendedConfig, logger)
+            MonitoringConfig monitoringConfig,
+            ILogger<SqlServerAgent> logger) : base(responseAccessor, requestAccessor, monitoringConfig, logger)
         {
             _connectionProcessor = connectionProcessor;
             _entraTokenProvider = entraTokenProvider;

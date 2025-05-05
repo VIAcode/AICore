@@ -5,6 +5,7 @@ using AiCoreApi.Common;
 using System.Web;
 using AiCoreApi.Data.Processors;
 using AiCoreApi.Common.Extensions;
+using AiCoreApi.Common.Monitoring;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
@@ -85,10 +86,10 @@ namespace AiCoreApi.SemanticKernel.Agents
         public StabilityAiImagesAgent(
             IConnectionProcessor connectionProcessor,
             ILogger<ApiCallAgent> logger,
-            ExtendedConfig extendedConfig,
+            MonitoringConfig monitoringConfig,
             IHttpClientFactory httpClientFactory,
             ResponseAccessor responseAccessor,
-            RequestAccessor requestAccessor) : base(responseAccessor, requestAccessor, extendedConfig, logger)
+            RequestAccessor requestAccessor) : base(responseAccessor, requestAccessor, monitoringConfig, logger)
         {
             _connectionProcessor = connectionProcessor;
             _httpClientFactory = httpClientFactory;

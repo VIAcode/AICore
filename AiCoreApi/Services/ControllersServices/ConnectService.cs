@@ -10,6 +10,7 @@ using System.Text.RegularExpressions;
 using AiCoreApi.Models.DbModels;
 using AiCoreApi.Common.Extensions;
 using AiCoreApi.Common.SsoSources;
+using AiCoreApi.Common.Monitoring;
 
 namespace AiCoreApi.Services.ControllersServices
 {
@@ -24,6 +25,7 @@ namespace AiCoreApi.Services.ControllersServices
         private readonly IRbacRoleSyncProcessor _rbacRoleSyncProcessor;
         private readonly ILogger<ConnectService> _logger;
         private readonly ExtendedConfig _config;
+        private readonly MonitoringConfig _monitoringConfig;
 
         public ConnectService(
             ILoginProcessor loginProcessor,
@@ -34,7 +36,8 @@ namespace AiCoreApi.Services.ControllersServices
             IRbacGroupSyncProcessor rbacGroupSyncProcessor,
             IRbacRoleSyncProcessor rbacRoleSyncProcessor,
             ILogger<ConnectService> logger,
-            ExtendedConfig config)
+            ExtendedConfig config,
+            MonitoringConfig monitoringConfig)
         {
             _loginProcessor = loginProcessor;
             _loginHistoryProcessor = loginHistoryProcessor;
@@ -45,6 +48,7 @@ namespace AiCoreApi.Services.ControllersServices
             _rbacRoleSyncProcessor = rbacRoleSyncProcessor;
             _logger = logger;
             _config = config;
+            _monitoringConfig = monitoringConfig;
         }
 
         public async Task<string?> GetCodeByCredentials(string loginName, string password, bool isOfflineMode, string codeChallenge, bool isPermanentToken)
@@ -328,7 +332,7 @@ namespace AiCoreApi.Services.ControllersServices
             var accessToken = CreateAccessToken(login, now);
             var idToken = CreateIdToken(login, now, loginHistory, accessToken);
 
-            if (_config.LogLoginLogout)
+            if (_monitoringConfig.LogLoginLogout)
                 _logger.LogCritical("[{DateTime}][User Login] Login: {Login}, Session id: {sessionId}", DateTime.UtcNow.ToString("g"), loginHistory.Login, loginHistory.LoginHistoryId);
 
             return new TokenModel
@@ -387,7 +391,7 @@ namespace AiCoreApi.Services.ControllersServices
                 return null;
             var login = await _loginProcessor.GetByLogin(loginName, loginType);
 
-            if (_config.LogAccessTokenCheck)
+            if (_monitoringConfig.LogAccessTokenCheck)
                 _logger.LogCritical("[{DateTime}]Access Token Check] Login: {Login}", DateTime.UtcNow.ToString("g"), loginName);
             return login;
         }
@@ -427,7 +431,7 @@ namespace AiCoreApi.Services.ControllersServices
                 return;
             loginHistory.ValidUntilTime = DateTime.UtcNow;
             _loginHistoryProcessor.Update(loginHistory);
-            if(_config.LogLoginLogout)
+            if(_monitoringConfig.LogLoginLogout)
                 _logger.LogCritical("[{DateTime}][User Logout] Login: {Login}, Session id: {sessionId}", DateTime.UtcNow.ToString("g"), loginHistory.Login, sessionId);
         }
     }

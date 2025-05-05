@@ -6,6 +6,7 @@ using AiCoreApi.Common;
 using AiCoreApi.Data.Processors;
 using AiCoreApi.Models.DbModels;
 using System.Web;
+using AiCoreApi.Common.Monitoring;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
@@ -36,8 +37,8 @@ namespace AiCoreApi.SemanticKernel.Agents
             RequestAccessor requestAccessor,
             ResponseAccessor responseAccessor,
             IHttpClientFactory httpClientFactory,
-            ExtendedConfig extendedConfig,
-            ILogger<AudioPromptAgent> logger) : base(responseAccessor, requestAccessor, extendedConfig, logger)
+            MonitoringConfig monitoringConfig,
+            ILogger<AudioPromptAgent> logger) : base(responseAccessor, requestAccessor, monitoringConfig, logger)
         {
             _connectionProcessor = connectionProcessor;
             _requestAccessor = requestAccessor;

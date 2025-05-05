@@ -16,24 +16,27 @@ public static class ServiceCollectionExtensions
     {
         ConfigureLogs(services, monitoringConfig);
 
-        SetTracesFilter(services, monitoringConfig);
-
-        var builder = services.AddOpenTelemetry();
-        if (monitoringConfig.EnableAppInsights)
+        if (monitoringConfig.EnableOpenTelemetry)
         {
-            builder.UseAzureMonitor(config =>
+            SetTracesFilter(services, monitoringConfig);
+
+            var builder = services.AddOpenTelemetry();
+            if (monitoringConfig.EnableAppInsights)
             {
-                config.ConnectionString = monitoringConfig.AppInsightsConnectionString;
-            }); // includes AddAspNetCoreInstrumentation, AddHttpClientInstrumentation, AddHttpClientAndServerMetrics, AddAzureMonitorTraceExporter,  AddAzureMonitorMetricExporter
+                builder.UseAzureMonitor(config =>
+                {
+                    config.ConnectionString = monitoringConfig.AppInsightsConnectionString;
+                }); // includes AddAspNetCoreInstrumentation, AddHttpClientInstrumentation, AddHttpClientAndServerMetrics, AddAzureMonitorTraceExporter,  AddAzureMonitorMetricExporter
+            }
+
+            SetInstrumentation(builder, monitoringConfig);
+
+            SetMetrics(builder, monitoringConfig);
+
+            SetMetricsFilter(builder, monitoringConfig);
+
+            SetExporters(builder, monitoringConfig);
         }
-
-        SetInstrumentation(builder, monitoringConfig);
-
-        SetMetrics(builder, monitoringConfig);
-
-        SetMetricsFilter(builder, monitoringConfig);
-
-        SetExporters(builder, monitoringConfig);
     }
 
     private static void SetTracesFilter(IServiceCollection services, MonitoringConfig monitoringConfig)
@@ -49,17 +52,21 @@ public static class ServiceCollectionExtensions
         services.AddLogging(loggingBuilder =>
         {
             loggingBuilder.ClearProviders();
-            loggingBuilder.AddOpenTelemetry();
 
-            if (monitoringConfig.LogLevel != null)
+            if (monitoringConfig.EnableOpenTelemetry)
             {
-                foreach (var setting in monitoringConfig.LogLevel)
+                loggingBuilder.AddOpenTelemetry();
+            }
+
+            if (monitoringConfig.LogLevels != null)
+            {
+                foreach (var setting in monitoringConfig.LogLevels)
                 {
                     loggingBuilder.AddFilter(setting.Key, setting.Value);
                 }
             }
 
-            loggingBuilder.AddConsole(opt => opt.LogToStandardErrorThreshold = Enum.Parse<LogLevel>(monitoringConfig.LogLevelConsole));           
+            loggingBuilder.AddConsole(opt => opt.LogToStandardErrorThreshold = Enum.Parse<LogLevel>(monitoringConfig.LogLevelConsole));
         });
     }
 

@@ -3,6 +3,7 @@ using Microsoft.SemanticKernel;
 using AiCoreApi.Models.DbModels;
 using AiCoreApi.Common;
 using System.Web;
+using AiCoreApi.Common.Monitoring;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
@@ -14,8 +15,8 @@ namespace AiCoreApi.SemanticKernel.Agents
         public ContainsAgent(
             RequestAccessor requestAccessor,
             ResponseAccessor responseAccessor,
-            ExtendedConfig extendedConfig,
-            ILogger<ContainsAgent> logger) : base(responseAccessor, requestAccessor, extendedConfig, logger)
+            MonitoringConfig monitoringConfig,
+            ILogger<ContainsAgent> logger) : base(responseAccessor, requestAccessor, monitoringConfig, logger)
         {
             _responseAccessor = responseAccessor;
         }

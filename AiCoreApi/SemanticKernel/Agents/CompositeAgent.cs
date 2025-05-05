@@ -6,6 +6,7 @@ using AiCoreApi.Data.Processors;
 using Microsoft.SemanticKernel.Planning.Handlebars;
 using Microsoft.SemanticKernel.Connectors.OpenAI;
 using System.Web;
+using AiCoreApi.Common.Monitoring;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
@@ -29,11 +30,12 @@ namespace AiCoreApi.SemanticKernel.Agents
         public CompositeAgent(
             IConnectionProcessor connectionProcessor,
             ExtendedConfig extendedConfig,
+            MonitoringConfig monitoringConfig,
             ResponseAccessor responseAccessor,
             RequestAccessor requestAccessor,
             IPlannerHelpers plannerHelpers,
-            ILogger<CompositeAgent> logger,
-            ISemanticKernelProvider semanticKernelProvider) : base(responseAccessor, requestAccessor, extendedConfig, logger)
+        ILogger<CompositeAgent> logger,
+            ISemanticKernelProvider semanticKernelProvider) : base(responseAccessor, requestAccessor, monitoringConfig, logger)
         {
             _connectionProcessor = connectionProcessor;
             _extendedConfig = extendedConfig;

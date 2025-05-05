@@ -102,11 +102,12 @@ Below is the full list of supported OpenTelemetry-related settings.
 
 | Setting Name | Environment Variable | appsettings.json Key | Description | Example Value |
 |--------------|----------------------|------------------------|-------------|----------------|
-| `EnableAppInsights` | `MONITORING_ENABLEAPPINSIGHTS` | `Monitoring.EnableAppInsights` | Enable or disable Azure Application Insights. | `true` |
+| `EnableOpenTelemetry` | `MONITORING_ENABLEOPENTELEMETRY` | `Monitoring.EnableOpenTelemetry` | Enable OpenTelemetry tracing and metrics. | `true` |
+| `EnableAppInsights` | `MONITORING_ENABLEAPPINSIGHTS` | `Monitoring.EnableAppInsights` | Send telemetry to Azure Application Insights. | `true` |
 | `AppInsightsConnectionString` | `MONITORING_APPINSIGHTSCONNECTIONSTRING` | `Monitoring.AppInsightsConnectionString` | Connection string for Azure Application Insights. | `"InstrumentationKey=...;IngestionEndpoint=...;ApplicationId=..."` |
-| `EnableNpgsqlInstrumentation` | `MONITORING_ENABLENPGSQLINSTRUMENTATION` | `Monitoring.EnableNpgsqlInstrumentation` | Enables instrumentation for PostgreSQL. | `true` |
-| `EnableAspNetCoreInstrumentation` | `MONITORING_ENABLEASPNETCOREINSTRUMENTATION` | `Monitoring.EnableAspNetCoreInstrumentation` | Enables instrumentation for ASP.NET Core. Ignored if App Insights is enabled. | `true` |
-| `EnableHttpClientInstrumentation` | `MONITORING_ENABLEHTTPCLIENTINSTRUMENTATION` | `Monitoring.EnableHttpClientInstrumentation` | Enables instrumentation for HTTP client calls. Ignored if App Insights is enabled. | `true` |
+| `EnableNpgsqlInstrumentation` | `MONITORING_ENABLENPGSQLINSTRUMENTATION` | `Monitoring.EnableNpgsqlInstrumentation` | Trace and monitor PostgreSQL interactions. | `true` |
+| `EnableAspNetCoreInstrumentation` | `MONITORING_ENABLEASPNETCOREINSTRUMENTATION` | `Monitoring.EnableAspNetCoreInstrumentation` | Trace and monitor ASP.NET Core requests. Ignored if App Insights is enabled. | `true` |
+| `EnableHttpClientInstrumentation` | `MONITORING_ENABLEHTTPCLIENTINSTRUMENTATION` | `Monitoring.EnableHttpClientInstrumentation` | Trace and monitor HTTP Client calls. Ignored if App Insights is enabled. | `true` |
 
 ---
 

@@ -11,6 +11,7 @@ using Azure.AI.DocumentIntelligence;
 using Azure.Storage.Blobs;
 using System.Text.RegularExpressions;
 using AiCoreApi.Common.Extensions;
+using AiCoreApi.Common.Monitoring;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
@@ -45,8 +46,8 @@ namespace AiCoreApi.SemanticKernel.Agents
             RequestAccessor requestAccessor,
             ResponseAccessor responseAccessor,
             IConnectionProcessor connectionProcessor,
-            ExtendedConfig extendedConfig, 
-            ILogger<OcrBuildClassifierAgent> logger) : base(responseAccessor, requestAccessor, extendedConfig, logger)
+            MonitoringConfig monitoringConfig, 
+            ILogger<OcrBuildClassifierAgent> logger) : base(responseAccessor, requestAccessor, monitoringConfig, logger)
         {
             _entraTokenProvider = entraTokenProvider;
             _requestAccessor = requestAccessor;

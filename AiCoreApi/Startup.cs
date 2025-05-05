@@ -232,7 +232,7 @@ public class Startup
         app.UseCors("CorsPolicy");
 
         var monitoringConfig = app.ApplicationServices.GetRequiredService<MonitoringConfig>();
-        if (monitoringConfig.EnablePrometheusExporter)
+        if (monitoringConfig.EnableOpenTelemetry && monitoringConfig.EnablePrometheusExporter)
         {
             app.UseOpenTelemetryPrometheusScrapingEndpoint();
         }

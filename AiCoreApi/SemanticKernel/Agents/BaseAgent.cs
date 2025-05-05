@@ -3,6 +3,7 @@ using Microsoft.SemanticKernel;
 using AiCoreApi.Models.DbModels;
 using AiCoreApi.Common;
 using System.Text;
+using AiCoreApi.Common.Monitoring;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
@@ -10,19 +11,19 @@ namespace AiCoreApi.SemanticKernel.Agents
     {
         private readonly ResponseAccessor _responseAccessor;
         private readonly RequestAccessor _requestAccessor;
-        private readonly ExtendedConfig _extendedConfig;
+        private readonly MonitoringConfig _monitoringConfig;
         private readonly ILogger<BaseAgent> _logger;
 
         protected BaseAgent(
             ResponseAccessor responseAccessor,
             RequestAccessor requestAccessor,
-            ExtendedConfig extendedConfig,
+            MonitoringConfig monitoringConfig,
             ILogger<BaseAgent> logger)
         {
             _responseAccessor = responseAccessor;
             _requestAccessor = requestAccessor;
-            _extendedConfig = extendedConfig;
             _logger = logger;
+            _monitoringConfig = monitoringConfig;
         }
 
         private static class AgentContentParameters
@@ -151,18 +152,18 @@ namespace AiCoreApi.SemanticKernel.Agents
                     return noAccessText;
                 }
             }
-            if (_extendedConfig.LogAgentRun)
+            if (_monitoringConfig.LogAgentRun)
             {
-                var parametersString = _extendedConfig.LogAgentPii
+                var parametersString = _monitoringConfig.LogAgentPii
                     ? string.Join(", ", parameters.Select(p => $"{p.Key}: {p.Value}"))
                     : "[PII]";
                 _logger.LogCritical("[{DateTime}][Run] {Login}, Action:{Action}, Agent: {Agent}, Parameters: {url}", DateTime.UtcNow.ToString("g"), _requestAccessor.Login, "ApiCall", agent.Name, parametersString);
             }
             var result = await DoCall(agent, parameters);
 
-            if (_extendedConfig.LogAgentResult)
+            if (_monitoringConfig.LogAgentResult)
                 _logger.LogCritical("[{DateTime}][Result] {Login}, Action:{Action}, Agent: {Agent}, Result: {url}", DateTime.UtcNow.ToString("g"), _requestAccessor.Login, "ApiCall", agent.Name,
-                    _extendedConfig.LogAgentPii ? result : "[PII]");
+                    _monitoringConfig.LogAgentPii ? result : "[PII]");
             return result;
         }
 
