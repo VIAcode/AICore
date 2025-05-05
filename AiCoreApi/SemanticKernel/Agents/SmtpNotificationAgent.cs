@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Mail;
 using System.Web;
 using AiCoreApi.Common;
+using AiCoreApi.Common.Monitoring;
 using AiCoreApi.Data.Processors;
 using AiCoreApi.Models.DbModels;
 using Microsoft.SemanticKernel;
@@ -29,9 +30,9 @@ namespace AiCoreApi.SemanticKernel.Agents
             IConnectionProcessor connectionProcessor,
             RequestAccessor requestAccessor,
             ResponseAccessor responseAccessor,
-            ExtendedConfig extendedConfig,
+            MonitoringConfig monitoringConfig,
             ILogger<SmtpNotificationAgent> logger)
-            : base(responseAccessor, requestAccessor, extendedConfig, logger)
+            : base(responseAccessor, requestAccessor, monitoringConfig, logger)
         {
             _connectionProcessor = connectionProcessor;
             _requestAccessor = requestAccessor;
