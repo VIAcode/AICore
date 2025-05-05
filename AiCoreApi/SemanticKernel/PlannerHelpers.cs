@@ -57,6 +57,7 @@ namespace AiCoreApi.SemanticKernel
         private readonly IAzureLogAnalyticsAgent _azureLogAnalyticsAgent;
         private readonly IGoogleSearchApiAgent _googleSearchApiAgent;
         private readonly ISmtpNotificationAgent _smtpNotificationAgent;
+        private readonly IGraphTeamsNotificationAgent _teamsNotificationAgent;
 
         public PlannerHelpers(
             RequestAccessor requestAccessor,
@@ -92,8 +93,8 @@ namespace AiCoreApi.SemanticKernel
             IOcrBuildClassifierAgent ocrBuildClassifierAgent,
             IAzureLogAnalyticsAgent azureLogAnalyticsAgent,
             IGoogleSearchApiAgent googleSearchApiAgent,
-            ISmtpNotificationAgent smtpNotificationAgent
-            )
+            ISmtpNotificationAgent smtpNotificationAgent,
+            IGraphTeamsNotificationAgent teamsNotificationAgent)
         {
             _requestAccessor = requestAccessor;
             _extendedConfig = extendedConfig;
@@ -129,6 +130,7 @@ namespace AiCoreApi.SemanticKernel
             _azureLogAnalyticsAgent = azureLogAnalyticsAgent;
             _googleSearchApiAgent = googleSearchApiAgent;
             _smtpNotificationAgent = smtpNotificationAgent;
+            _teamsNotificationAgent = teamsNotificationAgent;
         }
 
         private List<AgentModel>? _agentsList;
@@ -271,6 +273,7 @@ namespace AiCoreApi.SemanticKernel
                 { AgentType.AzureLogAnalytics, _azureLogAnalyticsAgent },
                 { AgentType.GoogleSearchApi, _googleSearchApiAgent },
                 { AgentType.Smtp, _smtpNotificationAgent },
+                { AgentType.GraphTeamsNotification, _teamsNotificationAgent }
             };
             return agentMapping;
         }

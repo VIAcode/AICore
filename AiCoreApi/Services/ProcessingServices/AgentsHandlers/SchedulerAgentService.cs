@@ -20,14 +20,11 @@ namespace AiCoreApi.Services.ProcessingServices.AgentsHandlers
             _agentsProcessor = agentsProcessor;
         }
 
-        public async Task ProcessTask()
+        public async Task ProcessTask(List<AgentModel> agents)
         {
-            var agents = await _agentsProcessor.List(null);
-            var schedulerAgents = agents.Where(agent => agent.Type == AgentType.Scheduler).ToList();
+            var schedulerAgents = agents.Where(agent => agent.Type == AgentType.Scheduler && agent.IsEnabled).ToList();
             foreach (var agent in schedulerAgents)
             {
-                if(!agent.IsEnabled)
-                    continue;
                 var cronScheduleStartTime = agent.Content["schedule"].Value;
                 var runAs = Convert.ToInt32(agent.Content["runAs"].Value);
                 var agentToCallName = agent.Content["compositeAgentName"].Value;
@@ -53,6 +50,6 @@ namespace AiCoreApi.Services.ProcessingServices.AgentsHandlers
 
     public interface ISchedulerAgentService
     {
-        public Task ProcessTask();
+        public Task ProcessTask(List<AgentModel> agents);
     }
 }

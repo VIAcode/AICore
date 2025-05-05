@@ -72,5 +72,7 @@ namespace AiCoreApi.Models.ViewModels
         Smtp = 37,
         Imap = 38,
         GraphMail = 39,
+        GraphTeamsNotification = 40,
+        GraphTeamsListener = 41,
     }
 }
