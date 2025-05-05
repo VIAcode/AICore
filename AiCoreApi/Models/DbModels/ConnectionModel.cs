@@ -45,6 +45,9 @@ namespace AiCoreApi.Models.DbModels
         StabilityAi = 23,
         AzureLogAnalytics = 24,
         GoogleSearchApi = 25,
+        Smtp = 26,
+        Imap = 27,
+        GraphApi = 28,
     }
 
     public static class ConnectionTypeExtensions

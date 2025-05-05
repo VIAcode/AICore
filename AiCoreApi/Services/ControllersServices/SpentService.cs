@@ -3,14 +3,14 @@ using AiCoreApi.Common.Extensions;
 using AiCoreApi.Data.Processors;
 using AiCoreApi.Models.DbModels;
 using AiCoreApi.Models.ViewModels;
-using AutoMapper;
 using Microsoft.Extensions.Caching.Distributed;
 
 namespace AiCoreApi.Services.ControllersServices
 {
     public class SpentService : ISpentService
     {
-        private readonly IMapper _mapper;
+        private const int DaysToShow = 30;
+
         private readonly ISpentProcessor _spentProcessor;
         private readonly ILoginProcessor _loginProcessor;
         private readonly IConnectionProcessor _connectionProcessor;
@@ -19,7 +19,6 @@ namespace AiCoreApi.Services.ControllersServices
         private readonly IDistributedCache _cache;
 
         public SpentService(
-            IMapper mapper,
             ISpentProcessor spentProcessor,
             ILoginProcessor loginProcessor,
             IConnectionProcessor connectionProcessor,
@@ -27,7 +26,6 @@ namespace AiCoreApi.Services.ControllersServices
             RequestAccessor requestAccessor,
             IDistributedCache cache)
         {
-            _mapper = mapper;
             _spentProcessor = spentProcessor;
             _loginProcessor = loginProcessor;
             _connectionProcessor = connectionProcessor;
@@ -39,35 +37,46 @@ namespace AiCoreApi.Services.ControllersServices
         public async Task<List<SpentItemViewModel>> List()
         {
             var logins = await _loginProcessor.List();
-            var llmConnections = (await _connectionProcessor.List(_requestAccessor.WorkspaceId))
-                .Where(x => x.Type.IsLlmConnection())
+            var connectionList = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
+
+            var llmConnections = connectionList
+                .Where(c => c.Type.IsLlmConnection())
                 .ToDictionary(
-                    key => key.Name, 
-                    value => new
+                    c => c.Name,
+                    c => new
                     {
-                        InputTokenCost = Convert.ToDecimal(value.Content["inputTokenCost"]),
-                        OutputTokenCost = Convert.ToDecimal(value.Content["outputTokenCost"])
+                        InputTokenCost = Convert.ToDecimal(c.Content["inputTokenCost"]),
+                        OutputTokenCost = Convert.ToDecimal(c.Content["outputTokenCost"])
                     });
 
             var lastMonthData = await _spentProcessor.ListLastMonth();
-            var result = lastMonthData.GroupBy(item => item.LoginId)
+
+            var grouped = lastMonthData.GroupBy(item => item.LoginId)
                 .Select(group =>
                 {
                     var login = logins.FirstOrDefault(x => x.LoginId == group.Key);
                     var chatGroup = group.ToList();
-                    var tokensIncoming = chatGroup.Sum(item => item.TokensIncoming);
-                    var tokensOutgoing = chatGroup.Sum(item => item.TokensOutgoing);
+
+                    var tokensIncoming = chatGroup.Sum(x => x.TokensIncoming);
+                    var tokensOutgoing = chatGroup.Sum(x => x.TokensOutgoing);
                     var costDayByDay = new List<decimal>();
-                    var previousDayCost = 0m;
-                    for (var i = 0; i < 30; i++)
+
+                    decimal runningTotal = 0;
+
+                    for (var i = 0; i < DaysToShow; i++)
                     {
-                        var date = DateTime.Now.Date.AddDays(i - 29);
-                        var dayCost = group.Where(x => x.Date == date.Date)
-                            .Sum(item => item.TokensIncoming * llmConnections[item.ModelName].OutputTokenCost + 
-                                                 item.TokensOutgoing * llmConnections[item.ModelName].InputTokenCost) / 1000;
-                        previousDayCost += dayCost;
-                        costDayByDay.Add(previousDayCost);
+                        var date = DateTime.UtcNow.Date.AddDays(i - (DaysToShow - 1));
+                        var dayCost = chatGroup
+                            .Where(x => x.Date.Date == date)
+                            .Sum(x =>
+                                llmConnections.TryGetValue(x.ModelName, out var cost) ?
+                                    (x.TokensIncoming * cost.OutputTokenCost + x.TokensOutgoing * cost.InputTokenCost) : 0
+                            ) / 1000;
+
+                        runningTotal += dayCost;
+                        costDayByDay.Add(runningTotal);
                     }
+
                     return new SpentItemViewModel
                     {
                         LoginId = group.Key,
@@ -75,140 +84,158 @@ namespace AiCoreApi.Services.ControllersServices
                         LoginType = login?.LoginType.ToString(),
                         TokensIncoming = tokensIncoming,
                         TokensOutgoing = tokensOutgoing,
-                        Cost = costDayByDay.Sum(),
+                        Cost = costDayByDay.LastOrDefault(),
                         CostDayByDay = costDayByDay
                     };
                 })
                 .OrderBy(x => x.LoginId)
                 .ToList();
-            result.Insert(0, new SpentItemViewModel
+
+            // Add Total Row
+            var totalDayByDay = new decimal[DaysToShow];
+            foreach (var item in grouped)
+                for (int i = 0; i < DaysToShow; i++)
+                    totalDayByDay[i] += item.CostDayByDay[i];
+
+            grouped.Insert(0, new SpentItemViewModel
             {
                 LoginId = 0,
                 Login = "Total",
                 LoginType = "",
-                TokensIncoming = result.Sum(item => item.TokensIncoming),
-                TokensOutgoing = result.Sum(item => item.TokensOutgoing),
-                Cost = result.Sum(item => item.Cost),
-                CostDayByDay = result.SelectMany(item => item.CostDayByDay).ToList()
+                TokensIncoming = grouped.Sum(x => x.TokensIncoming),
+                TokensOutgoing = grouped.Sum(x => x.TokensOutgoing),
+                Cost = totalDayByDay.LastOrDefault(),
+                CostDayByDay = totalDayByDay.ToList()
             });
-            return result;
+
+            return grouped;
         }
 
         public async Task<List<TokenCostViewModel>> ListTokenCosts()
         {
             var pricesJson = await GetAzurePrices("openai-service");
-            var prices = pricesJson.JsonGet<Dictionary<string, LlmOfferModel>>("offers");
-            var i = 0;
+            var offers = pricesJson.JsonGet<Dictionary<string, LlmOfferModel>>("offers");
             var result = new List<TokenCostViewModel>();
-            foreach (var price in prices)
+            int id = 0;
+
+            foreach (var (key, promptModel) in offers)
             {
-                if (!price.Key.StartsWith("language-models-") || !price.Key.EndsWith("-prompt"))
+                if (!key.StartsWith("language-models-") || !key.EndsWith("-prompt"))
                     continue;
 
-                var modelName = price.Key.Replace("language-models-", string.Empty).Replace("-prompt", string.Empty);
-                var outgoingCost = price.Value.Prices.Perthousandapitransactions.Values.FirstOrDefault()?.Value ?? 0;
-                if (!prices.ContainsKey($"language-models-{modelName}-completion"))
+                var modelName = key.Replace("language-models-", "").Replace("-prompt", "");
+                var outputCost = promptModel.Prices.Perthousandapitransactions.Values.FirstOrDefault()?.Value ?? 0;
+
+                if (!offers.TryGetValue($"language-models-{modelName}-completion", out var completionModel))
                     continue;
-                var incomingModel = prices[$"language-models-{modelName}-completion"];
-                var incomingCost = incomingModel.Prices.Perthousandapitransactions.Values.FirstOrDefault()?.Value ?? 0;
-                var tokenCostModel = new TokenCostViewModel
+
+                var inputCost = completionModel.Prices.Perthousandapitransactions.Values.FirstOrDefault()?.Value ?? 0;
+
+                result.Add(new TokenCostViewModel
                 {
+                    TokenCostId = id++,
                     ModelName = modelName,
                     ModelTitle = modelName,
-                    IsDefault = i == 0,
-                    TokenCostId = i++,
-                    Incoming = incomingCost / 1000,
-                    Outgoing = outgoingCost / 1000
-                };
-                result.Add(tokenCostModel);
+                    IsDefault = id == 1,
+                    Incoming = inputCost / 1000,
+                    Outgoing = outputCost / 1000
+                });
             }
+
             return result;
         }
 
         public async Task<List<ResourcePriceViewModel>> ListAksPrices(string location)
         {
             var pricesJson = await GetAzurePrices("kubernetes-service");
-            var prices = pricesJson.JsonGet<Dictionary<string, AksOfferModel>>("offers");
-            var result = prices
-                .Where(item => item.Key.StartsWith("linux-") && item.Key.EndsWith("-standard"))
-                .Select(item =>
+            var offers = pricesJson.JsonGet<Dictionary<string, AksOfferModel>>("offers");
+
+            return offers
+                .Where(kv => kv.Key.StartsWith("linux-") && kv.Key.EndsWith("-standard"))
+                .Select(kv =>
                 {
-                    var slug = item.Key.Replace("linux-", string.Empty).Replace("-standard", string.Empty);   
-                    var price = item.Value.Prices.Perhour.FirstOrDefault(item => item.Key == location).Value;
-                    if(price == null)
-                        return null;
+                    var slug = kv.Key.Replace("linux-", "").Replace("-standard", "");
+                    var price = kv.Value.Prices.Perhour.GetValueOrDefault(location);
+                    if (price == null) return null;
+
                     return new ResourcePriceViewModel
                     {
-                        ResourceName = $"{slug.ToUpper()}: {item.Value.Cores} Cores, {item.Value.Ram} GB RAM, {item.Value.DiskSize} GB Temporary storage",
-                        Series = item.Value.Series,
+                        ResourceName = $"{slug.ToUpper()}: {kv.Value.Cores} Cores, {kv.Value.Ram} GB RAM, {kv.Value.DiskSize} GB Temp",
+                        Series = kv.Value.Series,
                         PriceHour = price.Value,
                         Location = location
                     };
                 })
-                .Where(item => item != null)
-                .OrderBy(item => item.PriceHour)
-                .ToList();
-            return result;
+                .Where(x => x != null)
+                .OrderBy(x => x.PriceHour)
+                .ToList()!;
         }
 
         public async Task<List<ResourcePriceLocationViewModel>> ListRegions()
         {
             var pricesJson = await GetAzurePrices("kubernetes-service");
-            var locations = pricesJson.JsonGet<List<ResourceLocationModel>>("regions");
-            var result = locations.Select(item => new ResourcePriceLocationViewModel
+            var regions = pricesJson.JsonGet<List<ResourceLocationModel>>("regions");
+
+            return regions.Select(r => new ResourcePriceLocationViewModel
             {
-                Location = item.Slug,
-                DisplayName = item.DisplayName
+                Location = r.Slug,
+                DisplayName = r.DisplayName
             }).ToList();
-            return result;
         }
 
         private async Task<string> GetAzurePrices(string type)
         {
             var cacheKey = $"prices-{type}";
-            var pricesJson = await _cache.GetStringAsync(cacheKey);
+            var cached = await _cache.GetStringAsync(cacheKey);
 
-            if (string.IsNullOrEmpty(pricesJson))
+            if (!string.IsNullOrEmpty(cached))
+                return cached;
+
+            var client = _httpClientFactory.CreateClient("RetryClient");
+            var response = await client.GetAsync($"https://azure.microsoft.com/api/v3/pricing/{type}/calculator/?culture=en-us&discount=mca");
+            response.EnsureSuccessStatusCode();
+
+            var json = await response.Content.ReadAsStringAsync();
+            await _cache.SetStringAsync(cacheKey, json, new DistributedCacheEntryOptions
             {
-                var client = _httpClientFactory.CreateClient("RetryClient");
-                var response = await client.GetAsync($"https://azure.microsoft.com/api/v3/pricing/{type}/calculator/?culture=en-us&discount=mca&billingAccount=&billingProfile=&v=20240517-1050-410891");
-                response.EnsureSuccessStatusCode();
-                pricesJson = await response.Content.ReadAsStringAsync();
-                var options = new DistributedCacheEntryOptions().SetAbsoluteExpiration(TimeSpan.FromHours(24));
-                await _cache.SetStringAsync(cacheKey, pricesJson, options);
-            }
-            return pricesJson;
+                AbsoluteExpirationRelativeToNow = TimeSpan.FromHours(24)
+            });
+
+            return json;
         }
 
+        // Models
         public class AksOfferModel
         {
-            public int Cores { get; set; } = 0;
-            public int DiskSize { get; set; } = 0;
-            public decimal Ram { get; set; } = 0;
+            public int Cores { get; set; }
+            public int DiskSize { get; set; }
+            public decimal Ram { get; set; }
             public string Series { get; set; } = "";
-            public AksOfferPricesModel Prices { get; set; }
+            public AksOfferPricesModel Prices { get; set; } = new();
+
             public class AksOfferPricesModel
             {
                 public Dictionary<string, AksOfferPriceModel> Perhour { get; set; } = new();
-
             }
+
             public class AksOfferPriceModel
             {
-                public decimal Value { get; set; } = 0;
-
+                public decimal Value { get; set; }
             }
         }
 
         public class LlmOfferModel
         {
-            public LlmOfferPricesModel Prices { get; set; }
+            public LlmOfferPricesModel Prices { get; set; } = new();
+
             public class LlmOfferPricesModel
             {
                 public Dictionary<string, LlmOfferPriceModel> Perthousandapitransactions { get; set; } = new();
             }
+
             public class LlmOfferPriceModel
             {
-                public decimal Value { get; set; } = 0;
+                public decimal Value { get; set; }
             }
         }
 
@@ -222,7 +249,7 @@ namespace AiCoreApi.Services.ControllersServices
     public interface ISpentService
     {
         Task<List<SpentItemViewModel>> List();
-        Task<List<TokenCostViewModel>> ListTokenCosts(); 
+        Task<List<TokenCostViewModel>> ListTokenCosts();
         Task<List<ResourcePriceViewModel>> ListAksPrices(string location);
         Task<List<ResourcePriceLocationViewModel>> ListRegions();
     }

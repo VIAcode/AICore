@@ -22,7 +22,7 @@ public class EntraController : ControllerBase
 
     [HttpGet]
     [CombinedAuthorize]
-    [RoleAuthorize(Role.Admin)]
+    [RoleAuthorize(Role.Admin, Role.Developer)]
     public async Task<IActionResult> List()
     {
         var result = await _entraService.ListEntraCredentials();

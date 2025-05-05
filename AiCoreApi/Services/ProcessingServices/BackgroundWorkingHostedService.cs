@@ -10,7 +10,9 @@ namespace AiCoreApi.Services.ProcessingServices
         private readonly IBackgroundWorkerAgentService _backgroundWorkerAgentService;
         private readonly IAzureServiceBusListenerAgentService _azureServiceBusListenerAgentService;
         private readonly IRabbitMqListenerAgentService _rabbitMqListenerAgentService;
+        private readonly IImapListenerAgentService _imapListenerAgentService;
         private readonly IDebugLogsProcessingService _debugLogsProcessingService;
+        private readonly IGraphMailListenerAgentService _graphMailListenerAgentService;
         private readonly IInstanceSync _instanceSync;
         private readonly Config _config;
 
@@ -19,7 +21,9 @@ namespace AiCoreApi.Services.ProcessingServices
             IBackgroundWorkerAgentService backgroundWorkerAgentService,
             IAzureServiceBusListenerAgentService azureServiceBusListenerAgentService,
             IRabbitMqListenerAgentService rabbitMqListenerAgentService,
+            IImapListenerAgentService imapListenerAgentService,
             IDebugLogsProcessingService debugLogsProcessingService,
+            IGraphMailListenerAgentService graphMailListenerAgentService,
             IInstanceSync instanceSync,
             Config config)
         {
@@ -27,7 +31,9 @@ namespace AiCoreApi.Services.ProcessingServices
             _backgroundWorkerAgentService = backgroundWorkerAgentService;
             _azureServiceBusListenerAgentService = azureServiceBusListenerAgentService;
             _rabbitMqListenerAgentService = rabbitMqListenerAgentService;
+            _imapListenerAgentService = imapListenerAgentService;
             _debugLogsProcessingService = debugLogsProcessingService;
+            _graphMailListenerAgentService = graphMailListenerAgentService;
             _instanceSync = instanceSync;
             _config = config;
         }
@@ -43,6 +49,8 @@ namespace AiCoreApi.Services.ProcessingServices
                 {
                     await _backgroundWorkerAgentService.ProcessTask();
                     await _schedulerAgentService.ProcessTask();
+                    await _imapListenerAgentService.ProcessTask();
+                    await _graphMailListenerAgentService.ProcessTask();
                 }
                 await Task.Run(AutoCompactLargeObjectHeap, cancellationToken);
                 // Await all tasks to complete in parallel
