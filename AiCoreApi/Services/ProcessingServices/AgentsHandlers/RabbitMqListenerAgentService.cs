@@ -28,17 +28,13 @@ namespace AiCoreApi.Services.ProcessingServices.AgentsHandlers
             _connectionProcessor = connectionProcessor;
         }
 
-        public async Task ProcessTask()
+        public async Task ProcessTask(List<AgentModel> agents)
         {
-            var agents = await _agentsProcessor.List(null);
-            var schedulerAgents = agents.Where(agent => agent.Type == AgentType.RabbitMqListener).ToList();
+            var schedulerAgents = agents.Where(agent => agent.Type == AgentType.RabbitMqListener && agent.IsEnabled).ToList();
             var processedAgents = new List<string>();
 
             foreach (var agent in schedulerAgents)
             {
-                if (!agent.IsEnabled)
-                    continue;
-
                 if (!agent.Content.ContainsKey("lastResult"))
                     agent.Content.Add("lastResult", new ConfigurableSetting { Value = "", Code = "lastResult", Name = "Last Result" });
 
@@ -136,6 +132,6 @@ namespace AiCoreApi.Services.ProcessingServices.AgentsHandlers
 
     public interface IRabbitMqListenerAgentService
     {
-        Task ProcessTask();
+        Task ProcessTask(List<AgentModel> agents);
     }
 }

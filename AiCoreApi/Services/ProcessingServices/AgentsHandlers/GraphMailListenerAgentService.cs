@@ -32,9 +32,8 @@ namespace AiCoreApi.Services.ProcessingServices.AgentsHandlers
             _httpClientFactory = httpClientFactory;
         }
 
-        public async Task ProcessTask()
+        public async Task ProcessTask(List<AgentModel> agents)
         {
-            var agents = await _agentsProcessor.List(null);
             var graphAgents = agents.Where(a => a.Type == AgentType.GraphMail && a.IsEnabled).ToList();
 
             foreach (var agent in graphAgents)
@@ -46,8 +45,8 @@ namespace AiCoreApi.Services.ProcessingServices.AgentsHandlers
                 var runAs = int.Parse(agent.Content["runAs"].Value);
                 var secondsBetweenChecks = int.Parse(agent.Content.ContainsKey("secondsBetweenChecks") ? agent.Content["secondsBetweenChecks"].Value : "30");
                 var now = DateTime.UtcNow;
-                var lastRun = agent.Content.ContainsKey("lastRun")
-                    ? DateTime.Parse(agent.Content["lastRun"].Value)
+                var lastRun = agent.Content.TryGetValue("lastRun", out var lastRunValue) && lastRunValue.Value != "Never"
+                    ? DateTime.Parse(lastRunValue.Value)
                     : DateTime.UtcNow.AddMinutes(-5);
 
                 var checkDelay = TimeSpan.FromSeconds(secondsBetweenChecks);
@@ -101,9 +100,6 @@ namespace AiCoreApi.Services.ProcessingServices.AgentsHandlers
                                 {"parameter1", parameters.ToJson()}
                             };
                             await RunAgent("GraphMailListener", allAgents, agent, agentToCall, runAs, parametersValues);
-
-                            agent.Content["lastResult"].Value = $"Last email processed: {message.Subject}";
-                            agent.Content["lastRun"].Value = now.ToString("o");
                             await _agentsProcessor.Update(agent);
                         }
                     }
@@ -141,6 +137,6 @@ namespace AiCoreApi.Services.ProcessingServices.AgentsHandlers
 
     public interface IGraphMailListenerAgentService
     {
-        Task ProcessTask();
+        Task ProcessTask(List<AgentModel> agents);
     }
 }

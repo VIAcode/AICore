@@ -28,9 +28,8 @@ namespace AiCoreApi.Services.ProcessingServices.AgentsHandlers
             _connectionProcessor = connectionProcessor;
         }
 
-        public async Task ProcessTask()
+        public async Task ProcessTask(List<AgentModel> agents)
         {
-            var agents = await _agentsProcessor.List(null);
             var imapAgents = agents.Where(a => a.Type == AgentType.Imap && a.IsEnabled).ToList();
             var processedAgents = new List<string>();
 
@@ -158,6 +157,6 @@ namespace AiCoreApi.Services.ProcessingServices.AgentsHandlers
 
     public interface IImapListenerAgentService
     {
-        Task ProcessTask();
+        Task ProcessTask(List<AgentModel> agents);
     }
 }
