@@ -108,6 +108,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             if (chat != null)
             {
                 await graphClient.Chats[chat.Id].Messages.PostAsync(message);
+                return;
             }
             throw new ExceptionHandlingMiddleware.AiCoreUiException($"Unable to send chat message for: {userEmail}{meetingTitle}{teamId}{channelId}.");
         }
