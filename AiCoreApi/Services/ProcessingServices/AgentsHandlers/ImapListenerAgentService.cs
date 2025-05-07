@@ -6,6 +6,7 @@ using MailKit;
 using MailKit.Net.Imap;
 using MailKit.Search;
 using System.Collections.Concurrent;
+using System.Text;
 
 namespace AiCoreApi.Services.ProcessingServices.AgentsHandlers
 {
@@ -88,7 +89,7 @@ namespace AiCoreApi.Services.ProcessingServices.AgentsHandlers
                                     var parameters = new Dictionary<string, string>
                                     {
                                         { "subject", message.Subject },
-                                        { "body", message.TextBody ?? message.HtmlBody },
+                                        { "bodyBase64",  Convert.ToBase64String(Encoding.UTF8.GetBytes(message.TextBody ?? message.HtmlBody)) },
                                         { "from", message.From.ToString() }
                                     };
 
