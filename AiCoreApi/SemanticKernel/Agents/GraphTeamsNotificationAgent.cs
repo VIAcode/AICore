@@ -6,6 +6,7 @@ using Microsoft.Graph;
 using Microsoft.SemanticKernel;
 using Microsoft.Graph.Models;
 using System.IdentityModel.Tokens.Jwt;
+using AiCoreApi.Common.Monitoring;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
@@ -36,9 +37,9 @@ namespace AiCoreApi.SemanticKernel.Agents
             RequestAccessor requestAccessor,
             ResponseAccessor responseAccessor,
             IHttpClientFactory httpClientFactory,
-            ExtendedConfig extendedConfig,
+            MonitoringConfig monitoringConfig,
             ILogger<GraphTeamsNotificationAgent> logger)
-            : base(responseAccessor, requestAccessor, extendedConfig, logger)
+            : base(responseAccessor, requestAccessor, monitoringConfig, logger)
         {
             _connectionProcessor = connectionProcessor;
             _entraTokenProvider = entraTokenProvider;
