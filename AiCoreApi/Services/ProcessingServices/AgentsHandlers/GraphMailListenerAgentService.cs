@@ -5,6 +5,7 @@ using AiCoreApi.Models.DbModels;
 using Microsoft.Graph;
 using Microsoft.Graph.Models;
 using Azure.Core;
+using System.Text;
 
 namespace AiCoreApi.Services.ProcessingServices.AgentsHandlers
 {
@@ -88,7 +89,7 @@ namespace AiCoreApi.Services.ProcessingServices.AgentsHandlers
                             var parameters = new Dictionary<string, string>
                             {
                                 { "subject", message.Subject },
-                                { "body", message.Body?.Content ?? "" },
+                                { "bodyBase64", Convert.ToBase64String(Encoding.UTF8.GetBytes(message.Body?.Content ?? "")) },
                                 { "from", message.From?.EmailAddress?.Address ?? "" },
                                 { "receivedDateTime", message.ReceivedDateTime?.ToString("o") ?? "" },
                                 { "messageId", message.Id },
