@@ -8,6 +8,7 @@ using AiCoreApi.Data.Processors;
 using System.Web;
 using ConnectionType = AiCoreApi.Models.DbModels.ConnectionType;
 using AiCoreApi.Common.Extensions;
+using AiCoreApi.Common.Monitoring;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
@@ -40,8 +41,8 @@ namespace AiCoreApi.SemanticKernel.Agents
             IConnectionProcessor connectionProcessor,
             ILoginProcessor loginProcessor,
             IFeatureFlags featureFlags,
-            ExtendedConfig extendedConfig,
-            ILogger<VectorSearchAgent> logger) : base(responseAccessor, requestAccessor, extendedConfig, logger)
+            MonitoringConfig monitoringConfig,
+            ILogger<VectorSearchAgent> logger) : base(responseAccessor, requestAccessor, monitoringConfig, logger)
         {
             _requestAccessor = requestAccessor;
             _responseAccessor = responseAccessor;

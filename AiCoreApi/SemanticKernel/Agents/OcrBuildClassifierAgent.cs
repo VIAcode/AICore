@@ -15,6 +15,7 @@ using Azure.AI.FormRecognizer.DocumentAnalysis;
 using BlobContentSource = Azure.AI.DocumentIntelligence.BlobContentSource;
 using ClassifierDocumentTypeDetails = Azure.AI.DocumentIntelligence.ClassifierDocumentTypeDetails;
 using DocumentClassifierDetails = Azure.AI.DocumentIntelligence.DocumentClassifierDetails;
+using AiCoreApi.Common.Monitoring;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
@@ -58,8 +59,8 @@ namespace AiCoreApi.SemanticKernel.Agents
             RequestAccessor requestAccessor,
             ResponseAccessor responseAccessor,
             IConnectionProcessor connectionProcessor,
-            ExtendedConfig extendedConfig, 
-            ILogger<OcrBuildClassifierAgent> logger) : base(responseAccessor, requestAccessor, extendedConfig, logger)
+            MonitoringConfig monitoringConfig, 
+            ILogger<OcrBuildClassifierAgent> logger) : base(responseAccessor, requestAccessor, monitoringConfig, logger)
         {
             _entraTokenProvider = entraTokenProvider;
             _requestAccessor = requestAccessor;

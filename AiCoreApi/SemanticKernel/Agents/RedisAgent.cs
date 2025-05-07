@@ -5,6 +5,7 @@ using AiCoreApi.Common;
 using AiCoreApi.Data.Processors;
 using StackExchange.Redis;
 using ConnectionType = AiCoreApi.Models.DbModels.ConnectionType;
+using AiCoreApi.Common.Monitoring;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
@@ -29,8 +30,8 @@ namespace AiCoreApi.SemanticKernel.Agents
             IConnectionProcessor connectionProcessor,
             RequestAccessor requestAccessor,
             ResponseAccessor responseAccessor,
-            ExtendedConfig extendedConfig,
-            ILogger<RedisAgent> logger) : base(responseAccessor, requestAccessor, extendedConfig, logger)
+            MonitoringConfig monitoringConfig,
+            ILogger<RedisAgent> logger) : base(responseAccessor, requestAccessor, monitoringConfig, logger)
         {
             _connectionProcessor = connectionProcessor;
             _requestAccessor = requestAccessor;

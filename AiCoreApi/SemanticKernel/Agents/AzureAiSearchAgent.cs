@@ -4,6 +4,7 @@ using System.Web;
 using AiCoreApi.Common;
 using AiCoreApi.Data.Processors;
 using Newtonsoft.Json;
+using AiCoreApi.Common.Monitoring;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
@@ -27,8 +28,8 @@ namespace AiCoreApi.SemanticKernel.Agents
             ResponseAccessor responseAccessor,
             IHttpClientFactory httpClientFactory,
             IConnectionProcessor connectionProcessor,
-            ExtendedConfig extendedConfig,
-            ILogger<AzureAiSearchAgent> logger) : base(responseAccessor, requestAccessor, extendedConfig, logger)
+            MonitoringConfig monitoringConfig,
+            ILogger<AzureAiSearchAgent> logger) : base(responseAccessor, requestAccessor, monitoringConfig, logger)
         {
             _requestAccessor = requestAccessor;
             _responseAccessor = responseAccessor;

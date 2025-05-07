@@ -5,6 +5,7 @@ using System.Web;
 using AiCoreApi.Common;
 using Python.Runtime;
 using System.Text.RegularExpressions;
+using AiCoreApi.Common.Monitoring;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
@@ -35,6 +36,7 @@ namespace AiCoreApi.SemanticKernel.Agents
         private readonly IPlannerHelpers _plannerHelpers;
         private readonly RequestAccessor _requestAccessor;
         private readonly ResponseAccessor _responseAccessor;
+        private readonly IMetricsAccessor _metricsAccessor;
         private readonly ICacheAccessor _cacheAccessor;
         private readonly ILogger<PythonCodeAgent> _logger;
 
@@ -42,9 +44,10 @@ namespace AiCoreApi.SemanticKernel.Agents
             IPlannerHelpers plannerHelpers,
             RequestAccessor requestAccessor,
             ResponseAccessor responseAccessor,
-            ICacheAccessor cacheAccessor, 
-            ExtendedConfig extendedConfig,
-            ILogger<PythonCodeAgent> logger) : base(responseAccessor, requestAccessor, extendedConfig, logger)
+            ICacheAccessor cacheAccessor,
+            MonitoringConfig monitoringConfig,
+            ILogger<PythonCodeAgent> logger,
+            IMetricsAccessor metricsAccessor) : base(responseAccessor, requestAccessor, monitoringConfig, logger)
         {
             _plannerHelpers = plannerHelpers;
             _requestAccessor = requestAccessor;
@@ -52,6 +55,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             _cacheAccessor = cacheAccessor;
             _cacheAccessor.KeyPrefix = "AgentExecution-";
             _logger = logger;
+            _metricsAccessor = metricsAccessor;
         }
 
         public async Task<string> DoCallWrapper(AgentModel agent, Dictionary<string, string> parameters) => await base.DoCallWrapper(agent, parameters);
@@ -109,9 +113,11 @@ namespace AiCoreApi.SemanticKernel.Agents
                         builtIns.Log = new Func<string, string[]?, string>(ExecuteAgent);
                         PyObject requestAccessorPy = _requestAccessor.ToPython();
                         PyObject responseAccessorPy = _responseAccessor.ToPython();
+                        PyObject metricsAccessorPy = _metricsAccessor.ToPython();
                         PyObject parametersPy = parameters.ToPython();
                         scope.Set("RequestAccessor", requestAccessorPy);
                         scope.Set("ResponseAccessor", responseAccessorPy);
+                        scope.Set("MetricsAccessor", metricsAccessorPy);
                         scope.Set("Parameters", parametersPy);
                         var pyModule = scope.Exec(pythonCode);
                         result = pyModule.Eval($@"str(result)").ToString();

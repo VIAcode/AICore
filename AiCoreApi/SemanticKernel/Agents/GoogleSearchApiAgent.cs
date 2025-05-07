@@ -7,6 +7,7 @@ using HtmlAgilityPack;
 using System.Text.Json;
 using AiCoreApi.Common.Extensions;
 using System.Text.Encodings.Web;
+using AiCoreApi.Common.Monitoring;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
@@ -44,8 +45,8 @@ namespace AiCoreApi.SemanticKernel.Agents
             ResponseAccessor responseAccessor,
             IHttpClientFactory httpClientFactory,
             IConnectionProcessor connectionProcessor,
-            ExtendedConfig extendedConfig,
-            ILogger<GoogleSearchApiAgent> logger) : base(responseAccessor, requestAccessor, extendedConfig, logger)
+            MonitoringConfig monitoringConfig,
+            ILogger<GoogleSearchApiAgent> logger) : base(responseAccessor, requestAccessor, monitoringConfig, logger)
         {
             _requestAccessor = requestAccessor;
             _responseAccessor = responseAccessor;

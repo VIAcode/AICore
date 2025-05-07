@@ -5,6 +5,7 @@ using JUST;
 using System.Web;
 using AiCoreApi.Common;
 using Newtonsoft.Json.Linq;
+using AiCoreApi.Common.Monitoring;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
@@ -16,8 +17,8 @@ namespace AiCoreApi.SemanticKernel.Agents
         public JsonTransformAgent(
             ResponseAccessor responseAccessor,
             RequestAccessor requestAccessor,
-            ExtendedConfig extendedConfig,
-            ILogger<JsonTransformAgent> logger) : base(responseAccessor, requestAccessor, extendedConfig, logger)
+            MonitoringConfig monitoringConfig,
+            ILogger<JsonTransformAgent> logger) : base(responseAccessor, requestAccessor, monitoringConfig, logger)
         {
             _responseAccessor = responseAccessor;
         }

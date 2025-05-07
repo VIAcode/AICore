@@ -9,6 +9,7 @@ using Azure.AI.DocumentIntelligence;
 using Azure.Core.Pipeline;
 using Azure.Core;
 using static Python.Runtime.TypeSpec;
+using AiCoreApi.Common.Monitoring;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
@@ -42,8 +43,8 @@ namespace AiCoreApi.SemanticKernel.Agents
             ResponseAccessor responseAccessor,
             IHttpClientFactory httpClientFactory,
             IConnectionProcessor connectionProcessor,
-            ExtendedConfig extendedConfig,
-            ILogger<OcrClassifyDocumentAgent> logger) : base(responseAccessor, requestAccessor, extendedConfig, logger)
+            MonitoringConfig monitoringConfig,
+            ILogger<OcrClassifyDocumentAgent> logger) : base(responseAccessor, requestAccessor, monitoringConfig, logger)
         {
             _entraTokenProvider = entraTokenProvider;
             _requestAccessor = requestAccessor;

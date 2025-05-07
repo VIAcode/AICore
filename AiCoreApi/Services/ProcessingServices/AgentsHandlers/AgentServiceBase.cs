@@ -69,6 +69,7 @@ namespace AiCoreApi.Services.ProcessingServices.AgentsHandlers
                     requestAccessor.LoginTypeString = runAsUser.LoginType.ToString();
                     requestAccessor.TagsString = string.Join(",", runAsUser.Tags.Select(tag => tag.TagId));
                     requestAccessor.WorkspaceId = agentToCallModel.WorkspaceId ?? 0;
+                    requestAccessor.AgentId = agentToCallModel.AgentId;
                     if (_extendedConfig.AllowDebugMode && _extendedConfig.DebugMessagesStorageEnabled)
                     {
                         requestAccessor.UseDebug = true;

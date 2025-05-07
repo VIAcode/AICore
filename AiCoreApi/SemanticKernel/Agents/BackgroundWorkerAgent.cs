@@ -4,6 +4,7 @@ using AiCoreApi.Common;
 using AiCoreApi.Common.Extensions;
 using AiCoreApi.Data.Processors;
 using System.Web;
+using AiCoreApi.Common.Monitoring;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
@@ -26,8 +27,8 @@ namespace AiCoreApi.SemanticKernel.Agents
             UserContextAccessor userContextAccessor,
             ResponseAccessor responseAccessor,
             RequestAccessor requestAccessor,
-            ExtendedConfig extendedConfig,
-            ILogger<BackgroundWorkerAgent> logger) : base(responseAccessor, requestAccessor, extendedConfig, logger)
+            MonitoringConfig monitoringConfig,
+            ILogger<BackgroundWorkerAgent> logger) : base(responseAccessor, requestAccessor, monitoringConfig, logger)
         {
             _schedulerAgentTaskProcessor = schedulerAgentTaskProcessor;
             _userContextAccessor = userContextAccessor;

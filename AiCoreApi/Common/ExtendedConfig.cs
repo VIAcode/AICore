@@ -327,47 +327,6 @@ public class ExtendedConfig
     [Tooltip("Specifies if the system should skip loading system packages. When enabled, the system skips loading system packages that are not explicitly specified in Agents code.")]
     public bool SkipNonExplicitSystemPackageLoad => GetValue<bool>("SkipNonExplicitSystemPackageLoad", true);
 
-    [Category(CategoryAttribute.ConfigCategoryEnum.Logging)]
-    [Description("Log Level")]
-    [Tooltip("Log Level is used to specify the level of logging that the system should use. The log level determines the amount of information that is logged by the system. The available log levels are: Debug, Information, Warning, Error, and Critical.")]
-    public string LogLevel => GetValue<string>("LogLevel", "Debug");
-
-    [Category(CategoryAttribute.ConfigCategoryEnum.Logging)]
-    [DataType(DataTypeAttribute.ConfigDataTypeEnum.Boolean)]
-    [Description("Log Login/Logout events")]
-    [Tooltip("Log Login/Logout events specifies if the system should log login and logout events. When enabled, the system logs information about user logins and logouts.")]
-    public bool LogLoginLogout => GetValue<bool>("LogLoginLogout", false);
-
-    [Category(CategoryAttribute.ConfigCategoryEnum.Logging)]
-    [DataType(DataTypeAttribute.ConfigDataTypeEnum.Boolean)]
-    [Description("Access Token check events")]
-    [Tooltip("Log Access Token check events specifies if the system should log access token check events. When enabled, the system logs information about access token checks.")]
-    public bool LogAccessTokenCheck => GetValue<bool>("LogAccessTokenCheck", false);
-
-    [Category(CategoryAttribute.ConfigCategoryEnum.Logging)]
-    [DataType(DataTypeAttribute.ConfigDataTypeEnum.Boolean)]
-    [Description("Log Agent Run events")]
-    [Tooltip("Log Agent Run specifies if the system should log Agent run events. When enabled, the system logs information about Agent runs.")]
-    public bool LogAgentRun => GetValue<bool>("LogAgentRun", false);
-
-    [Category(CategoryAttribute.ConfigCategoryEnum.Logging)]
-    [DataType(DataTypeAttribute.ConfigDataTypeEnum.Boolean)]
-    [Description("Log Agent Result events")]
-    [Tooltip("Log Agent Result specifies if the system should log Agent result events. When enabled, the system logs information about Agent results.")]
-    public bool LogAgentResult => GetValue<bool>("LogAgentResult", false);
-
-    [Category(CategoryAttribute.ConfigCategoryEnum.Logging)]
-    [DataType(DataTypeAttribute.ConfigDataTypeEnum.Boolean)]
-    [Description("Log Agent PII info (input parameters/result)")]
-    [Tooltip("Log Agent PII info specifies if the system should log Agent PII info. When enabled, the system logs Agent input parameters and result.")]
-    public bool LogAgentPii => GetValue<bool>("LogAgentPii", false);
-
-    [Category(CategoryAttribute.ConfigCategoryEnum.Logging)]
-    [DataType(DataTypeAttribute.ConfigDataTypeEnum.Boolean)]
-    [Description("Log Nuget package load events")]
-    [Tooltip("Log Nuget package load specifies if the system should log Nuget package load events. When enabled, the system logs information about Nuget package loads.")]
-    public bool LogNugetPackageLoad => GetValue<bool>("LogNugetPackageLoad", false);
-
     [Category(CategoryAttribute.ConfigCategoryEnum.KeyVaultStorage)]
     [DataType(DataTypeAttribute.ConfigDataTypeEnum.String)]
     [Description("Key Vault Url")]
@@ -543,8 +502,6 @@ public class CategoryAttribute : Attribute, IAttributeHandler
         Debug,
         [System.ComponentModel.Description("Nuget")]
         Nuget,
-        [System.ComponentModel.Description("Logging")]
-        Logging,
         [System.ComponentModel.Description("Key Vault Storage")]
         KeyVaultStorage,
         [System.ComponentModel.Description("Git Storage")]

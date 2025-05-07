@@ -6,6 +6,7 @@ using AiCoreApi.Common;
 using System.Web;
 using System.IO.Compression;
 using AiCoreApi.Common.Extensions;
+using AiCoreApi.Common.Monitoring;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
@@ -29,10 +30,10 @@ namespace AiCoreApi.SemanticKernel.Agents
 
         public ApiCallAgent(
             ILogger<ApiCallAgent> logger,
-            ExtendedConfig extendedConfig,
+            MonitoringConfig monitoringConfig,
             IHttpClientFactory httpClientFactory, 
             ResponseAccessor responseAccessor,
-            RequestAccessor requestAccessor) : base(responseAccessor, requestAccessor, extendedConfig, logger)
+            RequestAccessor requestAccessor) : base(responseAccessor, requestAccessor, monitoringConfig, logger)
         {
             _httpClientFactory = httpClientFactory;
             _responseAccessor = responseAccessor;

@@ -19,6 +19,7 @@ using AiCoreApi.Common.Extensions;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis;
 using System.Runtime.Loader;
+using AiCoreApi.Common.Monitoring;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
@@ -40,8 +41,10 @@ namespace AiCoreApi.SemanticKernel.Agents
         private readonly RequestAccessor _requestAccessor;
         private readonly ResponseAccessor _responseAccessor;
         private readonly ExtendedConfig _extendedConfig;
+        private readonly MonitoringConfig _monitoringConfig;
         private readonly ICacheAccessor _cacheAccessor;
         private readonly ILogger<CsharpCodeAgent> _logger;
+        private readonly IMetricsAccessor _metricsAccessor;
 
         public CsharpCodeAgent(
             IPlannerHelpers plannerHelpers,
@@ -49,7 +52,9 @@ namespace AiCoreApi.SemanticKernel.Agents
             ResponseAccessor responseAccessor,
             ExtendedConfig extendedConfig,
             ICacheAccessor cacheAccessor,
-            ILogger<CsharpCodeAgent> logger) : base(responseAccessor, requestAccessor, extendedConfig, logger)
+            ILogger<CsharpCodeAgent> logger,
+            IMetricsAccessor metricsAccessor,
+            MonitoringConfig monitoringConfig) : base(responseAccessor, requestAccessor, monitoringConfig, logger)
         {
             _plannerHelpers = plannerHelpers;
             _requestAccessor = requestAccessor;
@@ -58,6 +63,8 @@ namespace AiCoreApi.SemanticKernel.Agents
             _cacheAccessor = cacheAccessor;
             _cacheAccessor.KeyPrefix = "AgentExecution-";
             _logger = logger;
+            _metricsAccessor = metricsAccessor;
+            _monitoringConfig = monitoringConfig;
         }
 
         public async Task<string> DoCallWrapper(AgentModel agent, Dictionary<string, string> parameters) => await base.DoCallWrapper(agent, parameters);
@@ -167,6 +174,10 @@ namespace AiCoreApi.SemanticKernel.Agents
                 {
                     args = new object?[] { parameters, _requestAccessor, _responseAccessor, executeAgent, getCacheValue, setCacheValue, _logger };
                 }
+                else if (methodParameters.Length == 8)
+                {
+                    args = new object?[] { parameters, _requestAccessor, _responseAccessor, executeAgent, getCacheValue, setCacheValue, _logger, _metricsAccessor };
+                }
                 else
                 {
                     throw new InvalidOperationException("The 'Run' method has an unsupported parameter count.");
@@ -197,6 +208,7 @@ namespace AiCoreApi.SemanticKernel.Agents
                 Parameters = parameters,
                 RequestAccessor = _requestAccessor,
                 ResponseAccessor = _responseAccessor,
+                MetricsAccessor = _metricsAccessor,
                 ExecuteAgent = ExecuteAgent,
                 GetCacheValue = _cacheAccessor.GetCacheValue,
                 SetCacheValue = _cacheAccessor.SetCacheValue,
@@ -410,7 +422,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             if (processedPackages.Contains(packageKey))
                 return; // Already handled
 
-            if(_extendedConfig.LogNugetPackageLoad)
+            if(_monitoringConfig.LogNugetPackageLoad)
                 _logger.LogCritical("[{DateTime}][Nuget Package Load] Agent: {Agent}, Package: {Login}", agent.Name, DateTime.UtcNow.ToString("g"), packageKey);
 
             processedPackages.Add(packageKey);
@@ -573,6 +585,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             public Dictionary<string, string> Parameters { get; set; }
             public RequestAccessor RequestAccessor { get; set; }
             public ResponseAccessor ResponseAccessor { get; set; }
+            public IMetricsAccessor MetricsAccessor { get; set; }
             public Func<string, List<string>?, string> ExecuteAgent { get; set; }
             public Func<string, string> GetCacheValue { get; set; }
             public Func<string, string, int, string> SetCacheValue { get; set; }

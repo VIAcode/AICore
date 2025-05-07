@@ -5,6 +5,7 @@ using AiCoreApi.Common;
 using AiCoreApi.Data.Processors;
 using System.Text.RegularExpressions;
 using System.Net.Http.Headers;
+using AiCoreApi.Common.Monitoring;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
@@ -29,8 +30,8 @@ namespace AiCoreApi.SemanticKernel.Agents
             ResponseAccessor responseAccessor,
             IHttpClientFactory httpClientFactory,
             IConnectionProcessor connectionProcessor,
-            ExtendedConfig extendedConfig,
-            ILogger<AzureAiSpeechCreateSpeechAgent> logger) : base(responseAccessor, requestAccessor, extendedConfig, logger)
+            MonitoringConfig monitoringConfig,
+            ILogger<AzureAiSpeechCreateSpeechAgent> logger) : base(responseAccessor, requestAccessor, monitoringConfig, logger)
         {
             _requestAccessor = requestAccessor;
             _responseAccessor = responseAccessor;

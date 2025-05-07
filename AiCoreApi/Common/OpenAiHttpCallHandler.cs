@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text.RegularExpressions;
 using AiCoreApi.Common.Extensions;
+using AiCoreApi.Common.Monitoring;
 using AiCoreApi.Data.Processors;
 using AiCoreApi.Models.DbModels;
 using Microsoft.KernelMemory.AI;
@@ -28,6 +29,7 @@ namespace AiCoreApi.Common
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
+            var metricsService = _serviceProvider.GetService<ICommonMetricsService>();  
             var httpContext = _serviceProvider.GetService<IHttpContextAccessor>()?.HttpContext;
             var serviceProvider = httpContext?.RequestServices ?? _serviceProvider;
 
@@ -79,15 +81,49 @@ namespace AiCoreApi.Common
                 login.Login, "LLM", modelDeploymentName, currentRequestSpent.TokensIncoming, currentRequestSpent.TokensOutgoing);
             await spentProcessor.Update(spent);
 
+            if (metricsService != null)
+            {
+                var workspace = await GetWorkspace(serviceProvider, requestAccessor);
+                var agent = await GetAgent(serviceProvider, requestAccessor);
+
+                metricsService.AddOutgoingTokens(currentRequestSpent.TokensIncoming, connection, login, workspace, agent);
+                metricsService.AddIncomingTokens(currentRequestSpent.TokensOutgoing, connection, login, workspace, agent);
+            }
+
             // update spent tokens in response accessor
             if (httpContext != null)
             {
                 var responseAccessor = serviceProvider.GetService<ResponseAccessor>();
                 if (responseAccessor != null)
                     responseAccessor.AddSpentTokens(connection.Name, currentRequestSpent.TokensOutgoing, currentRequestSpent.TokensIncoming);
-
             }
             return response;
+        }
+
+        private async Task<WorkspaceModel?> GetWorkspace(IServiceProvider serviceProvider, RequestAccessor requestAccessor)
+        {
+            if (requestAccessor.WorkspaceId.HasValue)
+            {
+                var workspaceProcessor = serviceProvider.GetService<IWorkspaceProcessor>();
+                if (workspaceProcessor != null)
+                {
+                    return await workspaceProcessor.Get(requestAccessor.WorkspaceId.Value);
+                }
+            }
+            return null;
+        }
+
+        private async Task<AgentModel?> GetAgent(IServiceProvider serviceProvider, RequestAccessor requestAccessor)
+        {
+            if (requestAccessor.AgentId.HasValue)
+            {
+                var agentsProcessor = serviceProvider.GetService<IAgentsProcessor>();
+                if (agentsProcessor != null)
+                {
+                    return await agentsProcessor.GetById(requestAccessor.AgentId.Value);
+                }
+            }
+            return null;
         }
 
         private async Task<ConnectionModel> ApplyAzureOpenAiLlmCarousel(IServiceProvider serviceProvider, HttpRequestMessage request, List<ConnectionModel> connections, ConnectionModel connection, string modelDeploymentName)

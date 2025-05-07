@@ -142,6 +142,7 @@ namespace AiCoreApi.SemanticKernel
             var agent = dbAgents.FirstOrDefault(item => item.Name.ToLower() == agentName.ToLower());
             if (agent == null)
                 throw new AiCoreUiException($"Agent not found: {agentName}");
+            _requestAccessor.AgentId = agent.AgentId;
             if (checkAgentCallType)
             {
                 var callType = agent.Content.ContainsKey(AgentTypeCalls.AgentCallTypeFieldName)
