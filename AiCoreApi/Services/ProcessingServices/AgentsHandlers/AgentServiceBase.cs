@@ -69,29 +69,24 @@ namespace AiCoreApi.Services.ProcessingServices.AgentsHandlers
                     requestAccessor.LoginTypeString = runAsUser.LoginType.ToString();
                     requestAccessor.TagsString = string.Join(",", runAsUser.Tags.Select(tag => tag.TagId));
                     requestAccessor.WorkspaceId = agentToCallModel.WorkspaceId ?? 0;
-                    requestAccessor.AgentId = agentToCallModel.AgentId;
                     if (_extendedConfig.AllowDebugMode && _extendedConfig.DebugMessagesStorageEnabled)
                     {
                         requestAccessor.UseDebug = true;
                     }
                     userContextAccessor.SetLoginId(runAs);
                     UserContextAccessor.AsyncScheduledLoginId.Value = runAs;
-                    var result = "";
-                    if (agentToCallModel.Type == AgentType.Composite)
+                    var result = agentToCallModel.Type switch
                     {
-                        var compositeAgent = scope.ServiceProvider.GetRequiredService<ICompositeAgent>();
-                        result = await compositeAgent.DoCallWrapper(agentToCallModel, parametersValues);
-                    }
-                    else if (agentToCallModel.Type == AgentType.CsharpCode)
-                    {
-                        var csharpCodeAgent = scope.ServiceProvider.GetRequiredService<ICsharpCodeAgent>();
-                        result = await csharpCodeAgent.DoCallWrapper(agentToCallModel, parametersValues);
-                    }
-                    else if (agentToCallModel.Type == AgentType.PythonCode)
-                    {
-                        var pythonCodeAgent = scope.ServiceProvider.GetRequiredService<IPythonCodeAgent>();
-                        result = await pythonCodeAgent.DoCallWrapper(agentToCallModel, parametersValues);
-                    }
+                        AgentType.Composite => await scope.ServiceProvider.GetRequiredService<ICompositeAgent>().DoCallWrapper(agentToCallModel, parametersValues),
+                        AgentType.CsharpCode => await scope.ServiceProvider.GetRequiredService<ICsharpCodeAgent>().DoCallWrapper(agentToCallModel, parametersValues),
+                        AgentType.PythonCode => await scope.ServiceProvider.GetRequiredService<IPythonCodeAgent>().DoCallWrapper(agentToCallModel, parametersValues),
+                        AgentType.NodeJsCode => await scope.ServiceProvider.GetRequiredService<INodeJsCodeAgent>().DoCallWrapper(agentToCallModel, parametersValues),
+                        AgentType.CompositeCSharp => await scope.ServiceProvider.GetRequiredService<ICompositeCSharpAgent>().DoCallWrapper(agentToCallModel, parametersValues),
+                        AgentType.CompositePython => await scope.ServiceProvider.GetRequiredService<ICompositePythonAgent>().DoCallWrapper(agentToCallModel, parametersValues),
+                        AgentType.CompositeLoop => await scope.ServiceProvider.GetRequiredService<ICompositeLoopAgent>().DoCallWrapper(agentToCallModel, parametersValues),
+                        _ => throw new NotSupportedException($"Unsupported agent type: {agentToCallModel.Type}")
+                    };
+
 
                     if (_extendedConfig.AllowDebugMode && _extendedConfig.DebugMessagesStorageEnabled)
                     {

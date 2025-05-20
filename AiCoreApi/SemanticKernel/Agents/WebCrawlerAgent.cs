@@ -7,6 +7,7 @@ using System.Text.RegularExpressions;
 using System.Web;
 using AiCoreApi.Common.Extensions;
 using System.Text.Encodings.Web;
+using Microsoft.Playwright;
 using AiCoreApi.Common.Monitoring;
 
 namespace AiCoreApi.SemanticKernel.Agents
@@ -23,13 +24,17 @@ namespace AiCoreApi.SemanticKernel.Agents
             public const string CrawlUrlRegex = "crawlUrlRegex";
             public const string UserAgent = "userAgent";
             public const string MaxUrlsCount = "maxUrlsCount";
+            public const string Engine = "engine";
+            public const string WaitTimeout = "waitTimeout";
         }
 
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly ResponseAccessor _responseAccessor;
+        private readonly ExtendedConfig _extendedConfig;
 
         public WebCrawlerAgent(
             ILogger<WebCrawlerAgent> logger,
+            ExtendedConfig extendedConfig,
             MonitoringConfig monitoringConfig,
             IHttpClientFactory httpClientFactory,
             ResponseAccessor responseAccessor,
@@ -37,6 +42,7 @@ namespace AiCoreApi.SemanticKernel.Agents
         {
             _httpClientFactory = httpClientFactory;
             _responseAccessor = responseAccessor;
+            _extendedConfig = extendedConfig;
         }
 
         public override async Task<string> DoCall(AgentModel agent, Dictionary<string, string> parameters)
@@ -51,9 +57,40 @@ namespace AiCoreApi.SemanticKernel.Agents
             var userAgent = agent.Content.ContainsKey(AgentContentParameters.UserAgent)
                 ? ApplyParameters(agent.Content[AgentContentParameters.UserAgent].Value, parameters)
                 : "";
+            var engine = agent.Content.TryGetValue(AgentContentParameters.Engine, out var engineVal)
+                ? ApplyParameters(engineVal.Value, parameters).ToLower()
+                : "html";
+            var waitTimeout = Convert.ToInt32(agent.Content.TryGetValue(AgentContentParameters.WaitTimeout, out var waitTimeoutVal)
+                ? ApplyParameters(waitTimeoutVal.Value, parameters).ToLower()
+                : "10000");
+
 
             var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var allResults = new List<Dictionary<string, string>>();
+
+            IBrowser? playwrightBrowser = null;
+            IBrowserContext? playwrightContext = null;
+            IPage? sharedPage = null;
+
+            if (engine == "playwright")
+            {
+                PlaywrightInstall.EnsureInstalled();
+                var playwright = await Playwright.CreateAsync();
+                playwrightBrowser = await playwright.Chromium.LaunchAsync(new() { Headless = true });
+
+                playwrightContext = await playwrightBrowser.NewContextAsync(new BrowserNewContextOptions
+                {
+                    UserAgent = string.IsNullOrWhiteSpace(userAgent)
+                        ? "Mozilla/5.0 (compatible; WebCrawlerAgent/1.0)"
+                        : userAgent,
+                    Proxy = string.IsNullOrEmpty(_extendedConfig.Proxy)
+                        ? null
+                        : new Proxy { Server = _extendedConfig.Proxy },
+                    IgnoreHTTPSErrors = true,
+                });
+
+                sharedPage = await playwrightContext.NewPageAsync();
+            }
 
             async Task Crawl(string url, int depth, Regex? filter)
             {
@@ -63,20 +100,22 @@ namespace AiCoreApi.SemanticKernel.Agents
                     if (depth < 1 || visited.Contains(url) || (maxUrls > 0 && visited.Count >= maxUrls)) return;
                     visited.Add(url);
 
-                    var text = await GetPageTextAsync(url, agent, userAgent, parameters);
-                    if (!string.IsNullOrWhiteSpace(text))
+                    var result = engine == "playwright"
+                        ? await GetPageContentAndLinksWithPlaywrightAsync(url, sharedPage!, waitTimeout)
+                        : await GetTextAndLinksWithHtmlAgilityPackAsync(url, agent, userAgent, parameters);
+
+                    if (!string.IsNullOrWhiteSpace(result.text))
                     {
                         allResults.Add(new Dictionary<string, string>
                         {
                             { "url", url },
-                            { "text", text }
+                            { "text", result.text }
                         });
                     }
 
                     if (depth > 1)
                     {
-                        var links = await ExtractLinksAsync(url, agent, userAgent, parameters);
-                        foreach (var link in links)
+                        foreach (var link in result.links)
                         {
                             if (!visited.Contains(link) && (filter == null || filter.IsMatch(link)))
                             {
@@ -88,16 +127,28 @@ namespace AiCoreApi.SemanticKernel.Agents
                 }
                 catch (Exception ex)
                 {
-                    // Suppress errors as links can be broken or inaccessible
                     _responseAccessor.AddDebugMessage(_debugMessageSenderName, "Error", $"Failed to crawl {url}, {ex.Message}");
                 }
             }
 
-            await Crawl(startUrl, crawlDepth, crawlRegex);
+            try
+            {
+                await Crawl(startUrl, crawlDepth, crawlRegex);
+            }
+            finally
+            {
+                if (sharedPage != null) await sharedPage.CloseAsync();
+                if (playwrightContext != null) await playwrightContext.CloseAsync();
+                if (playwrightBrowser != null) await playwrightBrowser.CloseAsync();
+            }
 
-            var json = JsonSerializer.Serialize(allResults, new JsonSerializerOptions { WriteIndented = false, Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping });
+            var json = JsonSerializer.Serialize(allResults, new JsonSerializerOptions
+            {
+                WriteIndented = false,
+                Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+            });
+
             _responseAccessor.AddDebugMessage(_debugMessageSenderName, "Final Extracted JSON", json);
-
             return json;
         }
 
@@ -137,70 +188,6 @@ namespace AiCoreApi.SemanticKernel.Agents
             return null;
         }
 
-        private async Task<string> GetPageTextAsync(string url, AgentModel agent, string userAgent, Dictionary<string, string> parameters)
-        {
-            using var client = _httpClientFactory.CreateClient("NoRetryClient");
-            ApplyCustomHeaders(client, agent, userAgent, parameters);
-
-            try
-            {
-                var html = await client.GetCompressedStringAsync(url);
-                var doc = new HtmlDocument();
-                doc.LoadHtml(html);
-
-                doc.DocumentNode.Descendants()
-                    .Where(n => n.Name == "script" || n.Name == "style")
-                    .ToList()
-                    .ForEach(n => n.Remove());
-
-                var text = HtmlEntity.DeEntitize(doc.DocumentNode.InnerText);
-                return string.Join("\n",
-                    text.Split('\n')
-                        .Select(l => l.Trim())
-                        .Where(l => !string.IsNullOrWhiteSpace(l)));
-            }
-            catch (Exception ex)
-            {
-                _responseAccessor.AddDebugMessage(_debugMessageSenderName, "Error", $"Failed to crawl {url}, {ex.Message}");
-                return string.Empty;
-            }
-        }
-
-        private async Task<List<string>> ExtractLinksAsync(string url, AgentModel agent, string userAgent, Dictionary<string, string> parameters)
-        {
-            using var client = _httpClientFactory.CreateClient("NoRetryClient");
-            ApplyCustomHeaders(client, agent, userAgent, parameters);
-            var links = new List<string>();
-
-            try
-            {
-                var html = await client.GetCompressedStringAsync(url);
-                var doc = new HtmlDocument();
-                doc.LoadHtml(html);
-                var baseUri = new Uri(url);
-
-                var anchorTags = doc.DocumentNode.SelectNodes("//a[@href]");
-                if (anchorTags == null) return links;
-
-                foreach (var a in anchorTags)
-                {
-                    var href = a.GetAttributeValue("href", "");
-                    if (string.IsNullOrWhiteSpace(href)) continue;
-
-                    if (href.StartsWith("http"))
-                        links.Add(href);
-                    else
-                        links.Add(new Uri(baseUri, href).ToString());
-                }
-            }
-            catch (Exception ex)
-            {
-                _responseAccessor.AddDebugMessage(_debugMessageSenderName, "Error", $"Failed to extract links from {url}, {ex.Message}");
-            }
-
-            return links.Distinct().ToList();
-        }
-
         private void ApplyCustomHeaders(HttpClient client, AgentModel agent, string userAgent, Dictionary<string, string> parameters)
         {
             if (!string.IsNullOrEmpty(userAgent))
@@ -222,6 +209,114 @@ namespace AiCoreApi.SemanticKernel.Agents
                     if (!client.DefaultRequestHeaders.Contains(name))
                         client.DefaultRequestHeaders.Add(name, value);
                 }
+            }
+        }
+
+        private async Task<(string text, List<string> links)> GetTextAndLinksWithHtmlAgilityPackAsync(
+            string url,
+            AgentModel agent,
+            string userAgent,
+            Dictionary<string, string> parameters)
+        {
+            using var client = _httpClientFactory.CreateClient("NoRetryClient");
+            ApplyCustomHeaders(client, agent, userAgent, parameters);
+
+            var links = new List<string>();
+
+            try
+            {
+                var html = await client.GetCompressedStringAsync(url);
+                var doc = new HtmlDocument();
+                doc.LoadHtml(html);
+
+                doc.DocumentNode.Descendants()
+                    .Where(n => n.Name == "script" || n.Name == "style")
+                    .ToList()
+                    .ForEach(n => n.Remove());
+
+                var text = HtmlEntity.DeEntitize(doc.DocumentNode.InnerText);
+                var cleanedText = string.Join("\n",
+                    text.Split('\n').Select(l => l.Trim()).Where(l => !string.IsNullOrWhiteSpace(l)));
+
+                var baseUri = new Uri(url);
+                var anchorTags = doc.DocumentNode.SelectNodes("//a[@href]");
+                if (anchorTags != null)
+                {
+                    foreach (var a in anchorTags)
+                    {
+                        var href = a.GetAttributeValue("href", "");
+                        if (string.IsNullOrWhiteSpace(href)) continue;
+
+                        var fullUri = href.StartsWith("http")
+                            ? href
+                            : new Uri(baseUri, href).ToString();
+                        links.Add(fullUri);
+                    }
+                }
+
+                return (cleanedText, links.Distinct().ToList());
+            }
+            catch (Exception ex)
+            {
+                _responseAccessor.AddDebugMessage(_debugMessageSenderName, "Error", $"Failed to crawl {url}, {ex.Message}");
+                return (string.Empty, new List<string>());
+            }
+        }
+
+        private async Task<(string text, List<string> links)> GetPageContentAndLinksWithPlaywrightAsync(string url, IPage page, int waitTimeout)
+        {
+            try
+            {
+                await page.GotoAsync(url, new() { Timeout = waitTimeout });
+
+                var allText = new List<string>();
+                var allLinks = new HashSet<string>();
+                var baseUri = new Uri(url);
+
+                // Helper to process any frame (main or iframe)
+                async Task ProcessFrame(IFrame frame)
+                {
+                    var content = await frame.ContentAsync();
+                    var doc = new HtmlDocument();
+                    doc.LoadHtml(content);
+
+                    doc.DocumentNode.Descendants()
+                        .Where(n => n.Name == "script" || n.Name == "style")
+                        .ToList()
+                        .ForEach(n => n.Remove());
+
+                    var frameText = HtmlEntity.DeEntitize(doc.DocumentNode.InnerText);
+                    allText.AddRange(frameText
+                        .Split('\n')
+                        .Select(line => line.Trim())
+                        .Where(line => !string.IsNullOrWhiteSpace(line)));
+
+                    var elements = await frame.QuerySelectorAllAsync("a[href]");
+                    foreach (var element in elements)
+                    {
+                        var href = await element.GetAttributeAsync("href");
+                        if (string.IsNullOrWhiteSpace(href)) continue;
+
+                        var fullUri = Uri.TryCreate(href, UriKind.Absolute, out var abs)
+                            ? abs.ToString()
+                            : new Uri(baseUri, href).ToString();
+
+                        allLinks.Add(fullUri);
+                    }
+                }
+
+                // Process main page + all iframes
+                foreach (var frame in page.Frames)
+                {
+                    await ProcessFrame(frame);
+                }
+
+                return (string.Join("\n", allText), allLinks.ToList());
+            }
+            catch (Exception ex)
+            {
+                _responseAccessor.AddDebugMessage(_debugMessageSenderName, "Error", $"Playwright failed for {url}, {ex.Message}");
+                return (string.Empty, new List<string>());
             }
         }
     }

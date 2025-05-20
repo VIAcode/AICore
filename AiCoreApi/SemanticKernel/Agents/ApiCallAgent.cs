@@ -4,7 +4,6 @@ using System.Net.Http.Headers;
 using System.Text;
 using AiCoreApi.Common;
 using System.Web;
-using System.IO.Compression;
 using AiCoreApi.Common.Extensions;
 using AiCoreApi.Common.Monitoring;
 

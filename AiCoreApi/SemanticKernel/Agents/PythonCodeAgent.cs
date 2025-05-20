@@ -113,11 +113,9 @@ namespace AiCoreApi.SemanticKernel.Agents
                         builtIns.Log = new Func<string, string[]?, string>(ExecuteAgent);
                         PyObject requestAccessorPy = _requestAccessor.ToPython();
                         PyObject responseAccessorPy = _responseAccessor.ToPython();
-                        PyObject metricsAccessorPy = _metricsAccessor.ToPython();
                         PyObject parametersPy = parameters.ToPython();
                         scope.Set("RequestAccessor", requestAccessorPy);
                         scope.Set("ResponseAccessor", responseAccessorPy);
-                        scope.Set("MetricsAccessor", metricsAccessorPy);
                         scope.Set("Parameters", parametersPy);
                         var pyModule = scope.Exec(pythonCode);
                         result = pyModule.Eval($@"str(result)").ToString();
@@ -182,7 +180,41 @@ namespace AiCoreApi.SemanticKernel.Agents
             }
         }
 
-        private void LogCritical(string text) => _logger.LogCritical(text);
+
+        public string Validate(string pythonCode)
+        {
+            try
+            {
+                var base64Code = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(pythonCode));
+                using (Py.GIL())
+                {
+                    using (PyModule scope = Py.CreateScope())
+                    {
+                        var validationCode = $@"
+import ast, base64
+try:
+    decoded_code = base64.b64decode('{base64Code}').decode('utf-8')
+    ast.parse(decoded_code)
+    result = ''
+except SyntaxError as e:
+    result = f'SyntaxError: {{e.msg}} at line {{e.lineno}}, column {{e.offset}}'
+except Exception as e:
+    result = f'ValidationError: {{type(e).__name__}}: {{e}}'
+";
+                        scope.Exec(validationCode);
+                        return scope.Get("result").ToString();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                return $"ValidationHostError: {ex.Message}";
+            }
+        }
+
+
+
+    private void LogCritical(string text) => _logger.LogCritical(text);
         private void LogError(string text) => _logger.LogError(text);
         private void LogWarning(string text) => _logger.LogWarning(text);
         private void LogDebug(string text) => _logger.LogDebug(text);
@@ -209,5 +241,6 @@ namespace AiCoreApi.SemanticKernel.Agents
     {
         Task AddAgent(AgentModel agent, Kernel kernel, List<string> pluginsInstructions);
         Task<string> DoCallWrapper(AgentModel agent, Dictionary<string, string> parameters);
+        string Validate(string pythonCode);
     }
 }

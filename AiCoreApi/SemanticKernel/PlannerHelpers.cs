@@ -58,6 +58,10 @@ namespace AiCoreApi.SemanticKernel
         private readonly IGoogleSearchApiAgent _googleSearchApiAgent;
         private readonly ISmtpNotificationAgent _smtpNotificationAgent;
         private readonly IGraphTeamsNotificationAgent _teamsNotificationAgent;
+        private readonly IAzDoWikiAgent _azDoWikiAgent;
+        private readonly IQdrantAgent _qdrantAgent;
+        private readonly IEmbeddingAgent _embeddingAgent;
+        private readonly IOpenSearchAgent _openSearchAgent;
 
         public PlannerHelpers(
             RequestAccessor requestAccessor,
@@ -94,7 +98,11 @@ namespace AiCoreApi.SemanticKernel
             IAzureLogAnalyticsAgent azureLogAnalyticsAgent,
             IGoogleSearchApiAgent googleSearchApiAgent,
             ISmtpNotificationAgent smtpNotificationAgent,
-            IGraphTeamsNotificationAgent teamsNotificationAgent)
+            IGraphTeamsNotificationAgent teamsNotificationAgent,
+            IAzDoWikiAgent azDoWikiAgent,
+            IQdrantAgent qdrantAgent,
+            IEmbeddingAgent embeddingAgent,
+            IOpenSearchAgent openSearchAgent)
         {
             _requestAccessor = requestAccessor;
             _extendedConfig = extendedConfig;
@@ -131,6 +139,10 @@ namespace AiCoreApi.SemanticKernel
             _googleSearchApiAgent = googleSearchApiAgent;
             _smtpNotificationAgent = smtpNotificationAgent;
             _teamsNotificationAgent = teamsNotificationAgent;
+            _azDoWikiAgent = azDoWikiAgent;
+            _qdrantAgent = qdrantAgent;
+            _embeddingAgent = embeddingAgent;
+            _openSearchAgent = openSearchAgent;
         }
 
         private List<AgentModel>? _agentsList;
@@ -176,50 +188,59 @@ namespace AiCoreApi.SemanticKernel
             return result;
         }
 
-        private ICompositeAgent? _compositeAgent;
+        private T ResolveAgent<T>(ref T? field) where T : class
+        {
+            return field ??= _serviceProvider.GetService(typeof(T)) as T
+                ?? throw new InvalidOperationException($"Unable to resolve {typeof(T).Name}");
+        }
 
+        private ICompositeAgent? _compositeAgent;
         public ICompositeAgent CompositeAgent
         {
-            get
-            {
-                if (_compositeAgent == null)
-                    _compositeAgent = (ICompositeAgent)_serviceProvider.GetService(typeof(ICompositeAgent));
-                return _compositeAgent;
-            }
-            set
-            {
-                _compositeAgent = value;
-            }
+            get => ResolveAgent(ref _compositeAgent);
+            set => _compositeAgent = value;
         }
 
         private ICsharpCodeAgent? _csharpCodeAgent;
         public ICsharpCodeAgent CsharpCodeAgent
         {
-            get
-            {
-                if (_csharpCodeAgent == null)
-                    _csharpCodeAgent = (ICsharpCodeAgent)_serviceProvider.GetService(typeof(ICsharpCodeAgent));
-                return _csharpCodeAgent;
-            }
-            set
-            {
-                _csharpCodeAgent = value;
-            }
+            get => ResolveAgent(ref _csharpCodeAgent);
+            set => _csharpCodeAgent = value;
+        }
+
+        private ICompositeCSharpAgent? _compositeCSharpAgent;
+        public ICompositeCSharpAgent CompositeCSharpAgent
+        {
+            get => ResolveAgent(ref _compositeCSharpAgent);
+            set => _compositeCSharpAgent = value;
+        }
+
+        private ICompositePythonAgent? _compositePythonAgent;
+        public ICompositePythonAgent CompositePythonAgent
+        {
+            get => ResolveAgent(ref _compositePythonAgent);
+            set => _compositePythonAgent = value;
+        }
+
+        private ICompositeLoopAgent? _compositeLoopAgent;
+        public ICompositeLoopAgent CompositeLoopAgent
+        {
+            get => ResolveAgent(ref _compositeLoopAgent);
+            set => _compositeLoopAgent = value;
         }
 
         private IPythonCodeAgent? _pythonCodeAgent;
         public IPythonCodeAgent PythonCodeAgent
         {
-            get
-            {
-                if (_pythonCodeAgent == null)
-                    _pythonCodeAgent = (IPythonCodeAgent)_serviceProvider.GetService(typeof(IPythonCodeAgent));
-                return _pythonCodeAgent;
-            }
-            set
-            {
-                _pythonCodeAgent = value;
-            }
+            get => ResolveAgent(ref _pythonCodeAgent);
+            set => _pythonCodeAgent = value;
+        }
+
+        private INodeJsCodeAgent? _nodeJsCodeAgent;
+        public INodeJsCodeAgent NodeJsCodeAgent
+        {
+            get => ResolveAgent(ref _nodeJsCodeAgent);
+            set => _nodeJsCodeAgent = value;
         }
 
         public async Task AddPlugin(AgentModel agent, Kernel kernel, List<string> pluginsInstructions)
@@ -248,6 +269,10 @@ namespace AiCoreApi.SemanticKernel
                 { AgentType.Composite, CompositeAgent},
                 { AgentType.PythonCode, PythonCodeAgent },
                 { AgentType.CsharpCode, CsharpCodeAgent },
+                { AgentType.NodeJsCode, NodeJsCodeAgent },
+                { AgentType.CompositeCSharp, CompositeCSharpAgent },
+                { AgentType.CompositePython, CompositePythonAgent },
+                { AgentType.CompositeLoop, CompositeLoopAgent },
                 { AgentType.BingSearch, _bingSearchAgent },
                 { AgentType.History, _historyAgent },
                 { AgentType.RagPrompt, _ragPromptAgent },
@@ -274,7 +299,11 @@ namespace AiCoreApi.SemanticKernel
                 { AgentType.AzureLogAnalytics, _azureLogAnalyticsAgent },
                 { AgentType.GoogleSearchApi, _googleSearchApiAgent },
                 { AgentType.Smtp, _smtpNotificationAgent },
-                { AgentType.GraphTeamsNotification, _teamsNotificationAgent }
+                { AgentType.GraphTeamsNotification, _teamsNotificationAgent },
+                { AgentType.AzDoWiki, _azDoWikiAgent },
+                { AgentType.Embedding, _embeddingAgent },
+                { AgentType.Qdrant, _qdrantAgent },
+                { AgentType.OpenSearch, _openSearchAgent }
             };
             return agentMapping;
         }
@@ -302,5 +331,9 @@ namespace AiCoreApi.SemanticKernel
         ICompositeAgent CompositeAgent { get; set; }
         ICsharpCodeAgent CsharpCodeAgent { get; set; }
         IPythonCodeAgent PythonCodeAgent { get; set; }
+        INodeJsCodeAgent NodeJsCodeAgent { get; set; }
+        ICompositeCSharpAgent CompositeCSharpAgent { get; set; }
+        ICompositePythonAgent CompositePythonAgent { get; set; }
+        ICompositeLoopAgent CompositeLoopAgent { get; set; }
     }
 }

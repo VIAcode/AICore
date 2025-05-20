@@ -64,30 +64,25 @@ namespace AiCoreApi.Services.ProcessingServices.AgentsHandlers
                             await _schedulerAgentTaskProcessor.Update(schedulerAgentTaskModel);
                             return;
                         }
-                        var parameters = schedulerAgentTaskModel.Parameters.JsonGet<Dictionary<string, string>>() ?? new Dictionary<string, string>();
-                        var result = string.Empty;
-                        if (agentToCallModel.Type == AgentType.Composite)
+                        var parametersValues = schedulerAgentTaskModel.Parameters.JsonGet<Dictionary<string, string>>() ?? new Dictionary<string, string>();
+                        var result = agentToCallModel.Type switch
                         {
-                            var compositeAgent = scope.ServiceProvider.GetRequiredService<ICompositeAgent>();
-                            result = await compositeAgent.DoCallWrapper(agentToCallModel, parameters);
-                        }
-                        else if (agentToCallModel.Type == AgentType.CsharpCode)
-                        {
-                            var csharpCodeAgent = scope.ServiceProvider.GetRequiredService<ICsharpCodeAgent>();
-                            result = await csharpCodeAgent.DoCallWrapper(agentToCallModel, parameters);
-                        }
-                        else if (agentToCallModel.Type == AgentType.PythonCode)
-                        {
-                            var pythonCodeAgent = scope.ServiceProvider.GetRequiredService<IPythonCodeAgent>();
-                            result = await pythonCodeAgent.DoCallWrapper(agentToCallModel, parameters);
-                        }
+                            AgentType.Composite => await scope.ServiceProvider.GetRequiredService<ICompositeAgent>().DoCallWrapper(agentToCallModel, parametersValues),
+                            AgentType.CsharpCode => await scope.ServiceProvider.GetRequiredService<ICsharpCodeAgent>().DoCallWrapper(agentToCallModel, parametersValues),
+                            AgentType.PythonCode => await scope.ServiceProvider.GetRequiredService<IPythonCodeAgent>().DoCallWrapper(agentToCallModel, parametersValues),
+                            AgentType.NodeJsCode => await scope.ServiceProvider.GetRequiredService<INodeJsCodeAgent>().DoCallWrapper(agentToCallModel, parametersValues),
+                            AgentType.CompositeCSharp => await scope.ServiceProvider.GetRequiredService<ICompositeCSharpAgent>().DoCallWrapper(agentToCallModel, parametersValues),
+                            AgentType.CompositePython => await scope.ServiceProvider.GetRequiredService<ICompositePythonAgent>().DoCallWrapper(agentToCallModel, parametersValues),
+                            AgentType.CompositeLoop => await scope.ServiceProvider.GetRequiredService<ICompositeLoopAgent>().DoCallWrapper(agentToCallModel, parametersValues),
+                            _ => throw new NotSupportedException($"Unsupported agent type: {agentToCallModel.Type}")
+                        };
                         schedulerAgentTaskModel.Result = HttpUtility.HtmlDecode(result);
                         schedulerAgentTaskModel.SchedulerAgentTaskState = SchedulerAgentTaskState.Completed;
                         await _schedulerAgentTaskProcessor.Update(schedulerAgentTaskModel);
                         var login = await _loginProcessor.GetById(schedulerAgentTaskModel.LoginId);
                         if (_extendedConfig.AllowDebugMode && _extendedConfig.DebugMessagesStorageEnabled)
                         {
-                            var parametersString = string.Join(Environment.NewLine, parameters.Select(x => $" - {x.Key}: {x.Value}"));
+                            var parametersString = string.Join(Environment.NewLine, parametersValues.Select(x => $" - {x.Key}: {x.Value}"));
                             await _debugLogProcessor.Add(
                                 login?.Login ?? "",
                                 $"Agent (Background): {schedulerAgentTaskModel.CompositeAgentName}{Environment.NewLine}Parameters:{Environment.NewLine}{parametersString}",
