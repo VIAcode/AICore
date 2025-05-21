@@ -68,7 +68,7 @@ namespace AiCoreApi.Common.KernelMemory
             try
             {
                 var request = new UploadFileRequest(id, name, content, tags, embeddingConnectionModel, translateStep);
-                using var httpClient = GetClient();
+                var httpClient = GetClient();
                 using var response = await httpClient.PostAsJsonAsync(FilesCollection, request, cancellationToken);
                 response.EnsureSuccessStatusCode();
                 OnUploadCompleted(id);
@@ -85,7 +85,7 @@ namespace AiCoreApi.Common.KernelMemory
             {
                 var request = new HttpRequestMessage(HttpMethod.Delete, $"{FilesCollection}/{id}");
                 request.Content = new StringContent(embeddingConnectionModel.ToJson(), Encoding.UTF8, "application/json");
-                using var httpClient = GetClient();
+                var httpClient = GetClient();
                 using var response = await httpClient.SendAsync(request, cancellationToken);
                 response.EnsureSuccessStatusCode();
                 OnDeleteCompleted(id);

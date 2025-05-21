@@ -59,7 +59,7 @@ namespace AiCoreApi.SemanticKernel.Agents
                 }
             }
             _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Request", $"{GetHttpMethod(agent)}: {uri}\r\nBody: \r\n{body}");
-            using var httpClient = GetHttpClient(agent, parameters);
+            var httpClient = GetHttpClient(agent, parameters);
             var responseBody = await httpClient.GetCompressedStringAsync(httpRequestMessage);
             _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Response", responseBody);
             return responseBody;

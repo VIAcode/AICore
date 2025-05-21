@@ -83,7 +83,6 @@ You are an expert Python developer. Complete the code based on the given task.
 - The result must be a complete and executable script.
 - result must be set to 'result' variable
 - Use existing Agents where applicable. Do not re-implement Agent functionality.
-- Use existing Agents where applicable. Do not re-implement Agent functionality.
 - Do not include any pip install lines unless the imported module is directly used in the code.
 - Do not include # cmd:pip install package_name for 'openai' or any LLM-related packages unless they are directly imported and used (not just mentioned in prompt).
 - No ""def run(Parameters)"", just continue the code from ""Code to finish"".

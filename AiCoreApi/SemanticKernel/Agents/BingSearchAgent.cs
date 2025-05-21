@@ -152,7 +152,7 @@ namespace AiCoreApi.SemanticKernel.Agents
                 httpRequestMessage.Headers.Add("Ocp-Apim-Subscription-Key", apiKey);
             else
                 throw new InvalidOperationException("Bing API key is not set.");
-            using var httpClient = _httpClientFactory.CreateClient("RetryClient");
+            var httpClient = _httpClientFactory.CreateClient("RetryClient");
             return await httpClient.SendAsync(httpRequestMessage, cancellationToken).ConfigureAwait(false);
         }
 

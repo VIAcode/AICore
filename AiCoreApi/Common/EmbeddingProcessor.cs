@@ -40,7 +40,7 @@ namespace AiCoreApi.Common
                 client.DefaultRequestHeaders.Add("api-key", apiKey);
                 foreach (var chunk in text)
                 {
-                    var embedding = await PostForEmbedding(client, url, input);
+                    var embedding = await PostForEmbedding(client, url, chunk);
                     result.Add(new Chunk
                     {
                         Vector = embedding.ToList(),

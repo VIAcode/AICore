@@ -64,7 +64,7 @@ namespace AiCoreApi.SemanticKernel.Agents
                 $"Content Safety Analysis for: {textToAnalyze} \r\n\r\nAPI Url: {contentSafetyUrl} \r\nHate: {hate}\r\nSelfHarm: {selfHarm}\r\nSexual: {sexual}\r\nViolence: {violence}\r\nProtectedMaterial: {protectedMaterial}\r\nJailBreakAttack: {jailBreakAttack}");
 
             var foundContentSafetyIssues = new List<string>();
-            using var httpClient = _httpClientFactory.CreateClient("RetryClient");
+            var httpClient = _httpClientFactory.CreateClient("RetryClient");
             httpClient.DefaultRequestHeaders.Add("Ocp-Apim-Subscription-Key", apiKey);
             async Task DetectContentSafetyIssue(string endpoint, string debugMessage, string body, string jsonPath, string issueName)
             {

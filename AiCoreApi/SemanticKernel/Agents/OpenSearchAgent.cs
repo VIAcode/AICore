@@ -103,21 +103,21 @@ namespace AiCoreApi.SemanticKernel.Agents
 
         private async Task<string> Get(string url, ConnectionModel connection)
         {
-            using var client = GetClient(connection);
+            var client = GetClient(connection);
             var response = await client.GetAsync(url);
             return await HandleResponse(response);
         }
 
         private async Task<string> Delete(string url, ConnectionModel connection)
         {
-            using var client = GetClient(connection);
+            var client = GetClient(connection);
             var response = await client.DeleteAsync(url);
             return await HandleResponse(response);
         }
 
         private async Task<string> PostJson(string url, string json, ConnectionModel connection)
         {
-            using var client = GetClient(connection);
+            var client = GetClient(connection);
             var content = new StringContent(json, Encoding.UTF8, "application/json");
             var response = await client.PostAsync(url, content);
             return await HandleResponse(response);

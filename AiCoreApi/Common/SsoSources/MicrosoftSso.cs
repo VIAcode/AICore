@@ -47,7 +47,7 @@ namespace AiCoreApi.Common.SsoSources
 
         public async Task<ExtendedTokenModel> GetAccessTokenByCodeAsync(string code)
         {
-            using var httpClient = GetHttpClient();
+            var httpClient = GetHttpClient();
             var body = $"client_id={_extendedConfig.ClientId}"
                + $"&scope={Scope}"
                + $"&code={code}"
@@ -138,7 +138,7 @@ namespace AiCoreApi.Common.SsoSources
             var cachedContent = await _distributedCache.GetStringAsync(cacheKey);   
             if (cachedContent != null)
                 return cachedContent;
-            using var httpClient = GetHttpClient();
+            var httpClient = GetHttpClient();
             var message = new HttpRequestMessage(HttpMethod.Get, url)
             {
                 Headers = { Authorization = new AuthenticationHeaderValue("Bearer", accessToken) }

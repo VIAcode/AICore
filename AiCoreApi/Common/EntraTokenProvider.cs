@@ -155,7 +155,7 @@ namespace AiCoreApi.Common
                         { "scope", resource }
                     })
                 };
-                using var httpClient = _httpClientFactory.CreateClient("NoRetryClient");
+                var httpClient = _httpClientFactory.CreateClient("NoRetryClient");
                 var response = await httpClient.SendAsync(request);
                 if (!response.IsSuccessStatusCode)
                 {

@@ -136,7 +136,7 @@ globalThis.executeAgent=(name,args=[])=>{{
                                         case "Warning": _logger.LogWarning(call.args[1]); break;
                                         case "Debug": _logger.LogDebug(call.args[1]); break;
                                         case "Information": _logger.LogInformation(call.args[1]); break;
-                                        case "Trace": _logger.LogCritical(call.args[1]); break;
+                                        case "Trace": _logger.LogTrace(call.args[1]); break;
                                         default: _logger.LogCritical(call.args[1]); break;
                                     }
                                 }
@@ -161,7 +161,7 @@ globalThis.executeAgent=(name,args=[])=>{{
                             _responseAccessor.AddDebugMessage(_debugMessageSenderName, "Agent Exec Error", ex.ToString());
                         }
                     }
-                    await Task.Delay(5);
+                    await Task.Delay(10);
                 }
             });
 
