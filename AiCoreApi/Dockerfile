@@ -12,8 +12,8 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
     npm install -g npm@latest
 
 ENV PLAYWRIGHT_NODEJS_PATH=/usr/bin/node
+FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
 
-FROM base AS build
 ARG BUILD_CONFIGURATION=Release
 WORKDIR /src
 COPY ["AiCoreApi/AiCoreApi.csproj", "AiCoreApi/"]
