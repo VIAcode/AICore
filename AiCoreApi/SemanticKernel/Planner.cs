@@ -24,7 +24,11 @@ namespace AiCoreApi.SemanticKernel
         private readonly IPlannerHelpers _plannerHelpers;
         private readonly ICompositeAgent _compositeAgent;
         private readonly ICsharpCodeAgent _csharpCodeAgent;
-        private readonly IPythonCodeAgent _pythonCodeAgent; 
+        private readonly IPythonCodeAgent _pythonCodeAgent;
+        private readonly INodeJsCodeAgent _nodeJsCodeAgent;
+        private readonly ICompositeCSharpAgent _compositeCSharpAgent;
+        private readonly ICompositePythonAgent _compositePythonAgent;
+        private readonly ICompositeLoopAgent _compositeLoopAgent;
 
         public Planner(
             ISemanticKernelProvider semanticKernelProvider,
@@ -38,7 +42,11 @@ namespace AiCoreApi.SemanticKernel
             IPlannerHelpers plannerHelpers,
             ICompositeAgent compositeAgent,
             ICsharpCodeAgent csharpCodeAgent,
-            IPythonCodeAgent pythonCodeAgent)
+            IPythonCodeAgent pythonCodeAgent,
+            INodeJsCodeAgent nodeJsCodeAgent,
+            ICompositeCSharpAgent compositeCSharpAgent,
+            ICompositePythonAgent compositePythonAgent,
+            ICompositeLoopAgent compositeLoopAgent)
         {
             _semanticKernelProvider = semanticKernelProvider;
             _requestAccessor = requestAccessor;
@@ -52,8 +60,12 @@ namespace AiCoreApi.SemanticKernel
             _compositeAgent = compositeAgent;
             _csharpCodeAgent = csharpCodeAgent;
             _pythonCodeAgent = pythonCodeAgent;
+            _nodeJsCodeAgent = nodeJsCodeAgent;
+            _compositeCSharpAgent = compositeCSharpAgent;
+            _compositePythonAgent = compositePythonAgent;
+            _compositeLoopAgent = compositeLoopAgent;
         }
-        
+
         public async Task<MessageDialogViewModel.Message> GetChatResponse()
         {
             var agentsList = await _plannerHelpers.GetAgentsList();
@@ -158,6 +170,10 @@ namespace AiCoreApi.SemanticKernel
             _plannerHelpers.CompositeAgent = _compositeAgent;
             _plannerHelpers.CsharpCodeAgent = _csharpCodeAgent;
             _plannerHelpers.PythonCodeAgent = _pythonCodeAgent;
+            _plannerHelpers.NodeJsCodeAgent = _nodeJsCodeAgent;
+            _plannerHelpers.CompositeCSharpAgent = _compositeCSharpAgent;
+            _plannerHelpers.CompositePythonAgent = _compositePythonAgent;
+            _plannerHelpers.CompositeLoopAgent = _compositeLoopAgent;
             var allUserTags = await _loginProcessor.GetTagsByLogin(_requestAccessor.Login, _requestAccessor.LoginType);
             foreach (var agent in agentsList)
             {

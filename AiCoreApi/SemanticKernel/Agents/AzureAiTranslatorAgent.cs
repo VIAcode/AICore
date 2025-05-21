@@ -59,7 +59,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             var text = ApplyParameters(agent.Content[AgentContentParameters.Text].Value, parameters);
 
             _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Request", $"Connection: {connectionName}\r\nFrom: {fromLanguage}.\r\nTo: {toLanguage}\r\nText: {text}");
-            using var httpClient = _httpClientFactory.CreateClient("RetryClient");
+            var httpClient = _httpClientFactory.CreateClient("RetryClient");
             var route = $"/translate?api-version=3.0{(string.IsNullOrWhiteSpace(fromLanguage) ? "" : $"&from={fromLanguage}")}&to={toLanguage}";
             var uri = new Uri(Endpoint + route);
             httpClient.DefaultRequestHeaders.Add("Ocp-Apim-Subscription-Key", apiKey);

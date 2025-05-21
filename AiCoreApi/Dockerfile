@@ -1,17 +1,19 @@
-FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS base
-# USER app
+﻿FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS base
 WORKDIR /app
 EXPOSE 8080
 EXPOSE 8081
 
 RUN apt-get update && \
-    apt-get install -y python3.11 python3-pip && \
+    apt-get install -y python3.11 python3-pip ffmpeg curl gnupg && \
     rm -rf /var/lib/apt/lists/*
 
-RUN apt-get update && \
-    apt-get install -y ffmpeg
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+    apt-get install -y nodejs && \
+    npm install -g npm@latest
 
-FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
+ENV PLAYWRIGHT_NODEJS_PATH=/usr/bin/node
+
+FROM base AS build
 ARG BUILD_CONFIGURATION=Release
 WORKDIR /src
 COPY ["AiCoreApi/AiCoreApi.csproj", "AiCoreApi/"]

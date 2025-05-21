@@ -78,7 +78,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             var myId = jsonToken.Payload["oid"].ToString();
 
             var tokenCredential = new StaticTokenCredential(accessToken.Token, accessToken.ExpiresOn);
-            using var httpClient = _httpClientFactory.CreateClient("NoRetryClient");
+            var httpClient = _httpClientFactory.CreateClient("NoRetryClient");
             var graphClient = new GraphServiceClient(httpClient, tokenCredential);
 
             await SendTeamsMessageAsync(graphClient, targetType, userEmail, meetingTitle, channelId, teamId, body, myId);

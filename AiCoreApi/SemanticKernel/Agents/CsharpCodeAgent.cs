@@ -67,6 +67,8 @@ namespace AiCoreApi.SemanticKernel.Agents
             _monitoringConfig = monitoringConfig;
         }
 
+        public string BuildError { get; set; } = string.Empty;
+
         public async Task<string> DoCallWrapper(AgentModel agent, Dictionary<string, string> parameters) => await base.DoCallWrapper(agent, parameters);
 
         public override async Task<string> DoCall(AgentModel agent, Dictionary<string, string> parameters)
@@ -104,36 +106,46 @@ namespace AiCoreApi.SemanticKernel.Agents
             // If we haven't compiled a DLL for this code yet, do so
             if (!File.Exists(dllPath) || new FileInfo(dllPath).Length == 0 || (assemblyPathsCacheKey != "default" && !_assemblyPaths.ContainsKey(assemblyPathsCacheKey)))
             {
-                if (_compilationTasks.TryGetValue(dllPath, out var existingCompileTask))
+                try
                 {
-                    await existingCompileTask;
-                }
-                else
-                {
-                    var compileTask = Task.Run(async () =>
+                    if (_compilationTasks.TryGetValue(dllPath, out var existingCompileTask))
                     {
-                        _assemblyPaths.TryGetValue(assemblyPathsCacheKey, out var assemblyPaths);
-                        if (assemblyPaths == null)
+                        await existingCompileTask;
+                    }
+                    else
+                    {
+                        var compileTask = Task.Run(async () =>
                         {
-                            assemblyPaths = await ResolveNuGetPackages(agent, nugetDirectives);
-                            _assemblyPaths.TryAdd(assemblyPathsCacheKey, assemblyPaths);
-                        }
-                        var compiler = new DynamicCompiler();
-                        compiler.CompileCodeToDll(cleanedCode, dllPath, assemblyPaths, scriptCacheKey);
-                    });
+                            _assemblyPaths.TryGetValue(assemblyPathsCacheKey, out var assemblyPaths);
+                            if (assemblyPaths == null)
+                            {
+                                assemblyPaths = await ResolveNuGetPackages(agent, nugetDirectives);
+                                _assemblyPaths.TryAdd(assemblyPathsCacheKey, assemblyPaths);
+                            }
 
-                    if (!_compilationTasks.TryAdd(dllPath, compileTask))
-                    {
-                        compileTask = _compilationTasks[dllPath];
+                            var compiler = new DynamicCompiler();
+                            compiler.CompileCodeToDll(cleanedCode, dllPath, assemblyPaths, scriptCacheKey);
+                        });
+
+                        if (!_compilationTasks.TryAdd(dllPath, compileTask))
+                        {
+                            compileTask = _compilationTasks[dllPath];
+                        }
+
+                        try
+                        {
+                            await compileTask;
+                        }
+                        finally
+                        {
+                            _compilationTasks.TryRemove(dllPath, out _);
+                        }
                     }
-                    try
-                    {
-                        await compileTask;
-                    }
-                    finally
-                    {
-                        _compilationTasks.TryRemove(dllPath, out _);
-                    }
+                }
+                catch (Exception ex)
+                {
+                    BuildError = ex.Message + " " + ex.InnerException?.Message;
+                    throw;
                 }
             }
 
@@ -208,7 +220,6 @@ namespace AiCoreApi.SemanticKernel.Agents
                 Parameters = parameters,
                 RequestAccessor = _requestAccessor,
                 ResponseAccessor = _responseAccessor,
-                MetricsAccessor = _metricsAccessor,
                 ExecuteAgent = ExecuteAgent,
                 GetCacheValue = _cacheAccessor.GetCacheValue,
                 SetCacheValue = _cacheAccessor.SetCacheValue,
@@ -585,7 +596,6 @@ namespace AiCoreApi.SemanticKernel.Agents
             public Dictionary<string, string> Parameters { get; set; }
             public RequestAccessor RequestAccessor { get; set; }
             public ResponseAccessor ResponseAccessor { get; set; }
-            public IMetricsAccessor MetricsAccessor { get; set; }
             public Func<string, List<string>?, string> ExecuteAgent { get; set; }
             public Func<string, string> GetCacheValue { get; set; }
             public Func<string, string, int, string> SetCacheValue { get; set; }
@@ -754,5 +764,6 @@ namespace AiCoreApi.SemanticKernel.Agents
     {
         Task AddAgent(AgentModel agent, Kernel kernel, List<string> pluginsInstructions);
         Task<string> DoCallWrapper(AgentModel agent, Dictionary<string, string> parameters);
+        string BuildError { get; set; }
     }
 }

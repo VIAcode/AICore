@@ -4,7 +4,6 @@ using System.Net.Http.Headers;
 using System.Text;
 using AiCoreApi.Common;
 using System.Web;
-using System.IO.Compression;
 using AiCoreApi.Common.Extensions;
 using AiCoreApi.Common.Monitoring;
 
@@ -60,7 +59,7 @@ namespace AiCoreApi.SemanticKernel.Agents
                 }
             }
             _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Request", $"{GetHttpMethod(agent)}: {uri}\r\nBody: \r\n{body}");
-            using var httpClient = GetHttpClient(agent, parameters);
+            var httpClient = GetHttpClient(agent, parameters);
             var responseBody = await httpClient.GetCompressedStringAsync(httpRequestMessage);
             _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Response", responseBody);
             return responseBody;

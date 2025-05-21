@@ -488,7 +488,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             httpRequestMessage.Headers.Add("Authorization", $"Bearer {apiKey}");
             httpRequestMessage.Headers.Add("Accept", "image/*");
             httpRequestMessage.Content = formData;
-            using var httpClient = _httpClientFactory.CreateClient("NoRetryClient");
+            var httpClient = _httpClientFactory.CreateClient("NoRetryClient");
             using var response = await httpClient.SendAsync(httpRequestMessage);
             if (!response.IsSuccessStatusCode)
             {

@@ -59,7 +59,7 @@ namespace AiCoreApi.SemanticKernel.Agents
 
             var accessToken = await GetAccessToken(apiKey, region);
 
-            using var httpClient = _httpClientFactory.CreateClient("RetryClient");
+            var httpClient = _httpClientFactory.CreateClient("RetryClient");
             httpClient.DefaultRequestHeaders.Accept.Clear();
             httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
             httpClient.DefaultRequestHeaders.Add("Ocp-Apim-Subscription-Region", region);
@@ -131,7 +131,7 @@ namespace AiCoreApi.SemanticKernel.Agents
         {
             var tokenUri = $"https://{region}.api.cognitive.microsoft.com/sts/v1.0/issueToken";
 
-            using var httpClient = _httpClientFactory.CreateClient("RetryClient");
+            var httpClient = _httpClientFactory.CreateClient("RetryClient");
             httpClient.DefaultRequestHeaders.Accept.Clear();
             httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/x-www-form-urlencoded"));
             httpClient.DefaultRequestHeaders.Add("Ocp-Apim-Subscription-Key", apiKey);

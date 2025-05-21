@@ -118,7 +118,7 @@ namespace AiCoreApi.Services.ProcessingServices.AgentsHandlers
         {
             var tokenCredential = new StaticTokenCredential(accessToken.Token, accessToken.ExpiresOn);
             
-            using var httpClient = _httpClientFactory.CreateClient("NoRetryClient");
+            var httpClient = _httpClientFactory.CreateClient("NoRetryClient");
             var graphClient = new GraphServiceClient(httpClient, tokenCredential);
 
             var response = await graphClient.Users[userEmail]

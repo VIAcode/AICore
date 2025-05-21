@@ -70,7 +70,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             var whisperApiKey = connection.Content["apiKey"];
             var whisperEndpoint = connection.Content["endpoint"];
 
-            using var httpClient = _httpClientFactory.CreateClient("RetryClient");
+            var httpClient = _httpClientFactory.CreateClient("RetryClient");
             httpClient.DefaultRequestHeaders.Add("api-key", whisperApiKey);
             var fileContent = new ByteArrayContent(Convert.FromBase64String(base64Audio));
             fileContent.Headers.ContentType = MediaTypeHeaderValue.Parse(mimeType);

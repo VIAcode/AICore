@@ -48,6 +48,9 @@ namespace AiCoreApi.Models.DbModels
         Smtp = 26,
         Imap = 27,
         GraphApi = 28,
+        AzDoWiki = 29,
+        Qdrant = 30,
+        OpenSearch = 31,
     }
 
     public static class ConnectionTypeExtensions

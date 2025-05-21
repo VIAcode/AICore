@@ -39,7 +39,7 @@ namespace AiCoreApi.Common.SsoSources
 
         public async Task<ExtendedTokenModel> GetAccessTokenByCodeAsync(string code)
         {
-            using var httpClient = GetHttpClient();
+            var httpClient = GetHttpClient();
             var body = $"client_id={_extendedConfig.GoogleClientId}"
                + $"&scope={Scope}"
                + $"&code={code}"

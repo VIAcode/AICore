@@ -73,5 +73,13 @@ namespace AiCoreApi.Models.DbModels
         GraphMail = 39,
         GraphTeamsNotification = 40,
         GraphTeamsListener = 41,
+        AzDoWiki = 42,
+        NodeJsCode = 43,
+        Embedding = 44,
+        Qdrant = 45,
+        CompositeCSharp = 46,
+        CompositePython = 47,
+        OpenSearch = 48,
+        CompositeLoop = 49,
     }
 }

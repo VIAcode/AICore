@@ -56,7 +56,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             var resourceName = aiSearchConnection.Content["resourceName"];
 
             var endpoint = $"https://{resourceName}.search.windows.net/indexes/{indexName}/docs/{action}?api-version=2023-11-01";
-            using var httpClient = _httpClientFactory.CreateClient("RetryClient");
+            var httpClient = _httpClientFactory.CreateClient("RetryClient");
             httpClient.DefaultRequestHeaders.Add("api-key", apiKey);
             var content = new StringContent(queryString, System.Text.Encoding.UTF8, "application/json");
             var response = await httpClient.PostAsync(endpoint, content);

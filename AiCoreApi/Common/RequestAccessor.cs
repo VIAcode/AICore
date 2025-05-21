@@ -23,7 +23,7 @@ namespace AiCoreApi.Common
             UseMarkdown = GetParameter("use_markdown") != "false";
             UseBing = GetParameter("use_bing") == "true";
             UseCachedPlan = GetParameter("use_cached_plan") != "false";
-            UseDebug = GetParameter("use_debug") == "true" && UserContext.HasRole(nameof(RoleEnum.Developer)) || UserContext.HasRole(nameof(RoleEnum.Admin));
+            UseDebug = GetParameter("use_debug") == "true" && (UserContext.HasRole(nameof(RoleEnum.Developer)) || UserContext.HasRole(nameof(RoleEnum.Admin)));
             DefaultConnectionNames = GetParameter("connection_name")?.Split(',').ToList() ?? new List<string>();
             TagsString = string.IsNullOrEmpty(GetParameter("tags")) ? "0" : GetParameter("tags");
             WorkspaceId = GetParameter("workspace_id") != null ? Convert.ToInt32(GetParameter("workspace_id")) : null;
