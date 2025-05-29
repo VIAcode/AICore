@@ -29,5 +29,6 @@ namespace AiCoreApi.Models.DbModels
         WebUrl = 2,
         UploadFile = 3,
         AzDoWiki = 4,
+        AzureBlobStorage = 5,
     }
 }

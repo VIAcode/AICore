@@ -43,6 +43,18 @@ namespace AiCoreApi.Services.IngestionServices
             return connection;
         }
 
+        public async Task<ConnectionModel> GetDataSourceConnection(IngestionModel ingestion, ConnectionType connectionType, string connectionFieldName)
+        {
+            var connectionId = ingestion.Content.ContainsKey(connectionFieldName) ? ingestion.Content[connectionFieldName] : "";
+            var connections = await GetConnections(ingestion.WorkspaceId);
+            if (connections.Count == 0)
+                throw new ApplicationException("No connections found");
+            var connection = connections.Find(x => x.Type == connectionType && x.ConnectionId.ToString() == connectionId);
+            if (connection == null)
+                throw new ApplicationException("No connection found");
+            return connection;
+        }
+
         public async Task FillVectorDbConnection(IngestionModel ingestion, EmbeddingConnectionModel embeddingConnectionModel)
         {
             var vectorDbConnectionName = ingestion.Content.ContainsKey(Constants.VectorDbConnectionField) ? ingestion.Content[Constants.VectorDbConnectionField] : "";
@@ -93,6 +105,7 @@ namespace AiCoreApi.Services.IngestionServices
     public interface IDataIngestionHelperService
     {
         Task<ConnectionModel> GetEmbeddingConnection(IngestionModel ingestion);
+        Task<ConnectionModel> GetDataSourceConnection(IngestionModel ingestion, ConnectionType connectionType, string connectionFieldName);
         Task FillVectorDbConnection(IngestionModel ingestion, EmbeddingConnectionModel embeddingConnectionModel);
         Task<TranslateStepModel> GetTranslateStepModel(IngestionModel ingestion);
     }

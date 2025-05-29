@@ -23,13 +23,16 @@ namespace AiCoreApi.Common.KernelMemory
             ExecuteWithSemaphore(() => UploadInternal(embeddingConnectionModel, id, name, content, tags, translateStep, cancellationToken));
 
         public Task Upload(EmbeddingConnectionModel embeddingConnectionModel, string id, string? name, Stream content, Dictionary<string, List<string>> tags,
-            TranslateStepModel? translateStep = null, CancellationToken cancellationToken = default)
+            TranslateStepModel? translateStep = null, long? size = null, CancellationToken cancellationToken = default)
         {
             if (content.CanSeek && content.Position > 0)
                 content.Seek(0, SeekOrigin.Begin);
 
+            if (!size.HasValue)
+                size = content.Length;
+
             using var binaryReader = new BinaryReader(content);
-            var bytes = binaryReader.ReadBytes((int)content.Length);
+            var bytes = binaryReader.ReadBytes((int)size);
 
             return ExecuteWithSemaphore(() => UploadInternal(embeddingConnectionModel, id, name, bytes, tags, translateStep, cancellationToken));
         }
@@ -213,7 +216,7 @@ namespace AiCoreApi.Common.KernelMemory
     public interface IFileIngestionClient
     {
         Task Upload(EmbeddingConnectionModel embeddingConnectionModel, string id, string? name, byte[] content, Dictionary<string, List<string>> tags, TranslateStepModel? translateStep = null, CancellationToken cancellationToken = default);
-        Task Upload(EmbeddingConnectionModel embeddingConnectionModel, string id, string? name, Stream content, Dictionary<string, List<string>> tags, TranslateStepModel? translateStep = null, CancellationToken cancellationToken = default);
+        Task Upload(EmbeddingConnectionModel embeddingConnectionModel, string id, string? name, Stream content, Dictionary<string, List<string>> tags, TranslateStepModel? translateStep = null, long? size = null, CancellationToken cancellationToken = default);
         Task Upload(EmbeddingConnectionModel embeddingConnectionModel, string id, string url, Dictionary<string, List<string>> tags, TranslateStepModel? translateStep = null, CancellationToken cancellationToken = default);
         Task Delete(EmbeddingConnectionModel embeddingConnectionModel, string id, CancellationToken cancellationToken = default);
     }
