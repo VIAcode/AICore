@@ -34,7 +34,7 @@ public static class HttpExtensions
     {
         const int maxRedirects = 10;
         int redirectCount = 0;
-        HttpRequestMessage currentRequest = CloneRequest(originalRequest);
+        HttpRequestMessage currentRequest = await CloneRequest(originalRequest);
 
         while (true)
         {
@@ -51,7 +51,7 @@ public static class HttpExtensions
                     : new Uri(currentRequest.RequestUri!, response.Headers.Location);
 
                 response.Dispose(); // Dispose before creating new request
-                currentRequest = CloneRequest(originalRequest, redirectUri); // Clone original with new URL
+                currentRequest = await CloneRequest(originalRequest, redirectUri); // Clone original with new URL
                 continue;
             }
 
@@ -60,9 +60,19 @@ public static class HttpExtensions
         }
     }
 
-    private static HttpRequestMessage CloneRequest(HttpRequestMessage request, Uri? newUri = null)
+    private static async Task<HttpRequestMessage> CloneRequest(HttpRequestMessage request, Uri? newUri = null)
     {
         var clone = new HttpRequestMessage(request.Method, newUri ?? request.RequestUri);
+        
+        if (request.Content != null)
+        {
+            var memoryStream = new MemoryStream();
+            await request.Content.CopyToAsync(memoryStream);
+            memoryStream.Position = 0;
+            clone.Content = new StreamContent(memoryStream);
+            foreach (var header in request.Content.Headers)
+                clone.Content.Headers.TryAddWithoutValidation(header.Key, header.Value);
+        }
 
         foreach (var header in request.Headers)
             clone.Headers.TryAddWithoutValidation(header.Key, header.Value);
