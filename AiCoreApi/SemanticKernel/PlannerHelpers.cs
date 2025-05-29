@@ -186,7 +186,7 @@ namespace AiCoreApi.SemanticKernel
 
             var agentTypes = GetAgentTypes();
             if (!agentTypes.TryGetValue(agent.Type, out var agentType))
-                throw new Exception($"Agent type not found: {agent.Type}");
+                throw new AiCoreUiException($"Agent type not found: {agent.Type}");
             var agentInstance = ((BaseAgent)agentType);
             var result = await agentInstance.DoCallWrapper(agent, parametersDictionary);
             return result;
@@ -196,7 +196,7 @@ namespace AiCoreApi.SemanticKernel
         {
             var agentTypes = GetAgentTypes();
             if (!agentTypes.TryGetValue(agentModel.Type, out var agentType))
-                throw new Exception($"Agent type not found: {agentModel.Type}");
+                throw new AiCoreUiException($"Agent type not found: {agentModel.Type}");
             var agentInstance = (BaseAgent)agentType;
             await agentInstance.OnAddUpdate(agentModel);
         }
@@ -205,9 +205,11 @@ namespace AiCoreApi.SemanticKernel
         {
             var dbAgents = await _agentsProcessor.List(_requestAccessor.WorkspaceId);
             var agentModel = dbAgents.FirstOrDefault(item => item.AgentId == agentId);
+            if (agentModel == null)
+                throw new AiCoreUiException($"Agent not found with ID: {agentId}");
             var agentTypes = GetAgentTypes();
             if (!agentTypes.TryGetValue(agentModel.Type, out var agentType))
-                throw new Exception($"Agent type not found: {agentModel.Type}");
+                throw new AiCoreUiException($"Agent type not found: {agentModel.Type}");
             var agentInstance = ((BaseAgent)agentType);
             await agentInstance.OnDelete(agentModel);
         }

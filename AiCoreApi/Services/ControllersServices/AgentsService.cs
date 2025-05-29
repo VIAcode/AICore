@@ -323,6 +323,10 @@ public class AgentsService : IAgentsService
                 }
             }
         }
+        if (callsLimit <= 0)
+        {
+            _logger.LogError("Import agents process reached maximum calls limit. Some agents may not be imported.");
+        }
         await SaveGit();
     }
 

@@ -37,7 +37,9 @@ namespace AiCoreApi.SemanticKernel.Agents
 
         public override async Task<string> DoCall(AgentModel agent, Dictionary<string, string> parameters)
         {
-            parameters.ToList().ForEach(p => parameters[p.Key] = HttpUtility.HtmlDecode(p.Value));
+            foreach (var p in parameters)
+                parameters[p.Key] = HttpUtility.HtmlDecode(p.Value);
+
             _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
             _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Request", JsonSerializer.Serialize(parameters, new JsonSerializerOptions { WriteIndented = true }));
             var agentToCall = ApplyParameters(agent.Content[AgentContentParameters.AgentToCall].Value, parameters);
