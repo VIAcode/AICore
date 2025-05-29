@@ -74,6 +74,7 @@ namespace AiCoreApi.Services.ProcessingServices.AgentsHandlers
                             AgentType.CompositeCSharp => await scope.ServiceProvider.GetRequiredService<ICompositeCSharpAgent>().DoCallWrapper(agentToCallModel, parametersValues),
                             AgentType.CompositePython => await scope.ServiceProvider.GetRequiredService<ICompositePythonAgent>().DoCallWrapper(agentToCallModel, parametersValues),
                             AgentType.CompositeLoop => await scope.ServiceProvider.GetRequiredService<ICompositeLoopAgent>().DoCallWrapper(agentToCallModel, parametersValues),
+                            AgentType.Flow => await scope.ServiceProvider.GetRequiredService<IFlowAgent>().DoCallWrapper(agentToCallModel, parametersValues),
                             _ => throw new NotSupportedException($"Unsupported agent type: {agentToCallModel.Type}")
                         };
                         schedulerAgentTaskModel.Result = HttpUtility.HtmlDecode(result);

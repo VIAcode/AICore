@@ -7,6 +7,7 @@ using AiCoreApi.SemanticKernel.Agents;
 using AgentType = AiCoreApi.Models.DbModels.AgentType;
 using static AiCoreApi.Common.ExceptionHandlingMiddleware;
 using AiCoreApi.Authorization;
+using AiCoreApi.Models.ViewModels;
 
 namespace AiCoreApi.SemanticKernel
 {
@@ -62,6 +63,7 @@ namespace AiCoreApi.SemanticKernel
         private readonly IQdrantAgent _qdrantAgent;
         private readonly IEmbeddingAgent _embeddingAgent;
         private readonly IOpenSearchAgent _openSearchAgent;
+        private readonly IGitAgent _gitAgent;
 
         public PlannerHelpers(
             RequestAccessor requestAccessor,
@@ -102,7 +104,8 @@ namespace AiCoreApi.SemanticKernel
             IAzDoWikiAgent azDoWikiAgent,
             IQdrantAgent qdrantAgent,
             IEmbeddingAgent embeddingAgent,
-            IOpenSearchAgent openSearchAgent)
+            IOpenSearchAgent openSearchAgent,
+            IGitAgent gitAgent)
         {
             _requestAccessor = requestAccessor;
             _extendedConfig = extendedConfig;
@@ -143,6 +146,7 @@ namespace AiCoreApi.SemanticKernel
             _qdrantAgent = qdrantAgent;
             _embeddingAgent = embeddingAgent;
             _openSearchAgent = openSearchAgent;
+            _gitAgent = gitAgent;
         }
 
         private List<AgentModel>? _agentsList;
@@ -182,10 +186,50 @@ namespace AiCoreApi.SemanticKernel
 
             var agentTypes = GetAgentTypes();
             if (!agentTypes.TryGetValue(agent.Type, out var agentType))
-                throw new Exception($"Agent type not found: {agent.Type}");
+                throw new AiCoreUiException($"Agent type not found: {agent.Type}");
             var agentInstance = ((BaseAgent)agentType);
             var result = await agentInstance.DoCallWrapper(agent, parametersDictionary);
             return result;
+        }
+
+        public async Task OnAddUpdate(AgentModel agentModel)
+        {
+            var agentTypes = GetAgentTypes();
+            if (!agentTypes.TryGetValue(agentModel.Type, out var agentType))
+                throw new AiCoreUiException($"Agent type not found: {agentModel.Type}");
+            var agentInstance = (BaseAgent)agentType;
+            await agentInstance.OnAddUpdate(agentModel);
+        }
+
+        public async Task OnDelete(int agentId)
+        {
+            var dbAgents = await _agentsProcessor.List(_requestAccessor.WorkspaceId);
+            var agentModel = dbAgents.FirstOrDefault(item => item.AgentId == agentId);
+            if (agentModel == null)
+                throw new AiCoreUiException($"Agent not found with ID: {agentId}");
+            var agentTypes = GetAgentTypes();
+            if (!agentTypes.TryGetValue(agentModel.Type, out var agentType))
+                throw new AiCoreUiException($"Agent type not found: {agentModel.Type}");
+            var agentInstance = ((BaseAgent)agentType);
+            await agentInstance.OnDelete(agentModel);
+        }
+
+        public async Task OnExport(AgentModel agentModel, Dictionary<int, AgentModelProcessed> agentsToExport)
+        {
+            var agentTypes = GetAgentTypes();
+            if (!agentTypes.TryGetValue(agentModel.Type, out var agentType))
+                throw new Exception($"Agent type not found: {agentModel.Type}");
+            var agentInstance = (BaseAgent)agentType;
+            await agentInstance.OnExport(agentModel, agentsToExport);
+        }
+
+        public async Task OnImport(AgentModel agentModel, Dictionary<string, AgentModelProcessed> agentsTImport)
+        {
+            var agentTypes = GetAgentTypes();
+            if (!agentTypes.TryGetValue(agentModel.Type, out var agentType))
+                throw new Exception($"Agent type not found: {agentModel.Type}");
+            var agentInstance = (BaseAgent)agentType;
+            await agentInstance.OnImport(agentModel, agentsTImport);
         }
 
         private T ResolveAgent<T>(ref T? field) where T : class
@@ -241,6 +285,13 @@ namespace AiCoreApi.SemanticKernel
         {
             get => ResolveAgent(ref _nodeJsCodeAgent);
             set => _nodeJsCodeAgent = value;
+        }
+
+        private IFlowAgent? _flowAgent;
+        public IFlowAgent FlowAgent
+        {
+            get => ResolveAgent(ref _flowAgent);
+            set => _flowAgent = value;
         }
 
         public async Task AddPlugin(AgentModel agent, Kernel kernel, List<string> pluginsInstructions)
@@ -303,7 +354,9 @@ namespace AiCoreApi.SemanticKernel
                 { AgentType.AzDoWiki, _azDoWikiAgent },
                 { AgentType.Embedding, _embeddingAgent },
                 { AgentType.Qdrant, _qdrantAgent },
-                { AgentType.OpenSearch, _openSearchAgent }
+                { AgentType.OpenSearch, _openSearchAgent },
+                { AgentType.Git, _gitAgent },
+                { AgentType.Flow, FlowAgent }
             };
             return agentMapping;
         }
@@ -325,6 +378,10 @@ namespace AiCoreApi.SemanticKernel
     {
         Task<List<AgentModel>> GetAgentsList();
         Task<string> ExecuteAgent(string agentName, List<string>? parameters = null, bool checkAgentCallType = false);
+        Task OnDelete(int agentId);
+        Task OnAddUpdate(AgentModel agentModel);
+        Task OnExport(AgentModel agentModel, Dictionary<int, AgentModelProcessed> agentsToExport);
+        Task OnImport(AgentModel agentModel, Dictionary<string, AgentModelProcessed> agentsTImport);
         Task AddPlugin(AgentModel agent, Kernel kernel, List<string> pluginsInstructions);
         string ApplyPlaceholders(string plannerPrompt);
         string GetPlannerCacheKey(string plannerPrompt, Kernel kernel);
@@ -335,5 +392,6 @@ namespace AiCoreApi.SemanticKernel
         ICompositeCSharpAgent CompositeCSharpAgent { get; set; }
         ICompositePythonAgent CompositePythonAgent { get; set; }
         ICompositeLoopAgent CompositeLoopAgent { get; set; }
+        IFlowAgent FlowAgent { get; set; }
     }
 }

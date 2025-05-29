@@ -12,7 +12,7 @@ using AiCoreApi.Common.Monitoring;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
-    public class CompositePythonAgent : BaseAgent, ICompositePythonAgent
+    public class CompositePythonAgent : BaseEnabledAgentsAgent, ICompositePythonAgent
     {
         private static ConcurrentDictionary<string, string> CodeCache = new();
         private string _debugMessageSenderName = "CompositePythonAgent";
@@ -36,6 +36,7 @@ namespace AiCoreApi.SemanticKernel.Agents
         private readonly ISemanticKernelProvider _semanticKernelProvider;
 
         public CompositePythonAgent(
+            IAgentsProcessor agentsProcessor,
             MonitoringConfig monitoringConfig,
             IPythonCodeAgent pythonCodeAgent,
             ILogger<CompositePythonAgent> logger,
@@ -45,7 +46,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             IPlannerHelpers plannerHelpers,
             ISemanticKernelProvider semanticKernelProvider
         )
-        : base(responseAccessor, requestAccessor, monitoringConfig, logger)
+        : base(agentsProcessor, responseAccessor, requestAccessor, monitoringConfig, logger)
         {
             _pythonCodeAgent = pythonCodeAgent;
             _requestAccessor = requestAccessor;

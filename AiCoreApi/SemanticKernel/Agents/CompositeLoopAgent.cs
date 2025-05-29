@@ -12,7 +12,7 @@ using AiCoreApi.Common.Monitoring;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
-    public class CompositeLoopAgent : BaseAgent, ICompositeLoopAgent
+    public class CompositeLoopAgent : BaseEnabledAgentsAgent, ICompositeLoopAgent
     {
         private string _debugMessageSenderName = "CompositeLoopAgent";
 
@@ -65,6 +65,7 @@ namespace AiCoreApi.SemanticKernel.Agents
         }
 
         public CompositeLoopAgent(
+            IAgentsProcessor agentsProcessor,
             IPlannerHelpers plannerHelpers,
             ISemanticKernelProvider semanticKernelProvider,
             IConnectionProcessor connectionProcessor,
@@ -72,7 +73,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             ResponseAccessor responseAccessor,
             MonitoringConfig monitoringConfig,
             ILogger<CompositeLoopAgent> logger)
-            : base(responseAccessor, requestAccessor, monitoringConfig, logger)
+            : base(agentsProcessor, responseAccessor, requestAccessor, monitoringConfig, logger)
         {
             _requestAccessor = requestAccessor;
             _responseAccessor = responseAccessor;

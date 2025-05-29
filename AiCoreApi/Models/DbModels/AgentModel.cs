@@ -19,6 +19,7 @@ namespace AiCoreApi.Models.DbModels
         public List<TagModel> Tags { get; set; } = new();
         public int Version { get; set; } = 0;
         public int? WorkspaceId { get; set; }
+        public string? FlowName { get; set; }
 
     }
 
@@ -81,5 +82,7 @@ namespace AiCoreApi.Models.DbModels
         CompositePython = 47,
         OpenSearch = 48,
         CompositeLoop = 49,
+        Git = 50,
+        Flow = 51,
     }
 }
