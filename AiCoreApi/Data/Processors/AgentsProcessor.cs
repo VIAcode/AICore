@@ -97,7 +97,7 @@ public class AgentsProcessor : IAgentsProcessor
     public async Task UpdateFlowNameForAsync(string flowName, string? value, int? workspaceId)
     {
         var qry = _db.Agents.Where(e => e.FlowName == flowName);
-        if ((workspaceId ?? 0) == 0)
+        if (workspaceId == null || workspaceId == 0)
             qry = qry.Where(item => item.WorkspaceId == null || item.WorkspaceId == 0);
         else
             qry = qry.Where(item => item.WorkspaceId == workspaceId);
@@ -115,7 +115,7 @@ public class AgentsProcessor : IAgentsProcessor
     public async Task UpdateFlowNameForAsync(List<int> ids, string? value, int? workspaceId)
     {
         var qry = _db.Agents.Where(e => ids.Contains(e.AgentId));
-        if ((workspaceId ?? 0) == 0)
+        if (workspaceId == null || workspaceId == 0)
             qry = qry.Where(item => item.WorkspaceId == null || item.WorkspaceId == 0);
         else 
             qry = qry.Where(item => item.WorkspaceId == workspaceId);

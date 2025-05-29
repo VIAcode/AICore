@@ -23,6 +23,8 @@ public class AgentsService : IAgentsService
     private readonly RequestAccessor _requestAccessor;
     private readonly IPlannerHelpers _plannerHelpers;
 
+    private const int MaxCallsLimit = 1000;
+
     public AgentsService(
         ExtendedConfig extendedConfig,
         IAgentsProcessor agentsProcessor, 
@@ -304,7 +306,7 @@ public class AgentsService : IAgentsService
                     Processed = false
                 });
 
-        var callsLimit = 1000;
+        var callsLimit = MaxCallsLimit;
         while (agentsToImportDictionary.Any(x => !x.Value.Processed) && callsLimit > 0)
         {
             callsLimit--;
