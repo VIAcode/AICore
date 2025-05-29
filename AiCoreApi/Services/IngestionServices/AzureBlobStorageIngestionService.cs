@@ -77,7 +77,7 @@ namespace AiCoreApi.Services.IngestionServices
             var prefix = ingestion.Content.ContainsKey("Prefix") ? ingestion.Content["Prefix"] : string.Empty;
 
             var containerClient = blobServiceClient.GetBlobContainerClient(containerName);
-            var blobs = containerClient.GetBlobs(prefix: prefix);
+            var blobs = containerClient.GetBlobs(prefix: prefix).ToList();
             var docIds = new HashSet<string>();
 
             var i = 0;
