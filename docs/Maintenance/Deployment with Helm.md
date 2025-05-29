@@ -67,7 +67,7 @@ Deploy AI Core API with an internal PostgreSQL instance, using the latest images
 ```sh
 helm upgrade aicore "./helm" --namespace $namespace --create-namespace --install --kubeconfig $kubeconfig \
     --set global.app.domain=$hostName \
-    --set global.tls.crt.createSecret=true \
+    --set global.tls.createSecret=true \
     --set global.tls.crt=$tlsCrt \
     --set global.tls.key=$tlsKey
 ```

@@ -7,18 +7,20 @@ namespace AiCoreApi.Services.IngestionServices
         private readonly IFileUploadIngestionService _fileUploadIngestionService;
         private readonly IWebUrlIngestionService _webUrlIngestionService;
         private readonly IAzDoWikiIngestionService _azDoWikiIngestionService;
-
+        private readonly IAzureBlobStorageIngestionService _blobStorageIngestionService;
 
         public DataIngestionWorkerFactory(
             ISharePointIngestionService sharePointIngestionService,
             IFileUploadIngestionService fileUploadIngestionService,
             IWebUrlIngestionService webUrlIngestionService,
-            IAzDoWikiIngestionService azDoWikiIngestionService)
+            IAzDoWikiIngestionService azDoWikiIngestionService,
+            IAzureBlobStorageIngestionService blobStorageIngestionService)
         {
             _sharePointIngestionService = sharePointIngestionService;
             _fileUploadIngestionService = fileUploadIngestionService;
             _webUrlIngestionService = webUrlIngestionService;
             _azDoWikiIngestionService = azDoWikiIngestionService;
+            _blobStorageIngestionService = blobStorageIngestionService;
         }
 
         public IDataIngestionWorker GetService(IngestionModel ingestion) => GetService(ingestion.Type);
@@ -34,6 +36,8 @@ namespace AiCoreApi.Services.IngestionServices
                     return _fileUploadIngestionService;
                 case IngestionType.AzDoWiki:
                     return _azDoWikiIngestionService;
+                case IngestionType.AzureBlobStorage:
+                    return _blobStorageIngestionService;
                 default:
                     throw new InvalidOperationException($"Unsupported data source '{ingestionType}'.");
             }
