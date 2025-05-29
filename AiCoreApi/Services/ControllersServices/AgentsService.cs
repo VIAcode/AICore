@@ -2,12 +2,11 @@
 using AiCoreApi.Models.ViewModels;
 using AiCoreApi.Data.Processors;
 using AiCoreApi.Models.DbModels;
-using AiCoreApi.SemanticKernel.Agents;
 using AutoMapper;
 using AiCoreApi.Common.Extensions;
-using static AiCoreApi.SemanticKernel.Agents.CompositeAgent;
 using Microsoft.Extensions.Caching.Distributed;
 using AiCoreApi.Common;
+using AiCoreApi.SemanticKernel;
 using LibGit2Sharp;
 
 namespace AiCoreApi.Services.ControllersServices;
@@ -22,6 +21,7 @@ public class AgentsService : IAgentsService
     private readonly ILoginProcessor _loginProcessor;
     private readonly ITagsProcessor _tagsProcessor;
     private readonly RequestAccessor _requestAccessor;
+    private readonly IPlannerHelpers _plannerHelpers;
 
     public AgentsService(
         ExtendedConfig extendedConfig,
@@ -31,7 +31,8 @@ public class AgentsService : IAgentsService
         IDistributedCache distributedCache,
         ILoginProcessor loginProcessor,
         ITagsProcessor tagsProcessor,
-        RequestAccessor requestAccessor)
+        RequestAccessor requestAccessor,
+        IPlannerHelpers plannerHelpers)
     {
         _extendedConfig = extendedConfig;
         _agentsProcessor = agentsProcessor;
@@ -41,6 +42,7 @@ public class AgentsService : IAgentsService
         _loginProcessor = loginProcessor;
         _tagsProcessor = tagsProcessor;
         _requestAccessor = requestAccessor;
+        _plannerHelpers = plannerHelpers;
     }
 
     private static readonly SemaphoreSlim GitRepoLock = new(1, 1);
@@ -52,6 +54,7 @@ public class AgentsService : IAgentsService
             throw new ArgumentException("Value should be 0.", nameof(AgentViewModel.AgentId));
 
         var agentModel = _mapper.Map<AgentModel>(agentViewModel);
+        await _plannerHelpers.OnAddUpdate(agentModel);
         var savedModel = await _agentsProcessor.Add(agentModel, workspaceId);
         var result = _mapper.Map<AgentViewModel>(savedModel);
         await SaveGit();
@@ -64,6 +67,7 @@ public class AgentsService : IAgentsService
             throw new ArgumentException("Value should be not 0.", nameof(AgentViewModel.AgentId));
 
         var agentModel = _mapper.Map<AgentModel>(agentViewModel);
+        await _plannerHelpers.OnAddUpdate(agentModel);
         var savedModel = await _agentsProcessor.Update(agentModel);
         var result = _mapper.Map<AgentViewModel>(savedModel);
         await SaveGit();
@@ -79,6 +83,7 @@ public class AgentsService : IAgentsService
 
     public async Task DeleteAgent(int agentId)
     {
+        await _plannerHelpers.OnDelete(agentId);
         await _agentsProcessor.Delete(agentId);
         await SaveGit();
     }
@@ -149,15 +154,31 @@ public class AgentsService : IAgentsService
     {
         var agents = await _agentsProcessor.List(null);
 
-        var agentsToExport = agents
-            .Where(agent => agentIdsList.Contains(agent.AgentId) && agent.Type != Models.DbModels.AgentType.Composite)
-            .ToList();
+        var agentsToExportDictionary = agents
+            .Where(agent => agentIdsList.Contains(agent.AgentId))
+            .ToDictionary(
+                key => key.AgentId,
+                value => new AgentModelProcessed
+                {
+                    AgentModel = value,
+                    Processed = false
+                });
 
-        var compositeAgents = agents
-            .Where(agent => agentIdsList.Contains(agent.AgentId) && agent.Type == Models.DbModels.AgentType.Composite)
-            .ToList();
+        while (agentsToExportDictionary.Any(x => !x.Value.Processed))
+        {
+            var nonProcessedAgents = agentsToExportDictionary
+                .Where(x => !x.Value.Processed)
+                .Select(x => x.Value.AgentModel)
+                .ToList();
+            foreach (var agentModel in nonProcessedAgents)
+            {
+                await _plannerHelpers.OnExport(agentModel, agentsToExportDictionary);
+            }
+        }
 
-        await HandleCompositeAgents(agentsToExport, agents, compositeAgents);
+        var agentsToExport = agentsToExportDictionary
+            .Select(x => x.Value.AgentModel)
+            .ToList();
 
         var agentsToExportResult = _mapper.Map<List<AgentExportModel>>(agentsToExport);
         var fileMap = new Dictionary<string, string>();
@@ -177,41 +198,7 @@ public class AgentsService : IAgentsService
             var jsonName = $"{agent.Name}.json";
             fileMap[jsonName] = agent.ToJson(true);
         }
-
         return fileMap;
-    }
-
-
-    private async Task HandleCompositeAgents(List<AgentModel> agentsToExport, List<AgentModel> allAgents, List<AgentModel> compositeAgents)
-    {
-        foreach (var compositeAgent in compositeAgents)
-        {
-            var subAgentIds = compositeAgent.Content[CompositeAgent.AgentContentParameters.AgentsList]
-                .Value.JsonGet<Dictionary<string, bool>>()!
-                .Select(item => item.Key).ToList();
-
-            var subAgentsNames = subAgentIds.Select(subAgentId => allAgents.FirstOrDefault(agent => agent.AgentId.ToString() == subAgentId)?.Name).ToList();
-            compositeAgent.Content[AgentContentParameters.AgentsList].Value = subAgentsNames.ToJson();
-            agentsToExport.Add(compositeAgent);
-
-            // Add Agents to export list if they are not composite
-            var subAgentsToExport = allAgents.Where(agent => 
-                    subAgentIds.Contains(agent.AgentId.ToString()) 
-                    && agent.Type != Models.DbModels.AgentType.Composite
-                    && !agentsToExport.Select(item => item.AgentId).Contains(agent.AgentId)
-                )
-                .ToList();
-            agentsToExport.AddRange(subAgentsToExport);
-
-            // Handle Composite Agents
-            var subCompositeSubAgents = allAgents.Where(agent => 
-                    subAgentIds.Contains(agent.AgentId.ToString()) 
-                    && agent.Type == Models.DbModels.AgentType.Composite
-                    && !agentsToExport.Select(item => item.AgentId).Contains(agent.AgentId)
-                ).ToList();
-
-            await HandleCompositeAgents(agentsToExport, allAgents, subCompositeSubAgents);
-        }
     }
 
     public async Task<ImportAgentsResultModel> ImportAgents(IFormFile file, Dictionary<Models.ViewModels.AgentType, int> agentVersions, int workspaceId)
@@ -308,36 +295,30 @@ public class AgentsService : IAgentsService
 
     private async Task ImportAgentsConfirmed(List<AgentExportModel> agentExportModels, int workspaceId)
     {
-        var agents = (await _agentsProcessor.List(workspaceId)).Select(agent => agent.Name).ToList();
-        var nonCompositeAgents = agentExportModels.Where(agent => agent.Type != Models.ViewModels.AgentType.Composite.ToString()).ToList();
-        var compositeAgents = agentExportModels.Where(agent => agent.Type == Models.ViewModels.AgentType.Composite.ToString()).ToList();
-        foreach (var agent in nonCompositeAgents)
+        var agentsToImportDictionary = _mapper.Map<List<AgentModel>>(agentExportModels)
+            .ToDictionary(
+                key => key.Name,
+                value => new AgentModelProcessed
+                {
+                    AgentModel = value,
+                    Processed = false
+                });
+
+        var callsLimit = 1000;
+        while (agentsToImportDictionary.Any(x => !x.Value.Processed) && callsLimit > 0)
         {
-            await ImportAgentConfirmed(agent, workspaceId);
-            agents.Add(agent.Name);
-        }
-        var lastLoopWasNonEmpty = true;
-        while(compositeAgents.Count > 0 && lastLoopWasNonEmpty)
-        {
-            lastLoopWasNonEmpty = false;
-            foreach (var agent in compositeAgents.ToList())
+            callsLimit--;
+            var nonProcessedAgents = agentsToImportDictionary
+                .Where(x => !x.Value.Processed)
+                .Select(x => x.Value.AgentModel)
+                .ToList();
+            foreach (var agentModel in nonProcessedAgents)
             {
-                var subAgentNames = agent.Content[AgentContentParameters.AgentsList].Value.JsonGet<List<string>>();
-                // Check if all subagents are present in the system
-                if (subAgentNames.Any(subAgent => !agents.Contains(subAgent)))
-                    continue;
-
-                var subAgentsIds = (await _agentsProcessor.List(workspaceId))
-                    .Where(subAgent => subAgentNames.Contains(subAgent.Name))
-                    .Select(subAgent => subAgent.AgentId)
-                    .Distinct()
-                    .ToDictionary(key => key, value => true);
-                agent.Content[AgentContentParameters.AgentsList].Value = subAgentsIds.ToJson();
-
-                await ImportAgentConfirmed(agent, workspaceId);
-                agents.Add(agent.Name);
-                compositeAgents.Remove(agent);
-                lastLoopWasNonEmpty = true;
+                await _plannerHelpers.OnImport(agentModel, agentsToImportDictionary);
+                if (agentsToImportDictionary[agentModel.Name].Processed)
+                {
+                    await ImportAgentConfirmed(agentModel, workspaceId);
+                }
             }
         }
         await SaveGit();
@@ -372,10 +353,9 @@ public class AgentsService : IAgentsService
         return newTags;
     }
 
-    private async Task ImportAgentConfirmed(AgentExportModel agentExportModel, int workspaceId)
+    private async Task ImportAgentConfirmed(AgentModel agentModel, int workspaceId)
     {
-        var agentModel = _mapper.Map<AgentModel>(agentExportModel);
-        var agent = await _agentsProcessor.GetByName(agentExportModel.Name, workspaceId);
+        var agent = await _agentsProcessor.GetByName(agentModel.Name, workspaceId);
         if (agentModel.Tags.Count > 0)
         {
             var existingTags = _tagsProcessor.List();

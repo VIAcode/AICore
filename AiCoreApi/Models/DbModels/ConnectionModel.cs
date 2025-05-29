@@ -51,6 +51,7 @@ namespace AiCoreApi.Models.DbModels
         AzDoWiki = 29,
         Qdrant = 30,
         OpenSearch = 31,
+        Git = 32,
     }
 
     public static class ConnectionTypeExtensions

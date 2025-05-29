@@ -12,7 +12,7 @@ using AiCoreApi.Common.Monitoring;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
-    public class CompositeCSharpAgent : BaseAgent, ICompositeCSharpAgent
+    public class CompositeCSharpAgent : BaseEnabledAgentsAgent, ICompositeCSharpAgent
     {
         private static ConcurrentDictionary<string, string> CodeCache = new();
         private string _debugMessageSenderName = "CompositeCSharpAgent";
@@ -35,6 +35,7 @@ namespace AiCoreApi.SemanticKernel.Agents
         private readonly ISemanticKernelProvider _semanticKernelProvider;
 
         public CompositeCSharpAgent(
+            IAgentsProcessor agentsProcessor,
             MonitoringConfig monitoringConfig,
             ICsharpCodeAgent csharpCodeAgent,
             ILogger<CompositeCSharpAgent> logger,
@@ -44,7 +45,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             IPlannerHelpers plannerHelpers,
             ISemanticKernelProvider semanticKernelProvider
             )
-            : base(responseAccessor, requestAccessor, monitoringConfig, logger)
+            : base(agentsProcessor, responseAccessor, requestAccessor, monitoringConfig, logger)
         {
             _csharpCodeAgent = csharpCodeAgent;
             _requestAccessor = requestAccessor;

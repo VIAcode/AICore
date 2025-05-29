@@ -30,7 +30,6 @@ namespace AiCoreApi.SemanticKernel.Agents
         {
             public const string ParameterDescription = "parameterDescription";
             public const string OutputDescription = "outputDescription";
-            public const string PlannerInstruction = "plannerInstruction";
         }
 
         public async Task AddAgent(AgentModel agent, Kernel kernel, List<string> pluginsInstructions)
@@ -53,8 +52,6 @@ namespace AiCoreApi.SemanticKernel.Agents
                 returnParam);
             var kernelPlugin = kernel.CreatePluginFromFunctions($"{functionName}Plugin", new[] { function });
             kernel.Plugins.Add(kernelPlugin);
-            if (agent.Content.ContainsKey(AgentContentParameters.PlannerInstruction))
-                pluginsInstructions.Add(agent.Content[AgentContentParameters.PlannerInstruction].Value);
 
             async Task<string> AgentCallWrapper(
                 string parameter1 = "",
@@ -135,6 +132,26 @@ namespace AiCoreApi.SemanticKernel.Agents
                 startIndex = closeBraceIndex + 2;
             }
             return stringBuilder.ToString();
+        }
+
+        public virtual async Task OnAddUpdate(AgentModel agentModel)
+        {
+            // Do nothing, this method is for override in derived classes if needed
+        }
+
+        public virtual async Task OnDelete(AgentModel agentModel)
+        {
+            // Do nothing, this method is for override in derived classes if needed
+        }
+
+        public virtual async Task OnExport(AgentModel agentModel, Dictionary<int, Models.ViewModels.AgentModelProcessed> agentsToExport)
+        {
+            agentsToExport[agentModel.AgentId].Processed = true;
+        }
+
+        public virtual async Task OnImport(AgentModel agentModel, Dictionary<string, Models.ViewModels.AgentModelProcessed> agentsToImport)
+        {
+            agentsToImport[agentModel.Name].Processed = true;
         }
 
         public async Task<string> DoCallWrapper(AgentModel agent, Dictionary<string, string> parameters)

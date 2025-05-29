@@ -92,6 +92,43 @@ public class AgentsProcessor : IAgentsProcessor
         _db.Agents.Remove(agent);
         await _db.SaveChangesAsync();
     }
+
+    // Update all agents with the given FlowName, not just the first
+    public async Task UpdateFlowNameForAsync(string flowName, string? value, int? workspaceId)
+    {
+        var qry = _db.Agents.Where(e => e.FlowName == flowName);
+        if ((workspaceId ?? 0) == 0)
+            qry = qry.Where(item => item.WorkspaceId == null || item.WorkspaceId == 0);
+        else
+            qry = qry.Where(item => item.WorkspaceId == workspaceId);
+        var agents = await qry.ToListAsync();
+        if (!agents.Any())
+            return;
+        foreach (var agent in agents)
+        {
+            agent.FlowName = value;
+            _db.Agents.Update(agent);
+        }
+        await _db.SaveChangesAsync();
+    }
+
+    public async Task UpdateFlowNameForAsync(List<int> ids, string? value, int? workspaceId)
+    {
+        var qry = _db.Agents.Where(e => ids.Contains(e.AgentId));
+        if ((workspaceId ?? 0) == 0)
+            qry = qry.Where(item => item.WorkspaceId == null || item.WorkspaceId == 0);
+        else 
+            qry = qry.Where(item => item.WorkspaceId == workspaceId);
+        var agents = await qry.ToListAsync();
+        if (!agents.Any())
+            return;
+        foreach (var agent in agents)
+        {
+            agent.FlowName = value;
+            _db.Agents.Update(agent);
+        }
+        await _db.SaveChangesAsync();
+    }
 }
 
 public interface IAgentsProcessor
@@ -102,4 +139,6 @@ public interface IAgentsProcessor
     Task<AgentModel> Add(AgentModel agentModel, int workspaceId);
     Task<AgentModel?> Update(AgentModel agentModel);
     Task Delete(int agentId);
+    Task UpdateFlowNameForAsync(string flowName, string? value, int? workspaceId);
+    Task UpdateFlowNameForAsync(List<int> ids, string? value, int? workspaceId);
 }

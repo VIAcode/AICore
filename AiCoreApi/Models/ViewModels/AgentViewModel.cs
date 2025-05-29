@@ -15,6 +15,7 @@ namespace AiCoreApi.Models.ViewModels
         public List<TagViewModel> Tags { get; set; } = new();
         public int Version { get; set; } = 0;
         public int? WorkspaceId { get; set; }
+        public string? FlowName { get; set; }
     }
 
     public class ConfigurableSettingView
@@ -82,5 +83,7 @@ namespace AiCoreApi.Models.ViewModels
         CompositePython = 47,
         OpenSearch = 48,
         CompositeLoop = 49,
+        Git = 50,
+        Flow = 51,
     }
 }

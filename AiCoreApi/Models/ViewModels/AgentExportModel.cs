@@ -1,4 +1,5 @@
-﻿using Newtonsoft.Json;
+﻿using AiCoreApi.Models.DbModels;
+using Newtonsoft.Json;
 
 namespace AiCoreApi.Models.ViewModels
 {
@@ -12,6 +13,7 @@ namespace AiCoreApi.Models.ViewModels
         public Dictionary<string, ConfigurableExportSetting> Content { get; set; } = new();
         public List<string> Tags { get; set; } = new();
         public int Version { get; set; } = 0;
+        public string? FlowName { get; set; }
     }
 
     public class ConfigurableExportSetting
@@ -21,5 +23,11 @@ namespace AiCoreApi.Models.ViewModels
         public string Value { get; set; } = string.Empty;
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public string? Extension { get; set; }
+    }
+
+    public class AgentModelProcessed
+    {
+        public AgentModel? AgentModel { get; set; }
+        public bool Processed { get; set; } = false;
     }
 }

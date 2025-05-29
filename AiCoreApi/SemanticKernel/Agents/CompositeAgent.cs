@@ -10,7 +10,7 @@ using AiCoreApi.Common.Monitoring;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
-    public class CompositeAgent: BaseAgent, ICompositeAgent
+    public class CompositeAgent: BaseEnabledAgentsAgent, ICompositeAgent
     {
         private string _debugMessageSenderName = "CompositeAgent";
         public static class AgentContentParameters
@@ -28,6 +28,7 @@ namespace AiCoreApi.SemanticKernel.Agents
         private readonly ISemanticKernelProvider _semanticKernelProvider;
 
         public CompositeAgent(
+            IAgentsProcessor agentsProcessor,
             IConnectionProcessor connectionProcessor,
             ExtendedConfig extendedConfig,
             MonitoringConfig monitoringConfig,
@@ -35,7 +36,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             RequestAccessor requestAccessor,
             IPlannerHelpers plannerHelpers,
         ILogger<CompositeAgent> logger,
-            ISemanticKernelProvider semanticKernelProvider) : base(responseAccessor, requestAccessor, monitoringConfig, logger)
+            ISemanticKernelProvider semanticKernelProvider) : base(agentsProcessor, responseAccessor, requestAccessor, monitoringConfig, logger)
         {
             _connectionProcessor = connectionProcessor;
             _extendedConfig = extendedConfig;

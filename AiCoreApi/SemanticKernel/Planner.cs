@@ -29,6 +29,7 @@ namespace AiCoreApi.SemanticKernel
         private readonly ICompositeCSharpAgent _compositeCSharpAgent;
         private readonly ICompositePythonAgent _compositePythonAgent;
         private readonly ICompositeLoopAgent _compositeLoopAgent;
+        private readonly IFlowAgent _flowAgent;
 
         public Planner(
             ISemanticKernelProvider semanticKernelProvider,
@@ -46,7 +47,8 @@ namespace AiCoreApi.SemanticKernel
             INodeJsCodeAgent nodeJsCodeAgent,
             ICompositeCSharpAgent compositeCSharpAgent,
             ICompositePythonAgent compositePythonAgent,
-            ICompositeLoopAgent compositeLoopAgent)
+            ICompositeLoopAgent compositeLoopAgent,
+            IFlowAgent flowAgent)
         {
             _semanticKernelProvider = semanticKernelProvider;
             _requestAccessor = requestAccessor;
@@ -64,6 +66,7 @@ namespace AiCoreApi.SemanticKernel
             _compositeCSharpAgent = compositeCSharpAgent;
             _compositePythonAgent = compositePythonAgent;
             _compositeLoopAgent = compositeLoopAgent;
+            _flowAgent = flowAgent;
         }
 
         public async Task<MessageDialogViewModel.Message> GetChatResponse()
@@ -174,6 +177,7 @@ namespace AiCoreApi.SemanticKernel
             _plannerHelpers.CompositeCSharpAgent = _compositeCSharpAgent;
             _plannerHelpers.CompositePythonAgent = _compositePythonAgent;
             _plannerHelpers.CompositeLoopAgent = _compositeLoopAgent;
+            _plannerHelpers.FlowAgent = _flowAgent;
             var allUserTags = await _loginProcessor.GetTagsByLogin(_requestAccessor.Login, _requestAccessor.LoginType);
             foreach (var agent in agentsList)
             {
