@@ -10,6 +10,8 @@ namespace AiCoreApi.Services.IngestionServices
 {
     public class AzureBlobStorageIngestionService : IAzureBlobStorageIngestionService
     {
+        private const int DELAY_ON_REUPLOAD_SECONDS = 10;
+
         private readonly IFileIngestionClient _fileIngestionClient;
         private readonly IDocumentMetadataProcessor _documentMetadataProcessor;
         private readonly ITaskProcessor _taskProcessor;
@@ -111,7 +113,7 @@ namespace AiCoreApi.Services.IngestionServices
                 if (fileInDatabase != null)
                 {
                     await _fileIngestionClient.Delete(embeddingConnectionModel, docId);
-                    await Task.Delay(10000);
+                    await Task.Delay(TimeSpan.FromSeconds(DELAY_ON_REUPLOAD_SECONDS));
                 }
 
                 // Ingest blob data
