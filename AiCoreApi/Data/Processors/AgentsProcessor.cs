@@ -93,7 +93,6 @@ public class AgentsProcessor : IAgentsProcessor
         await _db.SaveChangesAsync();
     }
 
-    // Update all agents with the given FlowName, not just the first
     public async Task UpdateFlowNameForAsync(string flowName, string? value, int? workspaceId)
     {
         var qry = _db.Agents.Where(e => e.FlowName == flowName);
