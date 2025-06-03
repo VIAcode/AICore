@@ -194,6 +194,9 @@ namespace AiCoreApi.SemanticKernel
 
         public async Task OnAddUpdate(AgentModel agentModel)
         {
+            var listenerAgentTypes = GetListenerAgentTypes();
+            if (listenerAgentTypes.Contains(agentModel.Type))
+                return;
             var agentTypes = GetAgentTypes();
             if (!agentTypes.TryGetValue(agentModel.Type, out var agentType))
                 throw new AiCoreUiException($"Agent type not found: {agentModel.Type}");
@@ -207,6 +210,10 @@ namespace AiCoreApi.SemanticKernel
             var agentModel = dbAgents.FirstOrDefault(item => item.AgentId == agentId);
             if (agentModel == null)
                 throw new AiCoreUiException($"Agent not found with ID: {agentId}");
+            var listenerAgentTypes = GetListenerAgentTypes();
+            if (listenerAgentTypes.Contains(agentModel.Type))
+                return;
+
             var agentTypes = GetAgentTypes();
             if (!agentTypes.TryGetValue(agentModel.Type, out var agentType))
                 throw new AiCoreUiException($"Agent type not found: {agentModel.Type}");
@@ -216,6 +223,12 @@ namespace AiCoreApi.SemanticKernel
 
         public async Task OnExport(AgentModel agentModel, Dictionary<int, AgentModelProcessed> agentsToExport)
         {
+            var listenerAgentTypes = GetListenerAgentTypes();
+            if (listenerAgentTypes.Contains(agentModel.Type))
+            {
+                agentsToExport[agentModel.AgentId].Processed = true;
+                return;
+            }
             var agentTypes = GetAgentTypes();
             if (!agentTypes.TryGetValue(agentModel.Type, out var agentType))
                 throw new Exception($"Agent type not found: {agentModel.Type}");
@@ -223,13 +236,19 @@ namespace AiCoreApi.SemanticKernel
             await agentInstance.OnExport(agentModel, agentsToExport);
         }
 
-        public async Task OnImport(AgentModel agentModel, Dictionary<string, AgentModelProcessed> agentsTImport)
+        public async Task OnImport(AgentModel agentModel, Dictionary<string, AgentModelProcessed> agentsToImport)
         {
+            var listenerAgentTypes = GetListenerAgentTypes();
+            if (listenerAgentTypes.Contains(agentModel.Type))
+            {
+                agentsToImport[agentModel.Name].Processed = true;
+                return;
+            }
             var agentTypes = GetAgentTypes();
             if (!agentTypes.TryGetValue(agentModel.Type, out var agentType))
                 throw new Exception($"Agent type not found: {agentModel.Type}");
             var agentInstance = (BaseAgent)agentType;
-            await agentInstance.OnImport(agentModel, agentsTImport);
+            await agentInstance.OnImport(agentModel, agentsToImport);
         }
 
         private T ResolveAgent<T>(ref T? field) where T : class
@@ -360,6 +379,21 @@ namespace AiCoreApi.SemanticKernel
             };
             return agentMapping;
         }
+
+        public List<AgentType> GetListenerAgentTypes()
+        {
+            return new List<AgentType>
+            {
+                AgentType.AzureServiceBusListener,
+                AgentType.RabbitMqListener,
+                AgentType.Imap,
+                AgentType.GraphMail,
+                AgentType.GraphTeamsListener,
+                AgentType.Scheduler
+
+            };
+        }
+
 
         public string ApplyPlaceholders(string plannerPrompt) => plannerPrompt
             .Replace(PlannerPromptPlaceholders.CurrentQuestionPlaceholder, _requestAccessor.MessageDialog!.GetQuestion())
