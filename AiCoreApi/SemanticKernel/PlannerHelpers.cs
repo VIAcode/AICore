@@ -194,8 +194,7 @@ namespace AiCoreApi.SemanticKernel
 
         public async Task OnAddUpdate(AgentModel agentModel)
         {
-            var listenerAgentTypes = GetListenerAgentTypes();
-            if (listenerAgentTypes.Contains(agentModel.Type))
+            if (IsListenerAgentType(agentModel.Type))
                 return;
             var agentTypes = GetAgentTypes();
             if (!agentTypes.TryGetValue(agentModel.Type, out var agentType))
@@ -210,8 +209,7 @@ namespace AiCoreApi.SemanticKernel
             var agentModel = dbAgents.FirstOrDefault(item => item.AgentId == agentId);
             if (agentModel == null)
                 throw new AiCoreUiException($"Agent not found with ID: {agentId}");
-            var listenerAgentTypes = GetListenerAgentTypes();
-            if (listenerAgentTypes.Contains(agentModel.Type))
+            if (IsListenerAgentType(agentModel.Type))
                 return;
 
             var agentTypes = GetAgentTypes();
@@ -223,8 +221,7 @@ namespace AiCoreApi.SemanticKernel
 
         public async Task OnExport(AgentModel agentModel, Dictionary<int, AgentModelProcessed> agentsToExport)
         {
-            var listenerAgentTypes = GetListenerAgentTypes();
-            if (listenerAgentTypes.Contains(agentModel.Type))
+            if (IsListenerAgentType(agentModel.Type))
             {
                 agentsToExport[agentModel.AgentId].Processed = true;
                 return;
@@ -238,8 +235,7 @@ namespace AiCoreApi.SemanticKernel
 
         public async Task OnImport(AgentModel agentModel, Dictionary<string, AgentModelProcessed> agentsToImport)
         {
-            var listenerAgentTypes = GetListenerAgentTypes();
-            if (listenerAgentTypes.Contains(agentModel.Type))
+            if (IsListenerAgentType(agentModel.Type))
             {
                 agentsToImport[agentModel.Name].Processed = true;
                 return;
@@ -379,7 +375,6 @@ namespace AiCoreApi.SemanticKernel
             };
             return agentMapping;
         }
-
         public List<AgentType> GetListenerAgentTypes()
         {
             return new List<AgentType>
@@ -390,10 +385,9 @@ namespace AiCoreApi.SemanticKernel
                 AgentType.GraphMail,
                 AgentType.GraphTeamsListener,
                 AgentType.Scheduler
-
             };
         }
-
+        public bool IsListenerAgentType(AgentType agentType) => GetListenerAgentTypes().Contains(agentType);
 
         public string ApplyPlaceholders(string plannerPrompt) => plannerPrompt
             .Replace(PlannerPromptPlaceholders.CurrentQuestionPlaceholder, _requestAccessor.MessageDialog!.GetQuestion())
