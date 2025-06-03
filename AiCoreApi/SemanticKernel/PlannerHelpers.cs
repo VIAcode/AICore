@@ -375,19 +375,18 @@ namespace AiCoreApi.SemanticKernel
             };
             return agentMapping;
         }
-        public List<AgentType> GetListenerAgentTypes()
+
+        private static readonly HashSet<AgentType> ListenerAgentTypes = new()
         {
-            return new List<AgentType>
-            {
-                AgentType.AzureServiceBusListener,
-                AgentType.RabbitMqListener,
-                AgentType.Imap,
-                AgentType.GraphMail,
-                AgentType.GraphTeamsListener,
-                AgentType.Scheduler
-            };
-        }
-        public bool IsListenerAgentType(AgentType agentType) => GetListenerAgentTypes().Contains(agentType);
+            AgentType.AzureServiceBusListener,
+            AgentType.RabbitMqListener,
+            AgentType.Imap,
+            AgentType.GraphMail,
+            AgentType.GraphTeamsListener,
+            AgentType.Scheduler
+        };
+
+        public bool IsListenerAgentType(AgentType agentType) => ListenerAgentTypes.Contains(agentType);
 
         public string ApplyPlaceholders(string plannerPrompt) => plannerPrompt
             .Replace(PlannerPromptPlaceholders.CurrentQuestionPlaceholder, _requestAccessor.MessageDialog!.GetQuestion())
