@@ -21,7 +21,8 @@ namespace AiCoreApi.SemanticKernel.Agents
         private readonly IPlannerHelpers _plannerHelpers;
         private readonly ISemanticKernelProvider _semanticKernelProvider;
         private readonly IConnectionProcessor _connectionProcessor;
-        
+        private const string LastStepNoAgentsMessage = "Last step so no agents available. Use 'finish' or 'cannot' action.";
+
         private const string PlannerPromptJsonSchema = @"{
   ""$schema"": ""http://json-schema.org/draft-07/schema#"",
   ""title"": ""PlannerInstruction"",
@@ -114,6 +115,11 @@ namespace AiCoreApi.SemanticKernel.Agents
             for (int i = 0; i < maxIterations; i++)
             {
                 var context = string.Join($"{Environment.NewLine}{Environment.NewLine}", history.Select(h => $"Agent: {h.agent}, Params: [{string.Join(", ", h.@params)}], Result: {h.result}"));
+
+                if (i == maxIterations - 1)
+                {
+                    agentsDescription = LastStepNoAgentsMessage;
+                }
 
                 var plannerPrompt = plannerPromptTemplate
                     .Replace("{agentsList}", agentsDescription)
