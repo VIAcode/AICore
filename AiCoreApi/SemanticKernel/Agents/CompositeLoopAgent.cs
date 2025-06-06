@@ -115,6 +115,11 @@ namespace AiCoreApi.SemanticKernel.Agents
             {
                 var context = string.Join($"{Environment.NewLine}{Environment.NewLine}", history.Select(h => $"Agent: {h.agent}, Params: [{string.Join(", ", h.@params)}], Result: {h.result}"));
 
+                if (i == maxIterations - 1)
+                {
+                    agentsDescription = "Last step so no agents available. Use 'finish' or 'cannot' action.";
+                }
+
                 var plannerPrompt = plannerPromptTemplate
                     .Replace("{agentsList}", agentsDescription)
                     .Replace("{userInput}", userInput)
