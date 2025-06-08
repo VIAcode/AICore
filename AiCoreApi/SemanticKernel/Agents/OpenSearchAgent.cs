@@ -125,7 +125,7 @@ namespace AiCoreApi.SemanticKernel.Agents
 
         private HttpClient GetClient(ConnectionModel connection)
         {
-            var client = _httpClientFactory.CreateClient("NoRetryClient");
+            var client = _httpClientFactory.CreateClient(HttpClients.NoRetryClient);
             var accessType = connection.Content[ConnectionContentParameters.AccessType];
             if (accessType == "credentials")
             {

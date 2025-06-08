@@ -218,7 +218,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             string userAgent,
             Dictionary<string, string> parameters)
         {
-            var client = _httpClientFactory.CreateClient("NoRetryClient");
+            var client = _httpClientFactory.CreateClient(HttpClients.NoRetryClient);
             ApplyCustomHeaders(client, agent, userAgent, parameters);
 
             var links = new List<string>();

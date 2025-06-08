@@ -154,7 +154,7 @@ namespace AiCoreApi.Common.SsoSources
             return content;
         }
 
-        private HttpClient GetHttpClient() => _httpClientFactory.CreateClient("RetryClient");
+        private HttpClient GetHttpClient() => _httpClientFactory.CreateClient(HttpClients.RetryClient);
 
         public class UserGroup
         {

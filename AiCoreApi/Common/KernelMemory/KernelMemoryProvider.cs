@@ -29,7 +29,7 @@ namespace AiCoreApi.Common.KernelMemory
             var serviceProvider = httpContext?.RequestServices ?? _serviceProvider;
 
             var qdConfig = new QdrantConfig { Endpoint = _config.QdrantUrl };
-            var httpClient = _httpClientFactory.CreateClient("RetryClient");
+            var httpClient = _httpClientFactory.CreateClient(HttpClients.RetryClient);
 
             var searchClientConfig = new SearchClientConfig
             {

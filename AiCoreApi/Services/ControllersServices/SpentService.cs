@@ -191,7 +191,7 @@ namespace AiCoreApi.Services.ControllersServices
             if (!string.IsNullOrEmpty(cached))
                 return cached;
 
-            var client = _httpClientFactory.CreateClient("RetryClient");
+            var client = _httpClientFactory.CreateClient(HttpClients.RetryClient);
             var response = await client.GetAsync($"https://azure.microsoft.com/api/v3/pricing/{type}/calculator/?culture=en-us&discount=mca");
             response.EnsureSuccessStatusCode();
 

@@ -1,4 +1,3 @@
-using System.Net;
 using AiCoreApi.Common;
 using System.Reflection;
 using AiCoreApi.Authorization;
@@ -10,12 +9,9 @@ using AiCoreApi.Common.KernelMemory;
 using AiCoreApi.Common.Extensions;
 using AiCoreApi.Common.Data;
 using AspNetCore.Authentication.Basic;
-using Polly;
-using Polly.Extensions.Http;
 using Microsoft.OpenApi.Models;
 using AiCoreApi.Services.ProcessingServices;
 using AiCoreApi.Common.Monitoring;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace AiCoreApi;
 
@@ -95,33 +91,8 @@ public class Startup
         services.AddHttpContextAccessor();
         services.AddScoped<OpenAiHttpCallHandler>();
         //services.AddTransient(sp => new OpenAiHttpCallHandler(extendedConfig, sp));
-        services.AddHttpClient("RetryClient", httpClient =>
-        {
-            httpClient.Timeout = TimeSpan.FromMinutes(3); // wait 3 min instead of 100 sec by default
-        })
-            .SetHandlerLifetime(TimeSpan.FromMinutes(4))
-            .AddPolicyHandler(GetRetryPolicy())
-            .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
-            {
-                Proxy = string.IsNullOrEmpty(extendedConfig.Proxy) ? null : new WebProxy(new Uri(extendedConfig.Proxy)),
-                ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator,
-                AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate | DecompressionMethods.Brotli
-            })
-            .ConfigurePrimaryHttpMessageHandler<OpenAiHttpCallHandler>();
-
-        services.AddHttpClient("NoRetryClient", httpClient =>
-        {
-            httpClient.Timeout = TimeSpan.FromMinutes(3); // wait 3 min instead of 100 sec by default
-        })
-            .SetHandlerLifetime(TimeSpan.FromMinutes(4))
-            .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
-            {
-                Proxy = string.IsNullOrEmpty(extendedConfig.Proxy) ? null : new WebProxy(new Uri(extendedConfig.Proxy)),
-                ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator,
-                AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate | DecompressionMethods.Brotli
-            })
-            .ConfigurePrimaryHttpMessageHandler<OpenAiHttpCallHandler>();
-
+        services.AddHttpClients(extendedConfig, _logger);
+        
         var combinedAuthenticationScheme = "Combined";
         services.AddAuthentication(options =>
         {
@@ -250,21 +221,5 @@ public class Startup
         });
     }
 
-    private IAsyncPolicy<HttpResponseMessage> GetRetryPolicy() => HttpPolicyExtensions
-        .HandleTransientHttpError()
-        .OrResult(msg =>
-        {
-            var nonSuccessRequest = 
-                msg.StatusCode != HttpStatusCode.OK && 
-                msg.StatusCode != HttpStatusCode.Accepted &&
-                msg.StatusCode != (HttpStatusCode)424 &&
-                msg.StatusCode != HttpStatusCode.NoContent;
-            if (nonSuccessRequest)
-            {
-                _logger.LogWarning("Startup: {0}, url: {1}, request headers: {2}, code: {3}, body: {4}, response headers: {5}", "GetRetryPolicy",
-                    msg.RequestMessage.RequestUri, msg.RequestMessage.Headers, msg.StatusCode, msg.Content.ReadAsStringAsync().Result, msg.Headers);
-            }
-            return nonSuccessRequest;
-        })
-        .WaitAndRetryAsync(7, retryAttempt => TimeSpan.FromSeconds(Math.Pow(2, retryAttempt)));
+
 }

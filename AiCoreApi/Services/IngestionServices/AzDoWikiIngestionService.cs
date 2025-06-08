@@ -7,6 +7,7 @@ using System.Net.Http.Headers;
 using Newtonsoft.Json;
 using System.Security.Cryptography;
 using System.Web;
+using AiCoreApi.Common;
 
 namespace AiCoreApi.Services.IngestionServices
 {
@@ -48,7 +49,7 @@ namespace AiCoreApi.Services.IngestionServices
             var project = ingestion.Content["Project"];
             var wiki = ingestion.Content["WikiIdentifier"];
 
-            var client = _httpClientFactory.CreateClient("NoRetryClient");
+            var client = _httpClientFactory.CreateClient(HttpClients.NoRetryClient);
             var patToken = Convert.ToBase64String(Encoding.ASCII.GetBytes($":{pat}"));
             client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", patToken);
 

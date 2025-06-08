@@ -141,7 +141,7 @@ namespace AiCoreApi.SemanticKernel.Agents
 
         private async Task<string> Custom(string name, ConnectionModel connection, string method, string url, string payload)
         {
-            var client = _httpClientFactory.CreateClient("NoRetryClient");
+            var client = _httpClientFactory.CreateClient(HttpClients.NoRetryClient);
             if (connection.Content.TryGetValue("apiKey", out var apiKey) && !string.IsNullOrWhiteSpace(apiKey))
             {
                 client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
@@ -249,7 +249,7 @@ namespace AiCoreApi.SemanticKernel.Agents
 
         private async Task<string> PostJson(string url, object body, ConnectionModel connection)
         {
-            var client = _httpClientFactory.CreateClient("NoRetryClient");
+            var client = _httpClientFactory.CreateClient(HttpClients.NoRetryClient);
             if (connection.Content.TryGetValue("apiKey", out var apiKey) && !string.IsNullOrWhiteSpace(apiKey))
                 client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
 
@@ -266,7 +266,7 @@ namespace AiCoreApi.SemanticKernel.Agents
 
         private async Task<string> PutJson(string url, object body, ConnectionModel connection)
         {
-            var client = _httpClientFactory.CreateClient("NoRetryClient");
+            var client = _httpClientFactory.CreateClient(HttpClients.NoRetryClient);
             if (connection.Content.TryGetValue("apiKey", out var apiKey) && !string.IsNullOrWhiteSpace(apiKey))
                 client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
 
@@ -283,7 +283,7 @@ namespace AiCoreApi.SemanticKernel.Agents
 
         private async Task<string> Delete(string url, ConnectionModel connection)
         {
-            var client = _httpClientFactory.CreateClient("NoRetryClient");
+            var client = _httpClientFactory.CreateClient(HttpClients.NoRetryClient);
             if (connection.Content.TryGetValue("apiKey", out var apiKey) && !string.IsNullOrWhiteSpace(apiKey))
                 client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
 
@@ -299,7 +299,7 @@ namespace AiCoreApi.SemanticKernel.Agents
 
         private async Task<string> Get(string url, ConnectionModel connection)
         {
-            var client = _httpClientFactory.CreateClient("NoRetryClient");
+            var client = _httpClientFactory.CreateClient(HttpClients.NoRetryClient);
 
             if (connection.Content.TryGetValue("apiKey", out var apiKey) && !string.IsNullOrWhiteSpace(apiKey))
             {
@@ -321,7 +321,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             var endpoint = connection.Content["endpoint"].TrimEnd('/');
             var apiKey = connection.Content.ContainsKey("apiKey") ? connection.Content["apiKey"] : null;
 
-            var client = _httpClientFactory.CreateClient("NoRetryClient");
+            var client = _httpClientFactory.CreateClient(HttpClients.NoRetryClient);
             if (!string.IsNullOrEmpty(apiKey))
             {
                 client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);

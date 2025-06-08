@@ -74,7 +74,7 @@ namespace AiCoreApi.SemanticKernel.Agents
 
             _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Request", $"path: {path}");
 
-            var client = _httpClientFactory.CreateClient("NoRetryClient");
+            var client = _httpClientFactory.CreateClient(HttpClients.NoRetryClient);
             var patToken = Convert.ToBase64String(System.Text.Encoding.ASCII.GetBytes($":{pat}"));
             client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", patToken);
 

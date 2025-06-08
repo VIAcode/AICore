@@ -70,8 +70,8 @@ namespace AiCoreApi.SemanticKernel.Agents
             var noRetry = agent.Content.ContainsKey(AgentContentParameters.UseRetry) && agent.Content[AgentContentParameters.UseRetry].Value.ToLower() == "false";
 
             var httpClient = noRetry
-                ? _httpClientFactory.CreateClient("NoRetryClient")
-                : _httpClientFactory.CreateClient("RetryClient");
+                ? _httpClientFactory.CreateClient(HttpClients.NoRetryClient)
+                : _httpClientFactory.CreateClient(HttpClients.RetryClient);
             if (agent.Content.ContainsKey(AgentContentParameters.Authentication) 
                 && !string.IsNullOrWhiteSpace(agent.Content[AgentContentParameters.Authentication].Value))
             {
