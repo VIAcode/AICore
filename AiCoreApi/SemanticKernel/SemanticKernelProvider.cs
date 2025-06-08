@@ -26,7 +26,7 @@ namespace AiCoreApi.SemanticKernel
 
         public Kernel GetKernel(ConnectionModel connectionModel)
         {
-            var httpClient = _httpClientFactory.CreateClient("RetryClient");
+            var httpClient = _httpClientFactory.CreateClient(HttpClients.RetryClient);
             var kernelBuilder = Kernel.CreateBuilder();
             if (connectionModel.Type == ConnectionType.AzureOpenAiLlm)
             {

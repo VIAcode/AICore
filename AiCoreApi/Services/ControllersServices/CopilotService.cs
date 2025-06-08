@@ -141,7 +141,7 @@ namespace AiCoreApi.Services.ControllersServices
 
         public async Task<string> Proxy(ProxyRequestModel proxyRequest)
         {
-            var httpClient = _httpClientFactory.CreateClient("RetryClient");
+            var httpClient = _httpClientFactory.CreateClient(HttpClients.RetryClient);
             var method = proxyRequest.Method switch
             {
                 "GET" => HttpMethod.Get,

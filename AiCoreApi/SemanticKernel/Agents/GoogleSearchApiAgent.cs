@@ -143,7 +143,7 @@ namespace AiCoreApi.SemanticKernel.Agents
         {
             try
             {
-                var client = _httpClientFactory.CreateClient("NoRetryClient");
+                var client = _httpClientFactory.CreateClient(HttpClients.NoRetryClient);
                 var html = await client.GetCompressedStringAsync(url);
                 var doc = new HtmlDocument();
                 doc.LoadHtml(html);
@@ -174,7 +174,7 @@ namespace AiCoreApi.SemanticKernel.Agents
 
         private async Task<HttpResponseMessage> SendGetRequestAsync(Uri uri, CancellationToken cancellationToken = default)
         {
-            var httpClient = _httpClientFactory.CreateClient("RetryClient");
+            var httpClient = _httpClientFactory.CreateClient(HttpClients.RetryClient);
             var httpRequestMessage = new HttpRequestMessage(HttpMethod.Get, uri);
             return await httpClient.SendAsync(httpRequestMessage, cancellationToken).ConfigureAwait(false);
         }

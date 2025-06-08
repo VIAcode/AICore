@@ -145,7 +145,7 @@ namespace AiCoreApi.SemanticKernel.Agents
 
             var clientOptions = new DocumentIntelligenceClientOptions
             {
-                Transport = new HttpClientTransport(_httpClientFactory.CreateClient("RetryClient"))
+                Transport = new HttpClientTransport(_httpClientFactory.CreateClient(HttpClients.RetryClient))
             }; 
             
             var client = keyCredential != null

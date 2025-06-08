@@ -86,7 +86,7 @@ namespace AiCoreApi.Common.SsoSources
             return url + parameters;
         }
 
-        private HttpClient GetHttpClient() => _httpClientFactory.CreateClient("RetryClient");
+        private HttpClient GetHttpClient() => _httpClientFactory.CreateClient(HttpClients.RetryClient);
     }
 
     public interface IGoogleSso

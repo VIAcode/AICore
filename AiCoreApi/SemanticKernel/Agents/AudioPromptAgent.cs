@@ -165,7 +165,7 @@ namespace AiCoreApi.SemanticKernel.Agents
 
             _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Request", $"URI: {requestUri}\r\nBody: {jsonRequest}");
 
-            var httpClient = _httpClientFactory.CreateClient("RetryClient");
+            var httpClient = _httpClientFactory.CreateClient(HttpClients.RetryClient);
             httpClient.DefaultRequestHeaders.Add("api-key", openAiApiKey);
             httpClient.DefaultRequestHeaders.Accept.Add(
                 new MediaTypeWithQualityHeaderValue("application/json"));

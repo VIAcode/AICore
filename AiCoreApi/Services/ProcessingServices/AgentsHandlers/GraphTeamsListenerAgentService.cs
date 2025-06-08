@@ -89,7 +89,7 @@ namespace AiCoreApi.Services.ProcessingServices.AgentsHandlers
                     var myId = jsonToken.Payload["oid"].ToString();
 
                     var tokenCredential = new StaticTokenCredential(accessToken.Token, accessToken.ExpiresOn);
-                    var httpClient = _httpClientFactory.CreateClient("NoRetryClient");
+                    var httpClient = _httpClientFactory.CreateClient(HttpClients.NoRetryClient);
                     var graphClient = new GraphServiceClient(httpClient, tokenCredential);
 
                     var messageFromList = agent.Content["messageFrom"].Value
