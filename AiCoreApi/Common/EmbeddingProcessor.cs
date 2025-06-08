@@ -20,7 +20,7 @@ namespace AiCoreApi.Common
 
         public async Task<List<Chunk>> GetEmbeddingAsync(ConnectionModel connection, string input)
         {
-            var client = _httpClientFactory.CreateClient("NoRetryClient");
+            var client = _httpClientFactory.CreateClient("RetryClient"); // to avoid trolling by rate limits
 
             var isAzure = connection.Type == ConnectionType.AzureOpenAiEmbedding;
             var apiKey = connection.Content["apiKey"];
