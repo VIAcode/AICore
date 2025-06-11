@@ -1,4 +1,5 @@
-﻿using AiCoreApi.Models.ViewModels;
+﻿using AiCoreApi.Common.Extensions;
+using AiCoreApi.Models.ViewModels;
 using AiCoreApi.SemanticKernel;
 
 namespace AiCoreApi.Common
@@ -7,13 +8,19 @@ namespace AiCoreApi.Common
     {
         private readonly ILogger<ResponseAccessor> _logger;
         private readonly RequestAccessor _requestAccessor;
+        private readonly ICacheAccessor _cacheAccessor;
+        private const string ReasoningCachePrefix = "Reasoning_";
+        private const int ReasoningCacheTimeout = 600;
         public ResponseAccessor(
             ILogger<ResponseAccessor> logger,
-            RequestAccessor requestAccessor)
+            RequestAccessor requestAccessor,
+            ICacheAccessor cacheAccessor)
         {
             _logger = logger;
             _requestAccessor = requestAccessor;
+            _cacheAccessor = cacheAccessor;
         }
+
         public string? StepState { get; set; }
         public MessageDialogViewModel.Message CurrentMessage { get; set; } = new() { Sender = PlannerHelpers.AssistantName };
         public void AddDebugMessage(string sender, string title, string details)
@@ -26,10 +33,33 @@ namespace AiCoreApi.Common
                     Sender = sender,
                     Title = title,
                     Details = details,
-                    DateTime = DateTime.UtcNow
+                    DateTime = DateTime.UtcNow,
+                    Level = Level,
                 });
+                var chatItemId = _requestAccessor?.MessageDialog?.Messages?.Last().ChatItemId;
+                if (!string.IsNullOrEmpty(chatItemId))
+                {
+                    _cacheAccessor.SetCacheValue($"{ReasoningCachePrefix}{chatItemId}", CurrentMessage.DebugMessages.ToJson()!, ReasoningCacheTimeout);
+                }
             }
             _logger.LogDebug($"{4}, {0}: {1}, {2}", sender, title, details, _requestAccessor.Login);
+        }
+        public int Level { get; set; } = 0;
+
+        public List<MessageDialogViewModel.DebugMessage> GetDebugMessages(string chatMessageId)
+        {
+            if (string.IsNullOrEmpty(chatMessageId))
+                return new List<MessageDialogViewModel.DebugMessage>();
+            var resultString = _cacheAccessor.GetCacheValue($"{ReasoningCachePrefix}{chatMessageId}");
+            if (string.IsNullOrEmpty(resultString))
+                return new List<MessageDialogViewModel.DebugMessage>();
+            var result = resultString.JsonGet<List<MessageDialogViewModel.DebugMessage>>();
+            if (result == null)
+            {
+                _logger.LogWarning("GetDebugMessages: result is null for chatMessageId {ChatMessageId}", chatMessageId);
+                return new List<MessageDialogViewModel.DebugMessage>();
+            }
+            return result;
         }
 
         public void AddSpentTokens(string modelName, int requestTokens, int responseTokens)

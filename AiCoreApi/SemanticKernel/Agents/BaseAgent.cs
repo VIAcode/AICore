@@ -156,32 +156,46 @@ namespace AiCoreApi.SemanticKernel.Agents
 
         public async Task<string> DoCallWrapper(AgentModel agent, Dictionary<string, string> parameters)
         {
-            if (agent.Tags.Any())
+            try
             {
-                var userTags = await _requestAccessor.UserContext.GetTagsAsync();
-                var userHasAnyTag = agent.Tags.Any(agentTag => userTags.Any(userTag => agentTag.Name == userTag.Name));
-                if (!userHasAnyTag)
+                _responseAccessor.Level++;
+                if (agent.Tags.Any())
                 {
-                    var agentTagsNames = string.Join(", ", agent.Tags.Select(t => t.Name));
-                    var noAccessText = $"NO ACCESS TAG [{agentTagsNames}]";
-                    _responseAccessor.AddDebugMessage($"{agent.Name} ({agent.Type})", "Access Error", noAccessText);
-                    _logger.LogWarning("User {Login} has no access to agent {AgentName} [{agentTagsNames}].", _requestAccessor.Login, agent.Name, agentTagsNames);
-                    return noAccessText;
+                    var userTags = await _requestAccessor.UserContext.GetTagsAsync();
+                    var userHasAnyTag =
+                        agent.Tags.Any(agentTag => userTags.Any(userTag => agentTag.Name == userTag.Name));
+                    if (!userHasAnyTag)
+                    {
+                        var agentTagsNames = string.Join(", ", agent.Tags.Select(t => t.Name));
+                        var noAccessText = $"NO ACCESS TAG [{agentTagsNames}]";
+                        _responseAccessor.AddDebugMessage($"{agent.Name} ({agent.Type})", "Access Error", noAccessText);
+                        _logger.LogWarning("User {Login} has no access to agent {AgentName} [{agentTagsNames}].",
+                            _requestAccessor.Login, agent.Name, agentTagsNames);
+                        return noAccessText;
+                    }
                 }
-            }
-            if (_monitoringConfig.LogAgentRun)
-            {
-                var parametersString = _monitoringConfig.LogAgentPii
-                    ? string.Join(", ", parameters.Select(p => $"{p.Key}: {p.Value}"))
-                    : "[PII]";
-                _logger.LogCritical("[{DateTime}][Run] {Login}, Action:{Action}, Agent: {Agent}, Parameters: {url}", DateTime.UtcNow.ToString("g"), _requestAccessor.Login, "ApiCall", agent.Name, parametersString);
-            }
-            var result = await DoCall(agent, parameters);
 
-            if (_monitoringConfig.LogAgentResult)
-                _logger.LogCritical("[{DateTime}][Result] {Login}, Action:{Action}, Agent: {Agent}, Result: {url}", DateTime.UtcNow.ToString("g"), _requestAccessor.Login, "ApiCall", agent.Name,
-                    _monitoringConfig.LogAgentPii ? result : "[PII]");
-            return result;
+                if (_monitoringConfig.LogAgentRun)
+                {
+                    var parametersString = _monitoringConfig.LogAgentPii
+                        ? string.Join(", ", parameters.Select(p => $"{p.Key}: {p.Value}"))
+                        : "[PII]";
+                    _logger.LogCritical("[{DateTime}][Run] {Login}, Action:{Action}, Agent: {Agent}, Parameters: {url}",
+                        DateTime.UtcNow.ToString("g"), _requestAccessor.Login, "ApiCall", agent.Name, parametersString);
+                }
+
+                var result = await DoCall(agent, parameters);
+
+                if (_monitoringConfig.LogAgentResult)
+                    _logger.LogCritical("[{DateTime}][Result] {Login}, Action:{Action}, Agent: {Agent}, Result: {url}",
+                        DateTime.UtcNow.ToString("g"), _requestAccessor.Login, "ApiCall", agent.Name,
+                        _monitoringConfig.LogAgentPii ? result : "[PII]");
+                return result;
+            }
+            finally
+            {
+                _responseAccessor.Level--;
+            }
         }
 
         public abstract Task<string> DoCall(AgentModel agent, Dictionary<string, string> parameters);

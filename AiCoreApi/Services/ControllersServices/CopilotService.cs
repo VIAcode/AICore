@@ -209,6 +209,8 @@ namespace AiCoreApi.Services.ControllersServices
                 }
             }
         }
+
+        public async Task<List<MessageDialogViewModel.DebugMessage>> GetDebugMessages(string chatMessageId) => _responseAccessor.GetDebugMessages(chatMessageId);
     }
 
     public interface ICopilotService
@@ -219,6 +221,7 @@ namespace AiCoreApi.Services.ControllersServices
         Task<List<SearchItemModel>?> Search();
         Task<string> Transcribe(IFormFile file);
         Task<string> Proxy(ProxyRequestModel proxyRequest);
+        Task<List<MessageDialogViewModel.DebugMessage>> GetDebugMessages(string chatMessageId); 
         Task InitializeContext();
     }
 }

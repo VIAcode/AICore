@@ -31,6 +31,7 @@ namespace AiCoreApi.Models.ViewModels
             public Dictionary<string, TokensSpent>? SpentTokens { get; set; }
             [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
             public CallOptions[]? Options { get; set; }
+            public string ChatItemId { get; set; } = string.Empty;
         }
 
         public class CallOptions
@@ -57,6 +58,7 @@ namespace AiCoreApi.Models.ViewModels
             public DateTime DateTime { get; set; } = DateTime.Now;
             public string Title { get; set; } = string.Empty;
             public string Details { get; set; } = string.Empty;
+            public int Level { get; set; } = 0;
         }
 
         public class UploadFile
