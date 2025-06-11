@@ -164,5 +164,15 @@ namespace AiCoreApi.Controllers
             var result = await _copilotService.Proxy(proxyRequest);
             return Ok(result);
         }
+
+        [HttpGet("debug/{chatMessageId}")]
+        [CombinedAuthorize]
+        [Consumes("application/json")]
+        [SwaggerResponse(StatusCodes.Status200OK, Type = typeof(List<MessageDialogViewModel.DebugMessage>))]
+        public async Task<IActionResult> GetDebugMessages(string chatMessageId)
+        {
+            var result = await _copilotService.GetDebugMessages(chatMessageId);
+            return Ok(result);
+        }
     }
 }
