@@ -73,6 +73,20 @@ namespace AiCoreApi.Data.Processors
         {
             return await _db.Connections.AsNoTracking().FirstOrDefaultAsync(t => t.ConnectionId == connectionId);
         }
+
+        public async Task<ConnectionModel?> GetByName(string connectionName, int? workspaceId)
+        {
+            var qry = _db.Connections.AsNoTracking();
+            if (workspaceId == 0)
+            {
+                qry = qry.Where(e => e.Name == connectionName && (e.WorkspaceId == null || e.WorkspaceId == 0));
+            }
+            else if (workspaceId != null && workspaceId > 0)
+            {
+                qry = qry.Where(e => e.Name == connectionName && e.WorkspaceId == workspaceId);
+            }
+            return await qry.FirstOrDefaultAsync();
+        }
     }
 
     public interface IConnectionProcessor
@@ -81,5 +95,6 @@ namespace AiCoreApi.Data.Processors
         Task<ConnectionModel> Set(ConnectionModel connectionModel, int? workspaceId);
         Task Remove(int connectionId);
         Task<ConnectionModel?> GetById(int connectionId);
+        Task<ConnectionModel?> GetByName(string connectionName, int? workspaceId);
     }
 }

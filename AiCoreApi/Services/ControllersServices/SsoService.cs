@@ -20,11 +20,11 @@ public class SsoService : ISsoService
 
     public async Task<ClientSsoViewModel?> GetClientById(int clientSsoId)
     {
-        var client = await _clientSsoProcessor.Get(clientSsoId);
-        if (client == null) return null;
+        var clientSsoModel = await _clientSsoProcessor.Get(clientSsoId);
+        if (clientSsoModel == null) return null;
 
-        var clientSsoViewModelList = _mapper.Map<ClientSsoViewModel>(client);
-        return clientSsoViewModelList;
+        var clientSsoViewModel = _mapper.Map<ClientSsoViewModel>(clientSsoModel);
+        return clientSsoViewModel;
     }
 
     public async Task<List<ClientSsoViewModel>> ListClients()

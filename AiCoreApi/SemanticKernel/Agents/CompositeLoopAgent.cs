@@ -1,13 +1,9 @@
-using Microsoft.SemanticKernel;
-using Microsoft.SemanticKernel.ChatCompletion;
 using AiCoreApi.Models.DbModels;
 using AiCoreApi.Common;
 using AiCoreApi.Data.Processors;
 using static AiCoreApi.Common.ExceptionHandlingMiddleware;
 using System.Web;
 using AiCoreApi.Common.Extensions;
-using Microsoft.SemanticKernel.Connectors.OpenAI;
-using OpenAI.Chat;
 using AiCoreApi.Common.Monitoring;
 
 namespace AiCoreApi.SemanticKernel.Agents
@@ -105,7 +101,7 @@ namespace AiCoreApi.SemanticKernel.Agents
 
             if (!string.IsNullOrEmpty(preprocessPromptTemplate))
             {
-                userInput = await ExecutePrompt(llmConnection, preprocessPromptTemplate.Replace("{userInput}", userInput), temperature, topP, string.Empty);
+                userInput = await _semanticKernelProvider.ExecutePrompt(llmConnection, preprocessPromptTemplate.Replace("{userInput}", userInput), temperature, topP, string.Empty);
                 _responseAccessor.AddDebugMessage(_debugMessageSenderName, $"Preprocessed Prompt", userInput);
             }
 
@@ -128,7 +124,7 @@ namespace AiCoreApi.SemanticKernel.Agents
 
                 _responseAccessor.AddDebugMessage(_debugMessageSenderName, $"Step {i + 1}", plannerPrompt);
 
-                var plannerResponse = await ExecutePrompt(llmConnection, plannerPrompt, temperature, topP, systemMessage, PlannerPromptJsonSchema);
+                var plannerResponse = await _semanticKernelProvider.ExecutePrompt(llmConnection, plannerPrompt, temperature, topP, systemMessage, PlannerPromptJsonSchema);
 
                 _responseAccessor.AddDebugMessage(_debugMessageSenderName, $"Step {i + 1} Answer", plannerResponse);
                 var parsed = plannerResponse.JsonGet<PlannerInstruction>();
@@ -153,7 +149,7 @@ namespace AiCoreApi.SemanticKernel.Agents
                     case "finish":
                         if (!string.IsNullOrEmpty(finalPolishPrompt))
                         {
-                            var result = await ExecutePrompt(llmConnection, finalPolishPrompt.Replace("{result}", parsed.Result ?? ""), temperature, topP, string.Empty);
+                            var result = await _semanticKernelProvider.ExecutePrompt(llmConnection, finalPolishPrompt.Replace("{result}", parsed.Result ?? ""), temperature, topP, string.Empty);
                             _responseAccessor.AddDebugMessage(_debugMessageSenderName, $"Final Polished Prompt", result);
                             return result;
                         }
@@ -228,35 +224,6 @@ namespace AiCoreApi.SemanticKernel.Agents
                     return agentTopP;
             }
             return 0;
-        }
-
-        private async Task<string> ExecutePrompt(ConnectionModel llmConnection, string templateText, double temperature, double topP, string systemMessage, string jsonSchema = "")
-        {
-            var kernel = _semanticKernelProvider.GetKernel(llmConnection);
-            var chat = kernel.GetRequiredService<IChatCompletionService>();
-            var history = new ChatHistory();
-            if(!string.IsNullOrEmpty(systemMessage))
-                history.AddSystemMessage(systemMessage);
-            var message = new ChatMessageContentItemCollection
-            {
-                new TextContent(templateText),
-            };
-            history.AddUserMessage(message);
-            var executionSettings = new OpenAIPromptExecutionSettings
-            {
-                Temperature = temperature,
-                TopP = topP,
-            };
-            if (!string.IsNullOrEmpty(jsonSchema))
-            {
-                var chatResponseFormat = ChatResponseFormat.CreateJsonSchemaFormat(
-                    jsonSchemaFormatName: "prompt_result",
-                    jsonSchema: BinaryData.FromString(jsonSchema),
-                    jsonSchemaIsStrict: false);
-                executionSettings.ResponseFormat = chatResponseFormat;
-            }
-            var resultContent = await chat.GetChatMessageContentAsync(history, executionSettings);
-            return resultContent.Content ?? "";
         }
     }
 

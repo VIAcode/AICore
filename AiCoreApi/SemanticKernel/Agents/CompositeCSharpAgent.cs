@@ -1,10 +1,8 @@
 using Microsoft.SemanticKernel;
 using AiCoreApi.Models.DbModels;
 using AiCoreApi.Common;
-using Microsoft.SemanticKernel.ChatCompletion;
 using System.Web;
 using AiCoreApi.Data.Processors;
-using Microsoft.SemanticKernel.Connectors.OpenAI;
 using System.Collections.Concurrent;
 using AiCoreApi.Common.Extensions;
 using static AiCoreApi.Common.ExceptionHandlingMiddleware;
@@ -124,7 +122,7 @@ class Agent
             var cachekey = promptTemplate.GetHash();
             if (!CodeCache.TryGetValue(cachekey, out var code) && _requestAccessor.UseCachedPlan)
             {
-                code = await ExecutePrompt(llmConnection, promptTemplate, temperature, topP);
+                code = await _semanticKernelProvider.ExecutePrompt(llmConnection, promptTemplate, temperature, topP, SystemMessage);
             }
 
 
@@ -165,7 +163,7 @@ You are an expert C# developer. Fix code based on the Error Text below.
 {_csharpCodeAgent.BuildError}
 ";
                     _responseAccessor.AddDebugMessage(_debugMessageSenderName, "Prompt Fix", fixErrorPrompt);
-                    code = await ExecutePrompt(llmConnection, fixErrorPrompt, temperature, topP);
+                    code = await _semanticKernelProvider.ExecutePrompt(llmConnection, fixErrorPrompt, temperature, topP, SystemMessage);
                     _csharpCodeAgent.BuildError = string.Empty;
                 }
             }
@@ -239,27 +237,6 @@ Existing Agents:
 
             var extracted = code.Substring(startIndex, endIndex - startIndex);
             return extracted.Trim();
-        }
-
-
-        private async Task<string> ExecutePrompt(ConnectionModel llmConnection, string templateText, double temperature, double topP)
-        {
-            var kernel = _semanticKernelProvider.GetKernel(llmConnection);
-            var chat = kernel.GetRequiredService<IChatCompletionService>();
-            var history = new ChatHistory();
-            history.AddSystemMessage(SystemMessage);
-            var message = new ChatMessageContentItemCollection
-            {
-                new TextContent(templateText),
-            };
-            history.AddUserMessage(message);
-            var executionSettings = new OpenAIPromptExecutionSettings
-            {
-                Temperature = temperature,
-                TopP = topP,
-            };
-            var resultContent = await chat.GetChatMessageContentAsync(history, executionSettings);
-            return resultContent.Content ?? "";
         }
     }
 

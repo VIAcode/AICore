@@ -2,6 +2,9 @@ using AiCoreApi.Common;
 using AiCoreApi.Data.Processors;
 using AiCoreApi.Models.DbModels;
 using Microsoft.SemanticKernel;
+using Microsoft.SemanticKernel.ChatCompletion;
+using Microsoft.SemanticKernel.Connectors.OpenAI;
+using OpenAI.Chat;
 
 namespace AiCoreApi.SemanticKernel
 {
@@ -97,11 +100,41 @@ namespace AiCoreApi.SemanticKernel
             return GetKernel(llmConnection);
 
         }
+
+        public async Task<string> ExecutePrompt(ConnectionModel llmConnection, string templateText, double temperature, double topP, string systemMessage, string jsonSchema = "")
+        {
+            var kernel = GetKernel(llmConnection);
+            var chat = kernel.GetRequiredService<IChatCompletionService>();
+            var history = new ChatHistory();
+            if (!string.IsNullOrEmpty(systemMessage))
+                history.AddSystemMessage(systemMessage);
+            var message = new ChatMessageContentItemCollection
+            {
+                new TextContent(templateText),
+            };
+            history.AddUserMessage(message);
+            var executionSettings = new OpenAIPromptExecutionSettings
+            {
+                Temperature = temperature,
+                TopP = topP,
+            };
+            if (!string.IsNullOrEmpty(jsonSchema))
+            {
+                var chatResponseFormat = ChatResponseFormat.CreateJsonSchemaFormat(
+                    jsonSchemaFormatName: "prompt_result",
+                    jsonSchema: BinaryData.FromString(jsonSchema),
+                    jsonSchemaIsStrict: false);
+                executionSettings.ResponseFormat = chatResponseFormat;
+            }
+            var resultContent = await chat.GetChatMessageContentAsync(history, executionSettings);
+            return resultContent.Content ?? "";
+        }
     }
 
     public interface ISemanticKernelProvider
     {
         Kernel GetKernel(ConnectionModel connectionModel);
         Task<Kernel> GetKernel();
+        Task<string> ExecutePrompt(ConnectionModel llmConnection, string templateText, double temperature, double topP, string systemMessage, string jsonSchema = "");
     }
 }

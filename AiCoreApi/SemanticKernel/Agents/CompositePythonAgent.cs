@@ -1,10 +1,8 @@
 using Microsoft.SemanticKernel;
 using AiCoreApi.Models.DbModels;
 using AiCoreApi.Common;
-using Microsoft.SemanticKernel.ChatCompletion;
 using System.Web;
 using AiCoreApi.Data.Processors;
-using Microsoft.SemanticKernel.Connectors.OpenAI;
 using System.Collections.Concurrent;
 using AiCoreApi.Common.Extensions;
 using static AiCoreApi.Common.ExceptionHandlingMiddleware;
@@ -111,7 +109,7 @@ return result
             var cachekey = promptTemplate.GetHash();
             if (!CodeCache.TryGetValue(cachekey, out var code) && _requestAccessor.UseCachedPlan)
             {
-                code = await ExecutePrompt(llmConnection, promptTemplate, temperature, topP);
+                code = await _semanticKernelProvider.ExecutePrompt(llmConnection, promptTemplate, temperature, topP, SystemMessage);
             }
 
             for (var i = 0; i < RegenerationAttempts; i++)
@@ -141,7 +139,7 @@ You are an expert Python developer. Fix the code based on the Error Text below.
 {validationResult}
 ";
                 _responseAccessor.AddDebugMessage(_debugMessageSenderName, "Prompt Fix", fixErrorPrompt);
-                code = await ExecutePrompt(llmConnection, fixErrorPrompt, temperature, topP);
+                code = await _semanticKernelProvider.ExecutePrompt(llmConnection, fixErrorPrompt, temperature, topP, SystemMessage);
 
             }
             throw new AiCoreUiException("Code generation failed after multiple attempts.");
@@ -203,21 +201,6 @@ Use `ExecuteAgent('AgentName', ['param1', 'param2'])` to call.
             startIndex += 1;
             var endIndex = code.IndexOf("```", startIndex, StringComparison.Ordinal);
             return endIndex == -1 ? code.Trim() : code.Substring(startIndex, endIndex - startIndex).Trim();
-        }
-
-        private async Task<string> ExecutePrompt(ConnectionModel llmConnection, string templateText, double temperature, double topP)
-        {
-            var kernel = _semanticKernelProvider.GetKernel(llmConnection);
-            var chat = kernel.GetRequiredService<IChatCompletionService>();
-            var history = new ChatHistory();
-            history.AddSystemMessage(SystemMessage);
-            history.AddUserMessage(new ChatMessageContentItemCollection { new TextContent(templateText) });
-            var result = await chat.GetChatMessageContentAsync(history, new OpenAIPromptExecutionSettings
-            {
-                Temperature = temperature,
-                TopP = topP,
-            });
-            return result.Content ?? string.Empty;
         }
     }
 

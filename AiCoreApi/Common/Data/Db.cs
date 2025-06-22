@@ -24,6 +24,8 @@ namespace AiCoreApi.Common.Data
         public DbSet<SchedulerAgentTaskModel> SchedulerAgentTasks { get; set; }
         public DbSet<DebugLogModel> DebugLog { get; set; }
         public DbSet<WorkspaceModel> Workspaces { get; set; }
+        public DbSet<EvaluationModel> Evaluation { get; set; }
+        public DbSet<EvaluationHistoryModel> EvaluationHistory { get; set; }
 
 
         private readonly IDbQuery _dbQuery;
