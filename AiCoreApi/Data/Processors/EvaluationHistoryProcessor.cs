@@ -30,8 +30,8 @@ public class EvaluationHistoryProcessor : IEvaluationHistoryProcessor
     public async Task<List<EvaluationHistoryModel>> List(int workspaceId)
     {
         var qry = _db.EvaluationHistory
-            .AsNoTracking()
-            .OrderByDescending(item => item.EvaluationHistoryId).AsNoTracking();
+            .AsNoTracking();
+        qry = qry.OrderByDescending(item => item.EvaluationHistoryId);
         qry = qry.Where(e => e.WorkspaceId == workspaceId);
         qry = qry.Select(e => new EvaluationHistoryModel
         {

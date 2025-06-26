@@ -1,5 +1,4 @@
 ﻿using AiCoreApi.Authorization.Attributes;
-using AiCoreApi.Migrations;
 using AiCoreApi.Models.ViewModels;
 using AiCoreApi.Services.ControllersServices;
 using Microsoft.AspNetCore.Authorization;
