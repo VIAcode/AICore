@@ -18,15 +18,38 @@ public class EvaluationHistoryProcessor : IEvaluationHistoryProcessor
         return await _db.EvaluationHistory.AsNoTracking().FirstOrDefaultAsync(e => e.EvaluationHistoryId == evaluationHistoryId);
     }
 
+    public async Task<EvaluationHistoryModel?> GetShort(int evaluationHistoryId)
+    {
+        var result = await Get(evaluationHistoryId);
+        if (result == null) 
+            return null;
+        result.Questions.ForEach(q => q.DebugMessages = "[]");
+        return result;
+    }
+
     public async Task<List<EvaluationHistoryModel>> List(int workspaceId)
     {
-        var qry = _db.EvaluationHistory.OrderByDescending(item => item.EvaluationHistoryId).AsNoTracking();
+        var qry = _db.EvaluationHistory
+            .AsNoTracking()
+            .OrderByDescending(item => item.EvaluationHistoryId).AsNoTracking();
         qry = qry.Where(e => e.WorkspaceId == workspaceId);
+        qry = qry.Select(e => new EvaluationHistoryModel
+        {
+            AgentName = e.AgentName,
+            EvaluationId = e.EvaluationId,
+            EvaluationHistoryId = e.EvaluationHistoryId,
+            EvaluationLlmModel = e.EvaluationLlmModel,
+            EvaluationPrompt = e.EvaluationPrompt,
+            Status = e.Status,
+            Created = e.Created,
+            CreatedBy = e.CreatedBy,
+            WorkspaceId = e.WorkspaceId
+        });
         var data = await qry.ToListAsync();
         return data;
     }
 
-    public async Task<List<EvaluationHistoryModel>> ListShort(int evaluationId, int workspaceId)
+    public async Task<List<EvaluationHistoryModel>> List(int evaluationId, int workspaceId)
     {
         var agentNames = await _db.EvaluationHistory
             .AsNoTracking()
@@ -84,8 +107,9 @@ public class EvaluationHistoryProcessor : IEvaluationHistoryProcessor
 public interface IEvaluationHistoryProcessor
 {
     Task<EvaluationHistoryModel?> Get(int evaluationHistoryId);
+    Task<EvaluationHistoryModel?> GetShort(int evaluationHistoryId);
     Task<List<EvaluationHistoryModel>> List(int workspaceId);
-    Task<List<EvaluationHistoryModel>> ListShort(int evaluationId, int workspaceId); 
+    Task<List<EvaluationHistoryModel>> List(int evaluationId, int workspaceId); 
     Task Delete(int evaluationHistoryId);
     Task<EvaluationHistoryModel> Add(EvaluationHistoryModel evaluationHistoryModel);
     Task<EvaluationHistoryModel> Update(EvaluationHistoryModel evaluationHistoryModel);

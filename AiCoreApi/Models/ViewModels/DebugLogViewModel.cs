@@ -11,6 +11,7 @@
         public Dictionary<string, TokensSpentViewModel>? SpentTokens { get; set; }
         public List<string>? Files { get; set; }
         public int? WorkspaceId { get; set; }
+        public bool HasDebugMessages { get; set; }
     }
 
     public class DebugMessageViewModel
@@ -19,6 +20,7 @@
         public DateTime DateTime { get; set; } = DateTime.Now;
         public string Title { get; set; } = string.Empty;
         public string Details { get; set; } = string.Empty;
+        public int Level { get; set; } = 0;
     }
 
     public class TokensSpentViewModel

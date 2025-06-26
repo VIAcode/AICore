@@ -21,4 +21,5 @@ public class EvaluationHistoryQuestionViewModel
     public string Result { get; set; } = string.Empty;
     public string DebugMessages { get; set; } = string.Empty;
     public int Score { get; set; }
+    public int Id { get; set; }
 }

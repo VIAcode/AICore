@@ -9,7 +9,9 @@ public class DebugLogModelProfile : Profile
     public DebugLogModelProfile()
     {
         CreateMap<DebugLogViewModel, DebugLogModel>();
-        CreateMap<DebugLogModel, DebugLogViewModel>();
+        CreateMap<DebugLogModel, DebugLogViewModel>()
+            .ForMember(dst => dst.HasDebugMessages,
+            opt => opt.MapFrom(src => src.DebugMessages != null));
 
         CreateMap<DebugMessageViewModel, DebugMessage>();
         CreateMap<DebugMessage, DebugMessageViewModel>();

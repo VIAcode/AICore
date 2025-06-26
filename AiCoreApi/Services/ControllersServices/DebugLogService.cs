@@ -30,10 +30,19 @@ public class DebugLogService : IDebugLogService
         var pagesCount = await _debugLogProcessor.PagesCount(filterModel, workspaceId);
         return pagesCount;
     }
+    public async Task<List<DebugMessageViewModel>?> GetDebugMessages(int debugLogId)
+    {
+        var debugMessages = await _debugLogProcessor.GetDebugMessages(debugLogId);
+        if (debugMessages == null)
+            return null;
+        var debugMessagesViewModel = _mapper.Map<List<DebugMessageViewModel>>(debugMessages);
+        return debugMessagesViewModel;
+    }
 }
 
 public interface IDebugLogService
 {
     Task<List<DebugLogViewModel>> List(DebugLogFilterViewModel filterViewModel, int workspaceId);
     Task<int> PagesCount(DebugLogFilterViewModel filterViewModel, int workspaceId);
+    Task<List<DebugMessageViewModel>?> GetDebugMessages(int debugLogId);
 }

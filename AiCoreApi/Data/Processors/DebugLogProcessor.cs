@@ -34,10 +34,23 @@ namespace AiCoreApi.Data.Processors
                 result = result.Where(item => item.WorkspaceId == workspaceId);
             else
                 result = result.Where(item => item.WorkspaceId == null || item.WorkspaceId == 0);
+
             return await result
                 .OrderByDescending(item => item.DebugLogId)
                 .Skip(filter.Skip)
                 .Take(filter.Take)
+                .Select(item => new DebugLogModel
+                {
+                    DebugLogId = item.DebugLogId,
+                    Login = item.Login,
+                    Date = item.Date,
+                    Prompt = item.Prompt,
+                    Result = item.Result,
+                    Files = item.Files,
+                    SpentTokens = item.SpentTokens,
+                    WorkspaceId = item.WorkspaceId,
+                    DebugMessages = item.DebugMessages == null ? null : new List<DebugMessage>()
+                })
                 .ToListAsync();
         }
 
@@ -114,7 +127,8 @@ namespace AiCoreApi.Data.Processors
                         Sender = x.Sender,
                         DateTime = x.DateTime,
                         Title = x.Title,
-                        Details = x.Details
+                        Details = x.Details,
+                        Level = x.Level
                     }).ToList()
                 }, workspaceId);
             }
@@ -129,6 +143,13 @@ namespace AiCoreApi.Data.Processors
             await _db.SaveChangesAsync();
         }
 
+        public async Task<List<DebugMessage>?> GetDebugMessages(int debugLogId)
+        {
+            var debugLog = await _db.DebugLog.AsNoTracking()
+                .FirstOrDefaultAsync(item => item.DebugLogId == debugLogId);
+            return debugLog?.DebugMessages;
+        }
+
     }
 
     public interface IDebugLogProcessor
@@ -138,5 +159,6 @@ namespace AiCoreApi.Data.Processors
         Task<DebugLogModel> Set(DebugLogModel debugLogModel, int workspaceId);
         Task Add(string? login, string? prompt, MessageDialogViewModel messageDialog, int workspaceId);
         Task Remove(DateTime dateLimit);
+        Task<List<DebugMessage>?> GetDebugMessages(int debugLogId);
     }
 }
