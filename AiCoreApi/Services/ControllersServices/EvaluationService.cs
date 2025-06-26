@@ -239,6 +239,8 @@ public class EvaluationService : IEvaluationService
         var evaluationHistory = await _evaluationHistoryProcessor.Get(evaluationHistoryId);
         if (evaluationHistory == null)
             throw new AiCoreUiException($"Evaluation history with ID {evaluationHistoryId} not found.");
+        if (logId <= 0 || logId > evaluationHistory.Questions.Count)
+            throw new AiCoreUiException($"Invalid logId {logId}. It must be between 1 and {evaluationHistory.Questions.Count}.");
         var debugMessagesString = evaluationHistory.Questions[logId - 1].DebugMessages;
         if (string.IsNullOrEmpty(debugMessagesString) || debugMessagesString == "[]")
             return new List<DebugMessageViewModel>();
