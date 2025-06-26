@@ -55,15 +55,17 @@ public class EvaluationService : IEvaluationService
 
     public async Task<List<EvaluationHistoryViewModel>> ListHistory(int evaluationId)
     {
-        var evaluationHistoryList = await _evaluationHistoryProcessor.ListShort(evaluationId, _requestAccessor.WorkspaceId ?? 0);
+        var evaluationHistoryList = await _evaluationHistoryProcessor.List(evaluationId, _requestAccessor.WorkspaceId ?? 0);
         var evaluationHistoryViewModelList = _mapper.Map<List<EvaluationHistoryViewModel>>(evaluationHistoryList);
         return evaluationHistoryViewModelList;
     }
 
     public async Task<EvaluationHistoryViewModel> GetHistoryItem(int evaluationHistoryId)
     {
-        var evaluationHistory = await _evaluationHistoryProcessor.Get(evaluationHistoryId);
+        var evaluationHistory = await _evaluationHistoryProcessor.GetShort(evaluationHistoryId);
         var evaluationHistoryViewModel = _mapper.Map<EvaluationHistoryViewModel>(evaluationHistory);
+        var i = 1;
+        evaluationHistoryViewModel.Questions.ForEach(x => x.Id = i++);
         return evaluationHistoryViewModel;
     }
 
@@ -231,6 +233,25 @@ public class EvaluationService : IEvaluationService
         var result = await _plannerHelpers.ExecuteAgent(evaluation.AgentName, question.Parameters);
         return result;
     }
+
+    public async Task<List<DebugMessageViewModel>> GetDebugMessages(int evaluationHistoryId, int logId)
+    {
+        var evaluationHistory = await _evaluationHistoryProcessor.Get(evaluationHistoryId);
+        if (evaluationHistory == null)
+            throw new AiCoreUiException($"Evaluation history with ID {evaluationHistoryId} not found.");
+        if (logId <= 0 || logId > evaluationHistory.Questions.Count)
+            throw new AiCoreUiException($"Invalid logId {logId}. It must be between 1 and {evaluationHistory.Questions.Count}.");
+        var debugMessagesString = evaluationHistory.Questions[logId - 1].DebugMessages;
+        if (string.IsNullOrEmpty(debugMessagesString) || debugMessagesString == "[]")
+            return new List<DebugMessageViewModel>();
+        var debugMessages = debugMessagesString.JsonGet<List<DebugMessage>>();
+        if (debugMessages == null)
+        {
+            throw new AiCoreUiException($"Debug messages for evaluation history ID {evaluationHistoryId} and log ID {logId} are not available.");
+        }
+        var debugMessagesViewModel = _mapper.Map<List<DebugMessageViewModel>>(debugMessages);
+        return debugMessagesViewModel;
+    }
 }
 
 public interface IEvaluationService
@@ -243,4 +264,5 @@ public interface IEvaluationService
     Task Run(int evaluationId); 
     Task<EvaluationViewModel> Add(EvaluationViewModel evaluationViewModel);
     Task<EvaluationViewModel> Update(EvaluationViewModel evaluationViewModel);
+    Task<List<DebugMessageViewModel>> GetDebugMessages(int evaluationHistoryId, int logId);
 }

@@ -33,5 +33,13 @@ public class DebugLogController : ControllerBase
         return Ok(result);
     }
 
+    [HttpGet("debugMessages/{debugLogId}")]
+    [Authorize]
+    public async Task<IActionResult> GetDebugMessages(int debugLogId)
+    {
+        var result = await _debugLogService.GetDebugMessages(debugLogId);
+        return Ok(result);
+    }
+
 
 }

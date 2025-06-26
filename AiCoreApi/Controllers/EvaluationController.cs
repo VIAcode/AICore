@@ -118,5 +118,15 @@ namespace AiCoreApi.Controllers
 
             return Ok(model != null);
         }
+
+
+        [CombinedAuthorize]
+        [RoleAuthorize(Role.Admin, Role.Developer)]
+        [HttpGet("history/debugMessages/{evaluationHistoryId}/{logId}")]
+        public async Task<IActionResult> GetDebugMessages(int evaluationHistoryId, int logId)
+        {
+            var result = await _evaluationService.GetDebugMessages(evaluationHistoryId, logId);
+            return Ok(result);
+        }
     }
 }
