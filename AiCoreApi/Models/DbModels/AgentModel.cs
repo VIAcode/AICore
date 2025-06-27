@@ -84,5 +84,6 @@ namespace AiCoreApi.Models.DbModels
         CompositeLoop = 49,
         Git = 50,
         Flow = 51,
+        MemZero = 52,
     }
 }
