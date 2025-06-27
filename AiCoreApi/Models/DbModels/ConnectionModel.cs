@@ -52,6 +52,7 @@ namespace AiCoreApi.Models.DbModels
         Qdrant = 30,
         OpenSearch = 31,
         Git = 32,
+        MemZero = 33,
     }
 
     public static class ConnectionTypeExtensions

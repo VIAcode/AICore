@@ -64,6 +64,7 @@ namespace AiCoreApi.SemanticKernel
         private readonly IEmbeddingAgent _embeddingAgent;
         private readonly IOpenSearchAgent _openSearchAgent;
         private readonly IGitAgent _gitAgent;
+        private readonly IMemZeroAgent _memZeroAgent;
 
         public PlannerHelpers(
             RequestAccessor requestAccessor,
@@ -105,7 +106,8 @@ namespace AiCoreApi.SemanticKernel
             IQdrantAgent qdrantAgent,
             IEmbeddingAgent embeddingAgent,
             IOpenSearchAgent openSearchAgent,
-            IGitAgent gitAgent)
+            IGitAgent gitAgent,
+            IMemZeroAgent memZeroAgent)
         {
             _requestAccessor = requestAccessor;
             _extendedConfig = extendedConfig;
@@ -147,6 +149,7 @@ namespace AiCoreApi.SemanticKernel
             _embeddingAgent = embeddingAgent;
             _openSearchAgent = openSearchAgent;
             _gitAgent = gitAgent;
+            _memZeroAgent = memZeroAgent;
         }
 
         private List<AgentModel>? _agentsList;
@@ -371,7 +374,8 @@ namespace AiCoreApi.SemanticKernel
                 { AgentType.Qdrant, _qdrantAgent },
                 { AgentType.OpenSearch, _openSearchAgent },
                 { AgentType.Git, _gitAgent },
-                { AgentType.Flow, FlowAgent }
+                { AgentType.Flow, FlowAgent }, 
+                { AgentType.MemZero, _memZeroAgent }
             };
             return agentMapping;
         }
