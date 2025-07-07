@@ -88,6 +88,7 @@ namespace AiCoreApi.Services.ControllersServices
                 UseKeyVaultAppRegistration = _extendedConfig.UseKeyVaultAppRegistration,
                 UseGitStorage = _extendedConfig.UseGitStorage,
                 UseMcpServer = _extendedConfig.UseMcpServer,
+                UseWebHooks = _extendedConfig.UseWebHooks,
                 UsePublicCalls = _extendedConfig.UsePublicCalls,
                 DefaultMessageViewer = _extendedConfig.DefaultMessageViewer,    
                 FeatureFlags = _featureFlags.GetValues()

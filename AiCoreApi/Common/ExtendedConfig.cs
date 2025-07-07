@@ -416,6 +416,13 @@ public class ExtendedConfig
     [Description("Public calls acts as Login")]
     [Tooltip("Agents and Tools will be executed in a context of this user.")]
     public string PublicCallsUser => GetValue<string>("PublicCallsUser", "");
+
+
+    [Category(CategoryAttribute.ConfigCategoryEnum.WebHooksCalls)]
+    [DataType(DataTypeAttribute.ConfigDataTypeEnum.Boolean)]
+    [Description("Enable WebHooks")]
+    [Tooltip("Specifies if the system should allow to use WebHooks for Agents and Tools calls. When enabled, the system allows to use WebHooks for Agents and Tools calls.")]
+    public bool UseWebHooks => GetValue<bool>("UseWebHooks", false);
 }
 
 [AttributeUsage(AttributeTargets.Property)]
@@ -510,5 +517,7 @@ public class CategoryAttribute : Attribute, IAttributeHandler
         McpServer,
         [System.ComponentModel.Description("Public Calls")]
         PublicCalls,
+        [System.ComponentModel.Description("WebHooks")]
+        WebHooksCalls,
     }
 }
