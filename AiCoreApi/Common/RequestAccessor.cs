@@ -74,6 +74,7 @@ namespace AiCoreApi.Common
         }
 
         public bool IsMcpCall { get; set; }
+        public bool IsWebHookCall { get; set; }
         public bool IsPublicCall { get; set; }
         public bool UseMarkdown { get; set; }
         public bool UseBing { get; set; }
