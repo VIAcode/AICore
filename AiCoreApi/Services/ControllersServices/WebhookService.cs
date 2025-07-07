@@ -27,7 +27,7 @@ namespace AiCoreApi.Services.ControllersServices
             if (agent == null)
                 return $"No agent found for action: {action}";
             if (!agent.Content.ContainsKey(AgentTypeCalls.AgentCallTypeFieldName) || !agent.Content[AgentTypeCalls.AgentCallTypeFieldName].Value.Contains(AgentTypeCalls.WebHook))
-                return $"Agent {agent.Name} can not ba called via WebHook.";
+                return $"Agent {agent.Name} cannot be called via WebHook.";
             var result = await RunAgent(agent.Name, new List<string> { method, query, body});
             return result;
         }

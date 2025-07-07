@@ -169,7 +169,7 @@ namespace AiCoreApi.SemanticKernel
                     : AgentTypeCalls.PrivateCall;
                 var agentCallTypePublic = callType.Contains(AgentTypeCalls.PublicCall) && _extendedConfig.UsePublicCalls;
                 var agentCallTypePrivate = callType.Contains(AgentTypeCalls.PrivateCall);
-                var agentCallTypeWebHook = callType.Contains(AgentTypeCalls.WebHook);
+                var agentCallTypeWebHook = callType.Contains(AgentTypeCalls.WebHook) && _extendedConfig.UseWebHooks;
 
                 if (agentCallTypePublic && _requestAccessor.IsPublicCall)
                 {

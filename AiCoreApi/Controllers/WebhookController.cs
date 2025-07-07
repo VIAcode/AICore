@@ -30,7 +30,7 @@ public class WebhookController : ControllerBase
     public async Task<IActionResult> WebHookPost(string actionName)
     {
         var queryString = HttpContext.Request.QueryString.Value ?? string.Empty;
-        var text = await _webhookService.WebHook(actionName, "POST", queryString, GetBody());
+        var text = await _webhookService.WebHook(actionName, "POST", queryString, await GetBody());
         return Content(text, text.IsJson() ? "application/json" : "text/plain");
     }
 
@@ -39,7 +39,7 @@ public class WebhookController : ControllerBase
     public async Task<IActionResult> WebHookPut(string actionName)
     {
         var queryString = HttpContext.Request.QueryString.Value ?? string.Empty;
-        var text = await _webhookService.WebHook(actionName, "PUT", queryString, GetBody());
+        var text = await _webhookService.WebHook(actionName, "PUT", queryString, await GetBody());
         return Content(text, text.IsJson() ? "application/json" : "text/plain");
     }
 
@@ -48,17 +48,17 @@ public class WebhookController : ControllerBase
     public async Task<IActionResult> WebHookDelete(string actionName)
     {
         var queryString = HttpContext.Request.QueryString.Value ?? string.Empty;
-        var text = await _webhookService.WebHook(actionName, "DELETE", queryString, GetBody());
+        var text = await _webhookService.WebHook(actionName, "DELETE", queryString, await GetBody());
         return Content(text, text.IsJson() ? "application/json" : "text/plain");
     }
 
-    private string GetBody()
+    private async Task<string> GetBody()
     {
         var request = HttpContext.Request;
         request.EnableBuffering();
         request.Body.Position = 0;
         using var reader = new StreamReader(request.Body, leaveOpen: true);
-        var body = reader.ReadToEndAsync().Result;
+        var body = await reader.ReadToEndAsync();
         request.Body.Position = 0;
         return body;
     }
