@@ -171,17 +171,17 @@ namespace AiCoreApi.SemanticKernel
                 var agentCallTypePrivate = callType.Contains(AgentTypeCalls.PrivateCall);
                 var agentCallTypeWebHook = callType.Contains(AgentTypeCalls.WebHook) && _extendedConfig.UseWebHooks;
 
-                if (agentCallTypePublic && _requestAccessor.IsPublicCall)
+                if (agentCallTypeWebHook && _requestAccessor.IsWebHookCall)
+                {
+                    // webhook call
+                }
+                else if (agentCallTypePublic && _requestAccessor.IsPublicCall)
                 {
                     // public call
                 }
                 else if (agentCallTypePrivate && !_requestAccessor.IsPublicCall)
                 {
                     // private call
-                }
-                else if (agentCallTypeWebHook && _requestAccessor.IsWebHookCall)
-                {
-                    // webhook call
                 }
                 else
                     throw new AiCoreAuthException($"Agent {agentName} cannot be called according to its call type ({callType}).");

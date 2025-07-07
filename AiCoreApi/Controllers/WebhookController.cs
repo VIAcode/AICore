@@ -16,40 +16,28 @@ public class WebhookController : ControllerBase
         _webhookService = webhookService;
     }
 
-    [AllowAnonymous]
-    [HttpGet("{actionName}")]
-    public async Task<IActionResult> WebHookGet(string actionName)
-    {
-        var queryString = HttpContext.Request.QueryString.Value ?? string.Empty;
-        var text = await _webhookService.WebHook(actionName, "GET", queryString, string.Empty);
-        return Content(text, text.IsJson() ? "application/json" : "text/plain");
-    }
+    [AllowAnonymous, HttpGet("{actionName}")]
+    public Task<IActionResult> WebHookGet(string actionName) =>
+        HandleWebhookAsync(actionName, "GET", string.Empty);
 
-    [AllowAnonymous]
-    [HttpPost("{actionName}")]
-    public async Task<IActionResult> WebHookPost(string actionName)
-    {
-        var queryString = HttpContext.Request.QueryString.Value ?? string.Empty;
-        var text = await _webhookService.WebHook(actionName, "POST", queryString, await GetBody());
-        return Content(text, text.IsJson() ? "application/json" : "text/plain");
-    }
+    [AllowAnonymous, HttpPost("{actionName}")]
+    public async Task<IActionResult> WebHookPost(string actionName) =>
+        await HandleWebhookAsync(actionName, "POST", await GetBody());
 
-    [AllowAnonymous]
-    [HttpPut("{actionName}")]
-    public async Task<IActionResult> WebHookPut(string actionName)
-    {
-        var queryString = HttpContext.Request.QueryString.Value ?? string.Empty;
-        var text = await _webhookService.WebHook(actionName, "PUT", queryString, await GetBody());
-        return Content(text, text.IsJson() ? "application/json" : "text/plain");
-    }
+    [AllowAnonymous, HttpPut("{actionName}")]
+    public async Task<IActionResult> WebHookPut(string actionName) =>
+        await HandleWebhookAsync(actionName, "PUT", await GetBody());
 
-    [AllowAnonymous]
-    [HttpDelete("{actionName}")]
-    public async Task<IActionResult> WebHookDelete(string actionName)
+    [AllowAnonymous, HttpDelete("{actionName}")]
+    public async Task<IActionResult> WebHookDelete(string actionName) =>
+        await HandleWebhookAsync(actionName, "DELETE", await GetBody());
+
+    private async Task<IActionResult> HandleWebhookAsync(string actionName, string method, string body)
     {
         var queryString = HttpContext.Request.QueryString.Value ?? string.Empty;
-        var text = await _webhookService.WebHook(actionName, "DELETE", queryString, await GetBody());
-        return Content(text, text.IsJson() ? "application/json" : "text/plain");
+        var result = await _webhookService.WebHook(actionName, method, queryString, body);
+        var contentType = result.IsJson() ? "application/json" : "text/plain";
+        return Content(result, contentType);
     }
 
     private async Task<string> GetBody()
