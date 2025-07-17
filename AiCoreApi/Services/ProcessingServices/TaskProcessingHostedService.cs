@@ -1,4 +1,5 @@
 using AiCoreApi.Common;
+using AiCoreApi.Common.Extensions;
 using AiCoreApi.Data.Processors;
 using AiCoreApi.Models.DbModels;
 using AiCoreApi.Services.IngestionServices;
@@ -85,7 +86,12 @@ namespace AiCoreApi.Services.ProcessingServices
                     throw new InvalidOperationException($"'{nameof(IIngestionDataServiceFactory)}' service not found.");
 
                 var service = dataServiceFactory.GetService(task);
-                await service.Process(task.IngestionId, task.TaskId);
+                var payload = "";
+                if (task.Context is { Count: > 0 })
+                {
+                    payload = task.Context.ToDictionary(key => key.Key, value => value.Value.ToString()).ToJson();
+                }
+                await service.Process(task.IngestionId, task.TaskId, payload ?? "");
 
                 await SetTaskState(TaskState.Completed);
             }

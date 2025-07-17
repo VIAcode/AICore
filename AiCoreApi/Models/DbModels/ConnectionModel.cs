@@ -53,6 +53,7 @@ namespace AiCoreApi.Models.DbModels
         OpenSearch = 31,
         Git = 32,
         MemZero = 33,
+        Confluence = 34
     }
 
     public static class ConnectionTypeExtensions

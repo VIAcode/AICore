@@ -30,5 +30,6 @@ namespace AiCoreApi.Models.DbModels
         UploadFile = 3,
         AzDoWiki = 4,
         AzureBlobStorage = 5,
+        Confluence = 6,
     }
 }

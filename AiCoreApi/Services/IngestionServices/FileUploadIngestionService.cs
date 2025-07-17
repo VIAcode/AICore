@@ -79,6 +79,16 @@ namespace AiCoreApi.Services.IngestionServices
             await _ingestionProcessor.Set(ingestion, null);
         }
 
+        public async Task<string> GetFile(IngestionModel ingestion, string fileId)
+        {
+            throw new NotImplementedException();
+        }
+
+        public async Task SetFile(IngestionModel ingestion, string fileId, string articleText)
+        {
+            throw new NotImplementedException();
+        }
+
         private async Task<List<FileModel>> GetFiles(string base64File, string fileName)
         {
             // parameter started with something like:

@@ -25,7 +25,7 @@ namespace AiCoreApi.Services.IngestionServices
             _dataIngestionHelperService = dataIngestionHelperService;
         }
 
-        public async Task Process(int ingestionId, int taskId)
+        public async Task Process(int ingestionId, int taskId, string payload)
         {
             var ingestion = await _ingestionProcessor.GetIngestionById(ingestionId) ?? throw new InvalidOperationException($"Data source '{ingestionId}' not found.");
             var embeddingConnection = await _dataIngestionHelperService.GetEmbeddingConnection(ingestion);

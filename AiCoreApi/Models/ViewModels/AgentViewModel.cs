@@ -86,5 +86,7 @@ namespace AiCoreApi.Models.ViewModels
         Git = 50,
         Flow = 51,
         MemZero = 52,
+        KnowledgeBase = 53,
+        Confluence = 54,
     }
 }

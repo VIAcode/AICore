@@ -13,6 +13,7 @@ namespace AiCoreApi.Common
 
         public static AsyncLocal<int?> AsyncScheduledLoginId = new();
         private int? _loginId;
+        private string? _loginName;
         private List<TagModel>? _tags;
 
         public UserContextAccessor(IHttpContextAccessor httpContextAccessor, ILoginProcessor loginProcessor)
@@ -28,6 +29,15 @@ namespace AiCoreApi.Common
                 await LoadUserData();
             }
             return _loginId;
+        }
+
+        public async Task<string> GetLoginNameAsync()
+        {
+            if (string.IsNullOrEmpty(_loginName))
+            {
+                await LoadUserData();
+            }
+            return _loginName ?? "Unknown";
         }
 
         public async Task<List<TagModel>> GetTagsAsync()
@@ -63,6 +73,7 @@ namespace AiCoreApi.Common
                 return;
             var claims = identity.Claims.ToDictionary(key => key.Type, value => value.Value);
             claims.TryGetValue(ClaimTypes.NameIdentifier, out var login);
+            _loginName = login;
 
             var loginType = claims.TryGetValue(IdTokenClaims.LoginType, out var loginTypeClaimValue)
                 ? Enum.Parse<LoginTypeEnum>(loginTypeClaimValue)

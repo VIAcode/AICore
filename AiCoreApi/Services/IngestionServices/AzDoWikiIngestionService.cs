@@ -109,6 +109,97 @@ namespace AiCoreApi.Services.IngestionServices
             await _taskProcessor.SetMessage(taskId, "Completed");
         }
 
+        public async Task<string> GetFile(IngestionModel ingestion, string fileId)
+        {
+            try
+            {
+                var pat = ingestion.Content["PAT"];
+                var org = ingestion.Content["Organization"];
+                var project = ingestion.Content["Project"];
+                var wiki = ingestion.Content["WikiIdentifier"];
+
+                var client = _httpClientFactory.CreateClient(HttpClients.NoRetryClient);
+                var patToken = Convert.ToBase64String(Encoding.ASCII.GetBytes($":{pat}"));
+                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", patToken);
+
+                // fileId == docId == "{wiki}/{pagePath}". UniqueId() was used before,
+                // so we need to reconstruct the path from the docId if necessary.
+                // Assuming docId was based on "wiki/path" -> UniqueId(), we should search metadata first.
+                var metadata = _documentMetadataProcessor.Get(fileId);
+                if (metadata == null)
+                    throw new InvalidOperationException($"File with id '{fileId}' not found in metadata.");
+
+                // Extract the original wiki path from the file name (stored as .md)
+                var path = metadata.Name.Replace(".md", string.Empty);
+
+                // Get the latest content directly from Azure DevOps Wiki
+                var url = $"https://dev.azure.com/{org}/{project}/_apis/wiki/wikis/{wiki}/pages?path={HttpUtility.UrlEncode(path)}&includeContent=True&api-version=7.0";
+                var response = await client.GetAsync(url);
+                response.EnsureSuccessStatusCode();
+
+                var json = await response.Content.ReadAsStringAsync();
+                var data = JsonConvert.DeserializeObject<AzDoWikiPage>(json);
+
+                return data?.Content ?? string.Empty;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Failed to get file '{fileId}' from Azure DevOps Wiki.");
+                throw;
+            }
+        }
+
+        public async Task SetFile(IngestionModel ingestion, string fileId, string articleText)
+        {
+            try
+            {
+                var pat = ingestion.Content["PAT"];
+                var org = ingestion.Content["Organization"];
+                var project = ingestion.Content["Project"];
+                var wiki = ingestion.Content["WikiIdentifier"];
+
+                var client = _httpClientFactory.CreateClient(HttpClients.NoRetryClient);
+                var patToken = Convert.ToBase64String(Encoding.ASCII.GetBytes($":{pat}"));
+                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", patToken);
+
+                var metadata = _documentMetadataProcessor.Get(fileId)
+                    ?? throw new InvalidOperationException($"File '{fileId}' not found.");
+
+                var path = metadata.Name.Replace(".md", string.Empty);
+                var encodedPath = HttpUtility.UrlEncode(path);
+
+                var getPageUrl = $"https://dev.azure.com/{org}/{project}/_apis/wiki/wikis/{wiki}/pages?path={encodedPath}&includeContent=True&api-version=7.1";
+                var getResponse = await client.GetAsync(getPageUrl);
+                getResponse.EnsureSuccessStatusCode();
+                if (string.IsNullOrEmpty(getResponse.Headers.ETag?.Tag))
+                    throw new InvalidOperationException("Failed to get ETag from existing wiki page.");
+
+                var etag = getResponse.Headers.ETag.Tag;
+
+                var json = await getResponse.Content.ReadAsStringAsync();
+                var pageData = JsonConvert.DeserializeObject<AzDoWikiPage>(json);
+                if (pageData == null || pageData.Id == 0)
+                    throw new InvalidOperationException($"Page '{path}' not found in Azure DevOps Wiki.");
+
+
+                var updateUrl = $"https://dev.azure.com/{org}/{project}/_apis/wiki/wikis/{wiki}/pages?path={encodedPath}&api-version=7.1";
+                var payload = new { content = articleText };
+                var requestContent = new StringContent(JsonConvert.SerializeObject(payload), Encoding.UTF8, "application/json");
+                client.DefaultRequestHeaders.IfMatch.ParseAdd(etag);
+
+                var updateResponse = await client.PutAsync(updateUrl, requestContent);
+                updateResponse.EnsureSuccessStatusCode();
+
+                _logger.LogInformation($"Updated page '{path}' with ETag {etag}.");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Failed to set file '{fileId}' in Azure DevOps Wiki.");
+                throw;
+            }
+        }
+
+
         private async Task RemoveDeletedFiles(EmbeddingConnectionModel embeddingConnectionModel, IngestionModel ingestion, HashSet<string> currentDocIds, int taskId)
         {
             var filesInDatabase = _documentMetadataProcessor.GetByIngestion(ingestion.IngestionId);
@@ -176,6 +267,7 @@ namespace AiCoreApi.Services.IngestionServices
             var hashBytes = sha256.ComputeHash(bytes);
             return Convert.ToBase64String(hashBytes);
         }
+
 
         public class AzDoWikiPage
         {

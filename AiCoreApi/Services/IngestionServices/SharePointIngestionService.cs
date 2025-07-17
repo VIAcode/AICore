@@ -60,6 +60,124 @@ namespace AiCoreApi.Services.IngestionServices
             }
         }
 
+        public async Task<string> GetFile(IngestionModel ingestion, string fileId)
+        {
+            try
+            {
+                // Retrieve connection
+                var sharePointConnectionId = Convert.ToInt32(ingestion.Content["ConnectionId"]);
+                var sharePointConnection = await _connectionProcessor.GetById(sharePointConnectionId)
+                    ?? throw new InvalidOperationException($"SharePoint connection with Id = {sharePointConnectionId} not found.");
+                var connection = new SharePointConnection(sharePointConnection.Content);
+
+                // Retrieve metadata (for file name and URL validation)
+                var metadata = _documentMetadataProcessor.Get(fileId)
+                    ?? throw new InvalidOperationException($"File with id '{fileId}' not found in metadata.");
+
+                // Graph client
+                var graph = new GraphServiceClient(
+                    _httpClient,
+                    new ClientSecretCredential(
+                        connection.TenantId,
+                        connection.ClientId,
+                        connection.ClientSecret),
+                    new[] { "https://graph.microsoft.com/.default" });
+
+                // Parse DriveId and ItemId from UniqueId
+                var decoded = fileId.DecodeUniqueId().Split('/');
+                if (decoded.Length != 2)
+                    throw new InvalidOperationException($"Invalid fileId format: {fileId}");
+
+                var driveId = decoded[0];
+                var itemId = decoded[1];
+
+                // Download content as stream
+                var contentStream = await graph.Drives[driveId].Items[itemId].Content.GetAsync()
+                    ?? throw new InvalidOperationException($"Failed to retrieve file content for '{metadata.Name}'.");
+
+                using var memory = new MemoryStream();
+                await contentStream.CopyToAsync(memory);
+                var bytes = memory.ToArray();
+
+                // Try to interpret as UTF-8 text; fallback to Base64
+                try
+                {
+                    return System.Text.Encoding.UTF8.GetString(bytes);
+                }
+                catch
+                {
+                    return Convert.ToBase64String(bytes);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Failed to get file '{fileId}' from SharePoint.");
+                throw;
+            }
+        }
+
+        public async Task SetFile(IngestionModel ingestion, string fileId, string articleText)
+        {
+            try
+            {
+                // Retrieve connection
+                var sharePointConnectionId = Convert.ToInt32(ingestion.Content["ConnectionId"]);
+                var sharePointConnection = await _connectionProcessor.GetById(sharePointConnectionId)
+                    ?? throw new InvalidOperationException($"SharePoint connection with Id = {sharePointConnectionId} not found.");
+                var connection = new SharePointConnection(sharePointConnection.Content);
+
+                // Retrieve metadata
+                var metadata = _documentMetadataProcessor.Get(fileId)
+                    ?? throw new InvalidOperationException($"File '{fileId}' not found in metadata.");
+
+                // Graph client
+                var graph = new GraphServiceClient(
+                    _httpClient,
+                    new ClientSecretCredential(
+                        connection.TenantId,
+                        connection.ClientId,
+                        connection.ClientSecret),
+                    new[] { "https://graph.microsoft.com/.default" });
+
+                // Parse DriveId and ItemId from UniqueId
+                var decoded = fileId.DecodeUniqueId().Split('/');
+                if (decoded.Length != 2)
+                    throw new InvalidOperationException($"Invalid fileId format: {fileId}");
+
+                var driveId = decoded[0];
+                var itemId = decoded[1];
+
+                // Decide whether text or Base64 content was provided
+                byte[] bytes;
+                if (IsBase64String(articleText))
+                {
+                    bytes = Convert.FromBase64String(articleText);
+                }
+                else
+                {
+                    bytes = System.Text.Encoding.UTF8.GetBytes(articleText);
+                }
+
+                // Update file in SharePoint
+                using var stream = new MemoryStream(bytes);
+                await graph.Drives[driveId].Items[itemId].Content.PutAsync(stream);
+
+                _logger.LogInformation($"Updated file '{metadata.Name}' successfully in SharePoint.");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Failed to set file '{fileId}' in SharePoint.");
+                throw;
+            }
+        }
+
+        private bool IsBase64String(string input)
+        {
+            Span<byte> buffer = new Span<byte>(new byte[input.Length]);
+            return Convert.TryFromBase64String(input, buffer, out _);
+        }
+
+
         public async Task<List<string>> GetAutoComplete(string parameterName, IngestionModel ingestionModel)
         {
             if (!ingestionModel.Content.TryGetValue("ConnectionId", out var sharePointConnectionId))

@@ -6,15 +6,18 @@ namespace AiCoreApi.Services.IngestionServices
     {
         private readonly IDataIngestionService _ingestionService;
         private readonly IDataRemovalService _removalService;
+        private readonly IFeedbackService _feedbackService;
         private readonly ITagService _tagService;
 
         public IngestionDataServiceFactory(
             IDataIngestionService ingestionService, 
             IDataRemovalService removalService, 
+            IFeedbackService feedbackService,
             ITagService tagService)
         {
             _ingestionService = ingestionService;
             _removalService = removalService;
+            _feedbackService = feedbackService;
             _tagService = tagService;
         }
 
@@ -22,6 +25,8 @@ namespace AiCoreApi.Services.IngestionServices
         {
             switch (task.Type)
             {
+                case TaskType.Feedback:
+                    return _feedbackService;
                 case TaskType.DataSync:
                     return _ingestionService;
                 case TaskType.Remove:
@@ -36,7 +41,7 @@ namespace AiCoreApi.Services.IngestionServices
 
     public interface IIngestionDataService
     {
-        Task Process(int ingestionId, int taskId);
+        Task Process(int ingestionId, int taskId, string payload);
     }
 
     public interface IIngestionDataServiceFactory
