@@ -50,7 +50,7 @@ namespace AiCoreApi.SemanticKernel.Agents
         private static class Constants
         {
             public const double PromptTemperature = 0.5;
-            public const double PromptMaxTokens = 1;
+            public const double PrompTopP = 1;
         }
 
         private readonly RequestAccessor _requestAccessor;
@@ -140,7 +140,7 @@ namespace AiCoreApi.SemanticKernel.Agents
                 .Replace("{{answer}}", answer)
                 .Replace("{{feedback}}", feedback);
             var limit = ApplyParameters(agent.Content[AgentContentParameters.Limit].Value, parameters);
-            var searchString = await _semanticKernelProvider.ExecutePrompt(llmConnection, searchPrompt, Constants.PromptTemperature, Constants.PromptMaxTokens, "");
+            var searchString = await _semanticKernelProvider.ExecutePrompt(llmConnection, searchPrompt, Constants.PromptTemperature, Constants.PrompTopP, "");
 
             var searchResults = await kernelMemory.SearchAsync(searchString, minRelevance: minRelevance,
                 index: vectorIndexName, filters: _featureFlags.IsEnabled(FeatureFlags.Names.Tagging) ? filters : null);
@@ -153,7 +153,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             var summarizePrompt = ApplyParameters(agent.Content[AgentContentParameters.SummarizePrompt].Value, parameters)
                 .Replace("{{answer}}", answer)
                 .Replace("{{feedback}}", feedback);
-            feedback = await _semanticKernelProvider.ExecutePrompt(llmConnection, summarizePrompt, Constants.PromptTemperature, Constants.PromptMaxTokens, "");
+            feedback = await _semanticKernelProvider.ExecutePrompt(llmConnection, summarizePrompt, Constants.PromptTemperature, Constants.PrompTopP, "");
             if (useBingToEnrichFeedback)
             {
                 feedback = await EnrichWithBing(llmConnection, agent, parameters, feedback, searchString);
@@ -233,7 +233,7 @@ namespace AiCoreApi.SemanticKernel.Agents
                                          "Feedback: " + feedback + "\n\n" +
                                          "Web context: " + web + "\n\n\n\n" +
                                          "Enrich the feedback with the web context if context is useful. Return only feedback as plain text.";
-                feedback = await _semanticKernelProvider.ExecutePrompt(llmConnection, summarizeWebPrompt, Constants.PromptTemperature, Constants.PromptMaxTokens, "");
+                feedback = await _semanticKernelProvider.ExecutePrompt(llmConnection, summarizeWebPrompt, Constants.PromptTemperature, Constants.PrompTopP, "");
 
                 return feedback;
             }

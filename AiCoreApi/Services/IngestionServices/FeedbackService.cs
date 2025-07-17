@@ -29,7 +29,7 @@ namespace AiCoreApi.Services.IngestionServices
             public const string AutoSyncOnFeedback = "autoSyncOnFeedback";
             public const string MessageTitle = "FeedbackService task";
             public const double PromptTemperature = 0.5;
-            public const double PromptMaxTokens = 1;
+            public const double PromptTopP = 1;
             public const string ArticleTitle = "# [Article]"; 
         }
 
@@ -100,7 +100,7 @@ namespace AiCoreApi.Services.IngestionServices
                     .Replace("{{file}}", file)
                     .Replace("{{feedback}}", feedback);
 
-                var newFile = await _semanticKernelProvider.ExecutePrompt(llmConnection, prompt, Constants.PromptTemperature, Constants.PromptMaxTokens, "");
+                var newFile = await _semanticKernelProvider.ExecutePrompt(llmConnection, prompt, Constants.PromptTemperature, Constants.PromptTopP, "");
                 if (newFile.StartsWith(Constants.ArticleTitle))
                 {
                     newFile = newFile.Remove(0, Constants.ArticleTitle.Length).Trim();
