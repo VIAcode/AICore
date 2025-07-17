@@ -45,5 +45,6 @@ namespace AiCoreApi.Models.DbModels
         DataSync = 1,
         Remove = 2,
         TagSync = 3,
+        Feedback = 4,
     }
 }

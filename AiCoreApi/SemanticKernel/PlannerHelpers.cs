@@ -35,6 +35,7 @@ namespace AiCoreApi.SemanticKernel
         private readonly IBingSearchAgent _bingSearchAgent;
         private readonly IHistoryAgent _historyAgent;
         private readonly IRagPromptAgent _ragPromptAgent;
+        private readonly IKnowledgeBaseAgent _knowledgeBaseAgent;
         private readonly IOcrAgent _ocrAgent;
         private readonly IOcrClassifyDocumentAgent _ocrClassifyDocumentAgent;
         private readonly IBackgroundWorkerAgent _backgroundWorkerAgent;
@@ -60,6 +61,7 @@ namespace AiCoreApi.SemanticKernel
         private readonly ISmtpNotificationAgent _smtpNotificationAgent;
         private readonly IGraphTeamsNotificationAgent _teamsNotificationAgent;
         private readonly IAzDoWikiAgent _azDoWikiAgent;
+        private readonly IConfluenceAgent _confluenceAgent;
         private readonly IQdrantAgent _qdrantAgent;
         private readonly IEmbeddingAgent _embeddingAgent;
         private readonly IOpenSearchAgent _openSearchAgent;
@@ -78,6 +80,7 @@ namespace AiCoreApi.SemanticKernel
             IBingSearchAgent bingSearchAgent,
             IHistoryAgent historyAgent,
             IRagPromptAgent ragPromptAgent,
+            IKnowledgeBaseAgent knowledgeBaseAgent,
             IOcrAgent ocrAgent,
             IOcrClassifyDocumentAgent ocrClassifyDocumentAgent,
             IBackgroundWorkerAgent backgroundWorkerAgent,
@@ -103,6 +106,7 @@ namespace AiCoreApi.SemanticKernel
             ISmtpNotificationAgent smtpNotificationAgent,
             IGraphTeamsNotificationAgent teamsNotificationAgent,
             IAzDoWikiAgent azDoWikiAgent,
+            IConfluenceAgent confluenceAgent,
             IQdrantAgent qdrantAgent,
             IEmbeddingAgent embeddingAgent,
             IOpenSearchAgent openSearchAgent,
@@ -120,6 +124,7 @@ namespace AiCoreApi.SemanticKernel
             _bingSearchAgent = bingSearchAgent;
             _historyAgent = historyAgent;
             _ragPromptAgent = ragPromptAgent;
+            _knowledgeBaseAgent = knowledgeBaseAgent;
             _ocrAgent = ocrAgent;
             _ocrClassifyDocumentAgent = ocrClassifyDocumentAgent;
             _backgroundWorkerAgent = backgroundWorkerAgent;
@@ -145,6 +150,7 @@ namespace AiCoreApi.SemanticKernel
             _smtpNotificationAgent = smtpNotificationAgent;
             _teamsNotificationAgent = teamsNotificationAgent;
             _azDoWikiAgent = azDoWikiAgent;
+            _confluenceAgent = confluenceAgent;
             _qdrantAgent = qdrantAgent;
             _embeddingAgent = embeddingAgent;
             _openSearchAgent = openSearchAgent;
@@ -375,12 +381,14 @@ namespace AiCoreApi.SemanticKernel
                 { AgentType.Smtp, _smtpNotificationAgent },
                 { AgentType.GraphTeamsNotification, _teamsNotificationAgent },
                 { AgentType.AzDoWiki, _azDoWikiAgent },
+                { AgentType.Confluence, _confluenceAgent },
                 { AgentType.Embedding, _embeddingAgent },
                 { AgentType.Qdrant, _qdrantAgent },
                 { AgentType.OpenSearch, _openSearchAgent },
                 { AgentType.Git, _gitAgent },
                 { AgentType.Flow, FlowAgent }, 
-                { AgentType.MemZero, _memZeroAgent }
+                { AgentType.MemZero, _memZeroAgent },
+                { AgentType.KnowledgeBase, _knowledgeBaseAgent }
             };
             return agentMapping;
         }

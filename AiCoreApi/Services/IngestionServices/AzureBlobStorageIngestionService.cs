@@ -5,12 +5,14 @@ using AiCoreApi.Models.DbModels;
 using AiCoreApi.Common;
 using Azure.Storage.Blobs;
 using Azure.Storage;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace AiCoreApi.Services.IngestionServices
 {
     public class AzureBlobStorageIngestionService : IAzureBlobStorageIngestionService
     {
-        private const int DELAY_ON_REUPLOAD_SECONDS = 10;
+        private const int DelayOnReUploadSeconds = 10;
 
         private readonly IFileIngestionClient _fileIngestionClient;
         private readonly IDocumentMetadataProcessor _documentMetadataProcessor;
@@ -43,12 +45,79 @@ namespace AiCoreApi.Services.IngestionServices
             var embeddingConnectionModel = new EmbeddingConnectionModel().Populate(embeddingConnection);
             await _dataIngestionHelperService.FillVectorDbConnection(ingestion, embeddingConnectionModel);
 
-            var storageAccountConnectionId = Convert.ToInt32(ingestion.Content["ConnectionId"]);
-
             var docIds = await IngestBlobs(ingestion, taskId, translateStepModel, embeddingConnectionModel);
             await RemoveDeletedFiles(embeddingConnectionModel, ingestion, docIds, taskId);
 
             await _taskProcessor.SetMessage(taskId, "Completed");
+        }
+
+        public async Task<string> GetFile(IngestionModel ingestion, string fileId)
+        {
+            try
+            {
+                var connection = await _dataIngestionHelperService.GetDataSourceConnection(ingestion, ConnectionType.StorageAccount, "ConnectionId");
+                var accountName = connection.Content["accountName"];
+                var accessType = connection.Content.ContainsKey("accessType") ? connection.Content["accessType"] : "apiKey";
+
+                var metadata = _documentMetadataProcessor.Get(fileId)
+                    ?? throw new InvalidOperationException($"File with id '{fileId}' not found in metadata.");
+
+                var containerName = ingestion.Content["ContainerName"];
+                var blobName = metadata.Name;
+
+                var blobServiceClient = await ConnectStorageAccount(connection, accountName, accessType);
+                var containerClient = blobServiceClient.GetBlobContainerClient(containerName);
+                var blobClient = containerClient.GetBlobClient(blobName);
+
+                if (!await blobClient.ExistsAsync())
+                    throw new InvalidOperationException($"Blob '{blobName}' not found in container '{containerName}'.");
+
+                var downloadInfo = await blobClient.DownloadContentAsync();
+                // Try to return as text; fallback to Base64 if not UTF-8
+                try
+                {
+                    return downloadInfo.Value.Content.ToString();
+                }
+                catch
+                {
+                    return Convert.ToBase64String(downloadInfo.Value.Content.ToArray());
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Failed to get file '{fileId}' from Azure Blob Storage.");
+                throw;
+            }
+        }
+
+        public async Task SetFile(IngestionModel ingestion, string fileId, string articleText)
+        {
+            try
+            {
+                var connection = await _dataIngestionHelperService.GetDataSourceConnection(ingestion, ConnectionType.StorageAccount, "ConnectionId");
+                var accountName = connection.Content["accountName"];
+                var accessType = connection.Content.ContainsKey("accessType") ? connection.Content["accessType"] : "apiKey";
+
+                var metadata = _documentMetadataProcessor.Get(fileId)
+                    ?? throw new InvalidOperationException($"File with id '{fileId}' not found in metadata.");
+
+                var containerName = ingestion.Content["ContainerName"];
+                var blobName = metadata.Name;
+
+                var blobServiceClient = await ConnectStorageAccount(connection, accountName, accessType);
+                var containerClient = blobServiceClient.GetBlobContainerClient(containerName);
+                var blobClient = containerClient.GetBlobClient(blobName);
+
+                using var stream = new MemoryStream(Encoding.UTF8.GetBytes(articleText));
+                await blobClient.UploadAsync(stream, overwrite: true);
+
+                _logger.LogInformation($"Updated blob '{blobName}' in container '{containerName}'.");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Failed to set file '{fileId}' in Azure Blob Storage.");
+                throw;
+            }
         }
 
         private async Task<BlobServiceClient> ConnectStorageAccount(ConnectionModel connection, string accountName, string accessType)
@@ -67,7 +136,7 @@ namespace AiCoreApi.Services.IngestionServices
             }
         }
 
-        private async Task<HashSet<string>> IngestBlobs(IngestionModel ingestion, int taskId, 
+        private async Task<HashSet<string>> IngestBlobs(IngestionModel ingestion, int taskId,
             TranslateStepModel translateStepModel, EmbeddingConnectionModel embeddingConnectionModel)
         {
             var connection = await _dataIngestionHelperService.GetDataSourceConnection(ingestion, ConnectionType.StorageAccount, "ConnectionId");
@@ -79,26 +148,26 @@ namespace AiCoreApi.Services.IngestionServices
             var prefix = ingestion.Content.ContainsKey("Prefix") ? ingestion.Content["Prefix"] : string.Empty;
 
             var containerClient = blobServiceClient.GetBlobContainerClient(containerName);
-            var blobs = containerClient.GetBlobs(prefix: prefix).ToList();
             var docIds = new HashSet<string>();
 
-            var i = 0;
-            var count = blobs.Count();
+            int i = 0;
+            var blobs = containerClient.GetBlobs(prefix: prefix).ToList();
+
             foreach (var blob in blobs)
             {
                 i++;
-                await _taskProcessor.SetMessage(taskId, $"Processing blob '{blob.Name}' [{i}/{count}]");
+                await _taskProcessor.SetMessage(taskId, $"Processing blob '{blob.Name}' [{i}]");
 
-                var contentHash = Convert.ToBase64String(blob.Properties.ContentHash);
+                var contentHash = blob.Properties.ContentHash != null
+                    ? Convert.ToBase64String(blob.Properties.ContentHash)
+                    : ComputeHash(blob.Name + blob.Properties.LastModified);
+
                 var docId = ($"{accountName}/{containerName}/{blob.Name}").UniqueId();
                 docIds.Add(docId);
 
                 var fileInDatabase = _documentMetadataProcessor.Get(docId);
-                if (fileInDatabase != null)
-                {
-                    if (fileInDatabase.Url?.Split("#")?.LastOrDefault() == contentHash)
-                        continue;
-                }
+                if (fileInDatabase != null && fileInDatabase.Url?.Split("#").LastOrDefault() == contentHash)
+                    continue;
 
                 var file = fileInDatabase ?? new DocumentMetadataModel(docId)
                 {
@@ -109,21 +178,23 @@ namespace AiCoreApi.Services.IngestionServices
                 };
                 await _documentMetadataProcessor.Set(file);
 
-                // Remove previous version before re-uploading
                 if (fileInDatabase != null)
                 {
                     await _fileIngestionClient.Delete(embeddingConnectionModel, docId);
-                    await Task.Delay(TimeSpan.FromSeconds(DELAY_ON_REUPLOAD_SECONDS));
+                    await Task.Delay(TimeSpan.FromSeconds(DelayOnReUploadSeconds));
                 }
 
-                // Ingest blob data
                 var blobClient = containerClient.GetBlobClient(blob.Name);
-                var blobDownloadInfo = await blobClient.DownloadAsync();                
+                var blobDownloadInfo = await blobClient.DownloadAsync();
 
-                await _fileIngestionClient.Upload(embeddingConnectionModel, docId, blob.Name, 
-                    blobDownloadInfo.Value.Content, ingestion.Tags.ToTagDictionary(), translateStepModel, blob.Properties.ContentLength);
+                await _fileIngestionClient.Upload(
+                    embeddingConnectionModel, docId, blob.Name,
+                    blobDownloadInfo.Value.Content,
+                    ingestion.Tags.ToTagDictionary(),
+                    translateStepModel,
+                    blob.Properties.ContentLength ?? 0);
+
                 _logger.LogInformation($"Blob {blob.Name} uploaded successfully.");
-
                 file.ImportFinished = true;
                 await _documentMetadataProcessor.Set(file);
             }
@@ -151,6 +222,14 @@ namespace AiCoreApi.Services.IngestionServices
                     _logger.LogError(ex, $"Failed to delete file '{file.Name}' from memory or metadata.");
                 }
             }
+        }
+
+        private string ComputeHash(string content)
+        {
+            using var sha256 = SHA256.Create();
+            var bytes = Encoding.UTF8.GetBytes(content);
+            var hashBytes = sha256.ComputeHash(bytes);
+            return Convert.ToBase64String(hashBytes);
         }
     }
 

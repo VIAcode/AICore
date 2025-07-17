@@ -16,7 +16,7 @@ namespace AiCoreApi.Services.IngestionServices
             _ingestionWorkerFactory = ingestionWorkerFactory;
         }
 
-        public async Task Process(int ingestionId, int taskId)
+        public async Task Process(int ingestionId, int taskId, string payload)
         {
             var ingestion =
                 await _ingestionProcessor.GetIngestionById(ingestionId) ??

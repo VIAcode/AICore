@@ -148,6 +148,29 @@ public static class Extensions
         return sb.ToString();
     }
 
+    public static string DecodeUniqueId(this string uniqueId)
+    {
+        if (uniqueId == null)
+        {
+            throw new ArgumentNullException(nameof(uniqueId));
+        }
+
+        // Revert URL-safe Base64 transformations
+        var base64 = uniqueId
+            .Replace('-', '+')
+            .Replace('_', '/');
+
+        // Pad with '=' to make the length divisible by 4
+        switch (base64.Length % 4)
+        {
+            case 2: base64 += "=="; break;
+            case 3: base64 += "="; break;
+        }
+
+        var bytes = Convert.FromBase64String(base64);
+        return Encoding.UTF8.GetString(bytes);
+    }
+
     public static string GetDescription(this Enum genericEnum)
     {
         var genericEnumType = genericEnum.GetType();

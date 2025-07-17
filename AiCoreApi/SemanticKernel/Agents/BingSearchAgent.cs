@@ -166,6 +166,7 @@ namespace AiCoreApi.SemanticKernel.Agents
 
     public interface IBingSearchAgent
     {
+        Task<string> DoCall(AgentModel agent, Dictionary<string, string> parameters);
         Task AddAgent(AgentModel agent, Kernel kernel, List<string> pluginsInstructions);
     }
 }

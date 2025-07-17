@@ -58,6 +58,16 @@ namespace AiCoreApi.Services.IngestionServices
                 _logger.Log(LogLevel.Error, ex, $"Failed to import url: {url}.");
             }
         }
+
+        public async Task<string> GetFile(IngestionModel ingestion, string fileId)
+        {
+            throw new NotImplementedException();
+        }
+
+        public async Task SetFile(IngestionModel ingestion, string fileId, string articleText)
+        {
+            throw new NotImplementedException();
+        }
     }
 
     public interface IWebUrlIngestionService : IDataIngestionWorker

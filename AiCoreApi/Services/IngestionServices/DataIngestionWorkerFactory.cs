@@ -7,6 +7,7 @@ namespace AiCoreApi.Services.IngestionServices
         private readonly IFileUploadIngestionService _fileUploadIngestionService;
         private readonly IWebUrlIngestionService _webUrlIngestionService;
         private readonly IAzDoWikiIngestionService _azDoWikiIngestionService;
+        private readonly IConfluenceIngestionService _confluenceIngestionService;
         private readonly IAzureBlobStorageIngestionService _blobStorageIngestionService;
 
         public DataIngestionWorkerFactory(
@@ -14,12 +15,14 @@ namespace AiCoreApi.Services.IngestionServices
             IFileUploadIngestionService fileUploadIngestionService,
             IWebUrlIngestionService webUrlIngestionService,
             IAzDoWikiIngestionService azDoWikiIngestionService,
+            IConfluenceIngestionService confluenceIngestionService,
             IAzureBlobStorageIngestionService blobStorageIngestionService)
         {
             _sharePointIngestionService = sharePointIngestionService;
             _fileUploadIngestionService = fileUploadIngestionService;
             _webUrlIngestionService = webUrlIngestionService;
             _azDoWikiIngestionService = azDoWikiIngestionService;
+            _confluenceIngestionService = confluenceIngestionService;
             _blobStorageIngestionService = blobStorageIngestionService;
         }
 
@@ -36,6 +39,8 @@ namespace AiCoreApi.Services.IngestionServices
                     return _fileUploadIngestionService;
                 case IngestionType.AzDoWiki:
                     return _azDoWikiIngestionService;
+                case IngestionType.Confluence:
+                    return _confluenceIngestionService;
                 case IngestionType.AzureBlobStorage:
                     return _blobStorageIngestionService;
                 default:
@@ -53,7 +58,8 @@ namespace AiCoreApi.Services.IngestionServices
     public interface IDataIngestionWorker
     {
         Task Process(IngestionModel ingestion, int taskId);
-
+        Task<string> GetFile(IngestionModel ingestion, string fileId);
+        Task SetFile(IngestionModel ingestion, string fileId, string articleText); 
         Task<List<string>> GetAutoComplete(string parameterName, IngestionModel ingestionModel) => Task.FromResult(new List<string>());
     }
 }
