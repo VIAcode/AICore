@@ -159,7 +159,11 @@ namespace AiCoreApi.SemanticKernel.Agents
                 feedback = await EnrichWithBing(llmConnection, agent, parameters, feedback, searchString);
             }
             var loginId = await _requestAccessor.UserContext.GetLoginIdAsync();
-            var documentIds = searchResults.Results.Select(r => r.DocumentId).Take(Convert.ToInt32(limit)).ToList();
+            if (!int.TryParse(limit, out var limitInt))
+            {
+                throw new AiCoreUiException("Invalid limit parameter. Please provide a valid integer value for the limit.");
+            }
+            var documentIds = searchResults.Results.Select(r => r.DocumentId).Take(limitInt).ToList();
             var task = new TaskModel
             {
                 IngestionId = ingestion.IngestionId,

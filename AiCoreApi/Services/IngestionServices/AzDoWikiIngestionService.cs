@@ -171,8 +171,7 @@ namespace AiCoreApi.Services.IngestionServices
                 var getPageUrl = $"https://dev.azure.com/{org}/{project}/_apis/wiki/wikis/{wiki}/pages?path={encodedPath}&includeContent=True&api-version=7.1";
                 var getResponse = await client.GetAsync(getPageUrl);
                 getResponse.EnsureSuccessStatusCode();
-
-                if (!getResponse.Headers.ETag?.Tag?.Any() ?? true)
+                if (string.IsNullOrEmpty(getResponse.Headers.ETag?.Tag))
                     throw new InvalidOperationException("Failed to get ETag from existing wiki page.");
 
                 var etag = getResponse.Headers.ETag.Tag;

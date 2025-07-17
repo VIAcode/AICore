@@ -59,7 +59,17 @@ namespace AiCoreApi.Services.IngestionServices
             var service = _ingestionWorkerFactory.GetService(ingestion);
 
             var payloadDictionary = payload.JsonGet<Dictionary<string, string>>();
-
+            if (payloadDictionary == null ||
+                !payloadDictionary.ContainsKey(Constants.LoginId) ||
+                !payloadDictionary.ContainsKey(Constants.WorkspaceId) ||
+                !payloadDictionary.ContainsKey(Constants.Feedback) ||
+                !payloadDictionary.ContainsKey(Constants.ChangePrompt) ||
+                !payloadDictionary.ContainsKey(Constants.LlmConnectionId) ||
+                !payloadDictionary.ContainsKey(Constants.AutoSyncOnFeedback) ||
+                !payloadDictionary.ContainsKey(Constants.DocumentIds))
+            {
+                throw new ArgumentException("Payload is missing one or more required keys.");
+            }
             var loginId = Convert.ToInt32(payloadDictionary[Constants.LoginId]);
             var workspaceId = Convert.ToInt32(payloadDictionary[Constants.WorkspaceId]);
             var feedback = payloadDictionary[Constants.Feedback];

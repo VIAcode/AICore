@@ -49,7 +49,12 @@ namespace AiCoreApi.Services.IngestionServices
             var embeddingConnectionModel = new EmbeddingConnectionModel().Populate(embeddingConnection);
             await _dataIngestionHelperService.FillVectorDbConnection(ingestion, embeddingConnectionModel);
 
-            var connection = await GetConnection(ingestion, Convert.ToInt32(ingestion.Content["ConnectionName"]));
+            if (!ingestion.Content.TryGetValue("ConnectionName", out var connectionNameValue))
+            {
+                _logger.LogError("ConnectionName key is missing in ingestion.Content.");
+                throw new KeyNotFoundException("The 'ConnectionName' key is required but was not found in ingestion.Content.");
+            }
+            var connection = await GetConnection(ingestion, Convert.ToInt32(connectionNameValue));
 
             var baseUrl = connection.Content["baseUrl"];
             var username = connection.Content["username"];
