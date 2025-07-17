@@ -21,6 +21,8 @@ namespace AiCoreApi.Services.IngestionServices
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly IConnectionProcessor _connectionProcessor;
 
+        private const int DelayBeforeReUploadMilliseconds = 5000;
+
         public ConfluenceIngestionService(
             IFileIngestionClient fileIngestionClient,
             IDocumentMetadataProcessor documentMetadataProcessor,
@@ -92,7 +94,7 @@ namespace AiCoreApi.Services.IngestionServices
                 if (fileInDatabase != null)
                 {
                     await _fileIngestionClient.Delete(embeddingConnectionModel, docId);
-                    await Task.Delay(5000);
+                    await Task.Delay(DelayBeforeReUploadMilliseconds);
                 }
 
                 if (!string.IsNullOrEmpty(pageContent))

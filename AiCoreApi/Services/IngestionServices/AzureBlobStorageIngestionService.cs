@@ -156,7 +156,7 @@ namespace AiCoreApi.Services.IngestionServices
             foreach (var blob in blobs)
             {
                 i++;
-                await _taskProcessor.SetMessage(taskId, $"Processing blob '{blob.Name}' [{i}]");
+                await _taskProcessor.SetMessage(taskId, $"Processing blob '{blob.Name}' [{i}/{blobs.Count}]");
 
                 var contentHash = blob.Properties.ContentHash != null
                     ? Convert.ToBase64String(blob.Properties.ContentHash)
