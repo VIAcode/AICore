@@ -423,6 +423,12 @@ public class ExtendedConfig
     [Description("Enable WebHooks")]
     [Tooltip("Specifies if the system should allow to use WebHooks for Agents and Tools calls. When enabled, the system allows to use WebHooks for Agents and Tools calls.")]
     public bool UseWebHooks => GetValue<bool>("UseWebHooks", false);
+
+    [Category(CategoryAttribute.ConfigCategoryEnum.WebHooksCalls)]
+    [DataType(DataTypeAttribute.ConfigDataTypeEnum.Boolean)]
+    [Description("Use WebHooks in Debug Mode")]
+    [Tooltip("Specifies if the system should use Debug Mode for WebHooks. When enabled, the system uses Debug Mode for WebHooks calls, allowing to see the debug flow.")]
+    public bool UseDebugModeForWebHooks => GetValue<bool>("UseDebugModeForWebHooks", false);
 }
 
 [AttributeUsage(AttributeTargets.Property)]

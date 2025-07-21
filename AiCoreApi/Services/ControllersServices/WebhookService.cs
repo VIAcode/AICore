@@ -1,8 +1,8 @@
 ﻿using AiCoreApi.Authorization;
 using AiCoreApi.Models.ViewModels;
 using AiCoreApi.Common;
+using AiCoreApi.Data.Processors;
 using AiCoreApi.SemanticKernel;
-
 namespace AiCoreApi.Services.ControllersServices
 {
     public class WebhookService : IWebhookService
@@ -11,16 +11,19 @@ namespace AiCoreApi.Services.ControllersServices
         private readonly IPlannerHelpers _plannerHelpers;
         private readonly RequestAccessor _requestAccessor;
         private readonly ResponseAccessor _responseAccessor;
+        private readonly IDebugLogProcessor _debugLogProcessor;
 
         public WebhookService(IPlannerHelpers plannerHelpers,
             ExtendedConfig extendedConfig,
             RequestAccessor requestAccessor,
-            ResponseAccessor responseAccessor)
+            ResponseAccessor responseAccessor,
+            IDebugLogProcessor debugLogProcessor)
         {
             _extendedConfig = extendedConfig;
             _plannerHelpers = plannerHelpers;
             _requestAccessor = requestAccessor;
             _responseAccessor = responseAccessor;
+            _debugLogProcessor = debugLogProcessor;
         }
 
         public async Task<string> WebHook(string action, string method, string query, string body)
@@ -34,6 +37,25 @@ namespace AiCoreApi.Services.ControllersServices
             if (!agent.Content.ContainsKey(AgentTypeCalls.AgentCallTypeFieldName) || !agent.Content[AgentTypeCalls.AgentCallTypeFieldName].Value.Contains(AgentTypeCalls.WebHook))
                 throw new ExceptionHandlingMiddleware.AiCoreUiException($"Agent {agent.Name} cannot be called via WebHook.");
             var result = await RunAgent(agent.Name, new List<string> { method, query, body});
+            if (_extendedConfig.AllowDebugMode && _extendedConfig.UseDebugModeForWebHooks)
+            {
+                var parametersString = $"Method: {method}{Environment.NewLine}Action: {action}{Environment.NewLine}Query: {query}{Environment.NewLine}Body: {body}";
+                await _debugLogProcessor.Add(
+                    "WebHook",
+                    $"Agent: {agent.Name}{Environment.NewLine}{Environment.NewLine}{parametersString}",
+                    new MessageDialogViewModel
+                    {
+                        Messages = new List<MessageDialogViewModel.Message>
+                        {
+                            new()
+                            {
+                                Text = result,
+                                SpentTokens = _responseAccessor.CurrentMessage.SpentTokens,
+                                DebugMessages = _responseAccessor.CurrentMessage.DebugMessages
+                            }
+                        }
+                    }, agent.WorkspaceId ?? 0);
+            }
             return result;
         }
 
@@ -41,7 +63,7 @@ namespace AiCoreApi.Services.ControllersServices
         {
             if (_responseAccessor.CurrentMessage.DebugMessages != null)
                 _responseAccessor.CurrentMessage.DebugMessages.Clear();
-            _requestAccessor.UseDebug = false;
+            _requestAccessor.UseDebug = _extendedConfig.UseDebugModeForWebHooks;
             _requestAccessor.IsWebHookCall = true;
             _requestAccessor.MessageDialog = new MessageDialogViewModel
             {
