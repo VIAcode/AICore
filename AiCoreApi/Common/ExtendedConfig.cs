@@ -68,6 +68,11 @@ public class ExtendedConfig
     public string NoInformationFoundText => GetValue<string>("NoInformationFoundText");
 
     [Category(CategoryAttribute.ConfigCategoryEnum.Common)]
+    [Description("Daily token limit reached text")]
+    [Tooltip("Text that is displayed when the daily token limit is reached. This text is shown in the Chat window when the user has exceeded their daily token limit for AI model interactions. It informs the user that they cannot continue using the AI model until the next day.")]
+    public string DailyTokenLimitReachedText => GetValue<string>("DailyTokenLimitReachedText", "DAILY_TOKEN_LIMIT_REACHED");
+
+    [Category(CategoryAttribute.ConfigCategoryEnum.Common)]
     [Description("Planner prompt")]
     [Tooltip("The Planner prompt serves as a template for the root Planner, providing it with instructions for LLM on how to generate a plan of action for the Agents to accomplish the desired outcome. This prompt can incorporate various placeholders: {{currentQuestion}}: The last message exchanged in the Chat dialog. {{pluginsInstructions}}: A combined text derived from the Plugins Instructions sections of all Agents. {{hasFiles}}: A boolean value indicating whether any files were attached to the last message. {{filesNames}}: A list containing the names of all files attached to the last message. {{filesData}}: The parsed text content of all files attached to the last message. It's important to note that not all placeholders may be necessary for every Planner prompt.")]
     public string PlannerPrompt => GetValue<string>("PlannerPrompt", PlannerHelpers.PlannerPromptPlaceholders.PluginsInstructionsPlaceholder);

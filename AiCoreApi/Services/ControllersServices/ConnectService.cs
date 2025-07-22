@@ -92,8 +92,10 @@ namespace AiCoreApi.Services.ControllersServices
                 var clientSsoList = (await _clientSsoProcessor
                     .List())
                     .Where(sso => 
-                        sso.LoginType == LoginTypeEnum.SsoGoogle && 
-                        sso.Settings[GoogleSso.Parameters.Domain] == userDomain &&
+                        sso.LoginType == LoginTypeEnum.SsoGoogle &&
+                        (!sso.Settings.ContainsKey(GoogleSso.Parameters.Domain)
+                            || string.IsNullOrEmpty(sso.Settings[GoogleSso.Parameters.Domain])
+                            || sso.Settings[GoogleSso.Parameters.Domain] == userDomain) &&
                         (
                             !sso.Settings.ContainsKey(GoogleSso.Parameters.EmailRegex) ||
                             string.IsNullOrWhiteSpace(sso.Settings[GoogleSso.Parameters.EmailRegex]) ||
@@ -107,6 +109,12 @@ namespace AiCoreApi.Services.ControllersServices
                 // Get all attached groups
                 var groups = clientSsoList.SelectMany(e => e.Groups).DistinctBy(e => e.GroupId).ToList();
                 var autoAdmin = clientSsoList.Any(sso => sso.Settings.ContainsKey(GoogleSso.Parameters.AutoAdmin) && sso.Settings[GoogleSso.Parameters.AutoAdmin] == "True");
+                var dailyTokenLimitSetting = clientSsoList.FirstOrDefault(sso => sso.Settings.ContainsKey(GoogleSso.Parameters.DailyTokenLimit))?.Settings[MicrosoftSso.Parameters.DailyTokenLimit];
+                int dailyTokenLimit = 0;
+                if (!string.IsNullOrEmpty(dailyTokenLimitSetting) && int.TryParse(dailyTokenLimitSetting, out var parsedDailyTokenLimit))
+                {
+                    dailyTokenLimit = parsedDailyTokenLimit;
+                }
                 login = await _loginProcessor.Add(new LoginModel
                 {
                     Login = extendedTokenModel.Email,
@@ -117,7 +125,7 @@ namespace AiCoreApi.Services.ControllersServices
                     IsEnabled = true,
                     Created = DateTime.UtcNow,
                     CreatedBy = "system",
-                    TokensLimit = 0,
+                    TokensLimit = dailyTokenLimit,
                     Groups = groups
                 });
             }
@@ -144,6 +152,8 @@ namespace AiCoreApi.Services.ControllersServices
         {
             var login = await _loginProcessor.GetByLogin(extendedTokenModel.Email, LoginTypeEnum.SsoMicrosoft);
             var userGroups = await _microsoftSso.GetUserGroups(extendedTokenModel);
+            int dailyTokenLimit = 0;
+
             // If the user is not found, check if the user is in the allowed domain & group and create a new login
             if (login == null)
             {
@@ -152,7 +162,9 @@ namespace AiCoreApi.Services.ControllersServices
                     .List())
                     .Where(sso =>
                         sso.LoginType == LoginTypeEnum.SsoMicrosoft
-                        && sso.Settings[MicrosoftSso.Parameters.Domain] == userDomain
+                        && (!sso.Settings.ContainsKey(MicrosoftSso.Parameters.Domain)
+                            || string.IsNullOrEmpty(sso.Settings[MicrosoftSso.Parameters.Domain])
+                            || sso.Settings[MicrosoftSso.Parameters.Domain] == userDomain)
                         && (!sso.Settings.ContainsKey(MicrosoftSso.Parameters.Group)
                             || string.IsNullOrWhiteSpace(sso.Settings[MicrosoftSso.Parameters.Group])
                             || userGroups.Contains(sso.Settings[MicrosoftSso.Parameters.Group])))
@@ -163,9 +175,15 @@ namespace AiCoreApi.Services.ControllersServices
                     return "Error: User not in allowed domain or group. Or Add Registration permissions for domain/group are not set.";
 
                 // Get all attached groups
-
                 var groups = clientSsoList.SelectMany(e => e.Groups).DistinctBy(e => e.GroupId).ToList();
                 var autoAdmin = clientSsoList.Any(sso => sso.Settings.ContainsKey(MicrosoftSso.Parameters.AutoAdmin) && sso.Settings[MicrosoftSso.Parameters.AutoAdmin] == "True");
+
+                var dailyTokenLimitSetting = clientSsoList.FirstOrDefault(sso => sso.Settings.ContainsKey(MicrosoftSso.Parameters.DailyTokenLimit))?.Settings[MicrosoftSso.Parameters.DailyTokenLimit];
+                if (!string.IsNullOrEmpty(dailyTokenLimitSetting) && int.TryParse(dailyTokenLimitSetting, out var parsedDailyTokenLimit))
+                {
+                    dailyTokenLimit = parsedDailyTokenLimit;
+                }
+
                 login = await _loginProcessor.Add(new LoginModel
                 {
                     Login = extendedTokenModel.Email,
@@ -176,7 +194,7 @@ namespace AiCoreApi.Services.ControllersServices
                     IsEnabled = true,
                     Created = DateTime.UtcNow,
                     CreatedBy = "system",
-                    TokensLimit = 0,
+                    TokensLimit = dailyTokenLimit,
                     Groups = groups
                 });
             }

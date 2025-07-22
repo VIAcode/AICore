@@ -29,6 +29,7 @@ namespace AiCoreApi.Common.SsoSources
             public const string Domain = "Domain";
             public const string AutoAdmin = "AutoAdmin";
             public const string EmailRegex = "EmailRegex";
+            public const string DailyTokenLimit = "DailyTokenLimit";
         }
 
         private const string CodeChallenge = "ThisIsntRandomButItNeedsToBe43CharactersLong";
