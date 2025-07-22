@@ -418,7 +418,7 @@ public class ExtendedConfig
 
     [Category(CategoryAttribute.ConfigCategoryEnum.PublicCalls)]
     [DataType(DataTypeAttribute.ConfigDataTypeEnum.String)]
-    [Description("Public calls acts as Login")]
+    [Description("Public user calls act as Login")]
     [Tooltip("Agents and Tools will be executed in a context of this user.")]
     public string PublicCallsUser => GetValue<string>("PublicCallsUser", "");
 
@@ -434,6 +434,12 @@ public class ExtendedConfig
     [Description("Use WebHooks in Debug Mode")]
     [Tooltip("Specifies if the system should use Debug Mode for WebHooks. When enabled, the system uses Debug Mode for WebHooks calls, allowing to see the debug flow.")]
     public bool UseDebugModeForWebHooks => GetValue<bool>("UseDebugModeForWebHooks", false);
+
+    [Category(CategoryAttribute.ConfigCategoryEnum.WebHooksCalls)]
+    [DataType(DataTypeAttribute.ConfigDataTypeEnum.String)]
+    [Description("WebHooks user calls act as Login")]
+    [Tooltip("Agents and Tools will be executed in a context of this user.")]
+    public string WebHooksCallsUser => GetValue<string>("WebHooksCallsUser", "");
 }
 
 [AttributeUsage(AttributeTargets.Property)]
