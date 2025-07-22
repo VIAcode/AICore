@@ -92,8 +92,10 @@ namespace AiCoreApi.Services.ControllersServices
                 var clientSsoList = (await _clientSsoProcessor
                     .List())
                     .Where(sso => 
-                        sso.LoginType == LoginTypeEnum.SsoGoogle && 
-                        sso.Settings[GoogleSso.Parameters.Domain] == userDomain &&
+                        sso.LoginType == LoginTypeEnum.SsoGoogle &&
+                        (!sso.Settings.ContainsKey(GoogleSso.Parameters.Domain)
+                            || string.IsNullOrEmpty(sso.Settings[GoogleSso.Parameters.Domain])
+                            || sso.Settings[GoogleSso.Parameters.Domain] == userDomain) &&
                         (
                             !sso.Settings.ContainsKey(GoogleSso.Parameters.EmailRegex) ||
                             string.IsNullOrWhiteSpace(sso.Settings[GoogleSso.Parameters.EmailRegex]) ||
@@ -117,7 +119,7 @@ namespace AiCoreApi.Services.ControllersServices
                     IsEnabled = true,
                     Created = DateTime.UtcNow,
                     CreatedBy = "system",
-                    TokensLimit = 0,
+                    TokensLimit = GetDailyTokensLimit(clientSsoList, GoogleSso.Parameters.DailyTokenLimit),
                     Groups = groups
                 });
             }
@@ -152,7 +154,9 @@ namespace AiCoreApi.Services.ControllersServices
                     .List())
                     .Where(sso =>
                         sso.LoginType == LoginTypeEnum.SsoMicrosoft
-                        && sso.Settings[MicrosoftSso.Parameters.Domain] == userDomain
+                        && (!sso.Settings.ContainsKey(MicrosoftSso.Parameters.Domain)
+                            || string.IsNullOrEmpty(sso.Settings[MicrosoftSso.Parameters.Domain])
+                            || sso.Settings[MicrosoftSso.Parameters.Domain] == userDomain)
                         && (!sso.Settings.ContainsKey(MicrosoftSso.Parameters.Group)
                             || string.IsNullOrWhiteSpace(sso.Settings[MicrosoftSso.Parameters.Group])
                             || userGroups.Contains(sso.Settings[MicrosoftSso.Parameters.Group])))
@@ -163,9 +167,9 @@ namespace AiCoreApi.Services.ControllersServices
                     return "Error: User not in allowed domain or group. Or Add Registration permissions for domain/group are not set.";
 
                 // Get all attached groups
-
                 var groups = clientSsoList.SelectMany(e => e.Groups).DistinctBy(e => e.GroupId).ToList();
                 var autoAdmin = clientSsoList.Any(sso => sso.Settings.ContainsKey(MicrosoftSso.Parameters.AutoAdmin) && sso.Settings[MicrosoftSso.Parameters.AutoAdmin] == "True");
+
                 login = await _loginProcessor.Add(new LoginModel
                 {
                     Login = extendedTokenModel.Email,
@@ -176,7 +180,7 @@ namespace AiCoreApi.Services.ControllersServices
                     IsEnabled = true,
                     Created = DateTime.UtcNow,
                     CreatedBy = "system",
-                    TokensLimit = 0,
+                    TokensLimit = GetDailyTokensLimit(clientSsoList, MicrosoftSso.Parameters.DailyTokenLimit),
                     Groups = groups
                 });
             }
@@ -200,6 +204,17 @@ namespace AiCoreApi.Services.ControllersServices
             };
             _loginHistoryProcessor.Add(loginHistory);
             return loginHistory.Code;
+        }
+
+        private int GetDailyTokensLimit(List<ClientSsoModel> clientSsoList, string key)
+        {
+            var dailyTokenLimitSetting = clientSsoList.FirstOrDefault(sso => sso.Settings.ContainsKey(key))?.Settings[key];
+            int dailyTokenLimit = 0;
+            if (!string.IsNullOrEmpty(dailyTokenLimitSetting) && int.TryParse(dailyTokenLimitSetting, out var parsedDailyTokenLimit))
+            {
+                dailyTokenLimit = parsedDailyTokenLimit;
+            }
+            return dailyTokenLimit;
         }
 
         private async Task SyncRbacUserGroups(string email, List<string> userRbacGroups)

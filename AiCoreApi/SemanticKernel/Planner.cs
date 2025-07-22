@@ -154,6 +154,10 @@ namespace AiCoreApi.SemanticKernel
                 {
                     throw;
                 }
+                catch (TokensLimitException ex)
+                {
+                    throw;
+                }
                 catch (Exception ex)
                 {
                     _responseAccessor.AddDebugMessage(DebugMessageSenderName, "Agent Execution Error", ex.Message);

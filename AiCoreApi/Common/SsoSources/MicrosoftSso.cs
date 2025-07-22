@@ -32,6 +32,7 @@ namespace AiCoreApi.Common.SsoSources
         public static class Parameters
         {
             public const string Domain = "Domain";
+            public const string DailyTokenLimit = "DailyTokenLimit";
             public const string Group = "Group";
             public const string AutoAdmin = "AutoAdmin";
         }

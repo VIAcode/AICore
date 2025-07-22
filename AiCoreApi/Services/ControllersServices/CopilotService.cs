@@ -73,7 +73,7 @@ namespace AiCoreApi.Services.ControllersServices
                 messageDialog.Messages!.Add(new MessageDialogViewModel.Message
                 {
                     Sender = PlannerHelpers.AssistantName, 
-                    Text = ex.Message,
+                    Text = _extendedConfig.DailyTokenLimitReachedText,
                     DebugMessages = _responseAccessor.CurrentMessage.DebugMessages
                 });
             }
