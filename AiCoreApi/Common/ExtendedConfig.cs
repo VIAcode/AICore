@@ -434,6 +434,12 @@ public class ExtendedConfig
     [Description("Use WebHooks in Debug Mode")]
     [Tooltip("Specifies if the system should use Debug Mode for WebHooks. When enabled, the system uses Debug Mode for WebHooks calls, allowing to see the debug flow.")]
     public bool UseDebugModeForWebHooks => GetValue<bool>("UseDebugModeForWebHooks", false);
+
+    [Category(CategoryAttribute.ConfigCategoryEnum.WebHooksCalls)]
+    [DataType(DataTypeAttribute.ConfigDataTypeEnum.String)]
+    [Description("WebHooks calls acts as Login")]
+    [Tooltip("Agents and Tools will be executed in a context of this user.")]
+    public string WebHooksCallsUser => GetValue<string>("WebHooksCallsUser", "");
 }
 
 [AttributeUsage(AttributeTargets.Property)]
