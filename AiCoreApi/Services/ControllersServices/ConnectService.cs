@@ -109,12 +109,6 @@ namespace AiCoreApi.Services.ControllersServices
                 // Get all attached groups
                 var groups = clientSsoList.SelectMany(e => e.Groups).DistinctBy(e => e.GroupId).ToList();
                 var autoAdmin = clientSsoList.Any(sso => sso.Settings.ContainsKey(GoogleSso.Parameters.AutoAdmin) && sso.Settings[GoogleSso.Parameters.AutoAdmin] == "True");
-                var dailyTokenLimitSetting = clientSsoList.FirstOrDefault(sso => sso.Settings.ContainsKey(GoogleSso.Parameters.DailyTokenLimit))?.Settings[MicrosoftSso.Parameters.DailyTokenLimit];
-                int dailyTokenLimit = 0;
-                if (!string.IsNullOrEmpty(dailyTokenLimitSetting) && int.TryParse(dailyTokenLimitSetting, out var parsedDailyTokenLimit))
-                {
-                    dailyTokenLimit = parsedDailyTokenLimit;
-                }
                 login = await _loginProcessor.Add(new LoginModel
                 {
                     Login = extendedTokenModel.Email,
@@ -125,7 +119,7 @@ namespace AiCoreApi.Services.ControllersServices
                     IsEnabled = true,
                     Created = DateTime.UtcNow,
                     CreatedBy = "system",
-                    TokensLimit = dailyTokenLimit,
+                    TokensLimit = GetDailyTokensLimit(clientSsoList, GoogleSso.Parameters.DailyTokenLimit),
                     Groups = groups
                 });
             }
@@ -152,8 +146,6 @@ namespace AiCoreApi.Services.ControllersServices
         {
             var login = await _loginProcessor.GetByLogin(extendedTokenModel.Email, LoginTypeEnum.SsoMicrosoft);
             var userGroups = await _microsoftSso.GetUserGroups(extendedTokenModel);
-            int dailyTokenLimit = 0;
-
             // If the user is not found, check if the user is in the allowed domain & group and create a new login
             if (login == null)
             {
@@ -178,12 +170,6 @@ namespace AiCoreApi.Services.ControllersServices
                 var groups = clientSsoList.SelectMany(e => e.Groups).DistinctBy(e => e.GroupId).ToList();
                 var autoAdmin = clientSsoList.Any(sso => sso.Settings.ContainsKey(MicrosoftSso.Parameters.AutoAdmin) && sso.Settings[MicrosoftSso.Parameters.AutoAdmin] == "True");
 
-                var dailyTokenLimitSetting = clientSsoList.FirstOrDefault(sso => sso.Settings.ContainsKey(MicrosoftSso.Parameters.DailyTokenLimit))?.Settings[MicrosoftSso.Parameters.DailyTokenLimit];
-                if (!string.IsNullOrEmpty(dailyTokenLimitSetting) && int.TryParse(dailyTokenLimitSetting, out var parsedDailyTokenLimit))
-                {
-                    dailyTokenLimit = parsedDailyTokenLimit;
-                }
-
                 login = await _loginProcessor.Add(new LoginModel
                 {
                     Login = extendedTokenModel.Email,
@@ -194,7 +180,7 @@ namespace AiCoreApi.Services.ControllersServices
                     IsEnabled = true,
                     Created = DateTime.UtcNow,
                     CreatedBy = "system",
-                    TokensLimit = dailyTokenLimit,
+                    TokensLimit = GetDailyTokensLimit(clientSsoList, MicrosoftSso.Parameters.DailyTokenLimit),
                     Groups = groups
                 });
             }
@@ -218,6 +204,17 @@ namespace AiCoreApi.Services.ControllersServices
             };
             _loginHistoryProcessor.Add(loginHistory);
             return loginHistory.Code;
+        }
+
+        private int GetDailyTokensLimit(List<ClientSsoModel> clientSsoList, string key)
+        {
+            var dailyTokenLimitSetting = clientSsoList.FirstOrDefault(sso => sso.Settings.ContainsKey(key))?.Settings[key];
+            int dailyTokenLimit = 0;
+            if (!string.IsNullOrEmpty(dailyTokenLimitSetting) && int.TryParse(dailyTokenLimitSetting, out var parsedDailyTokenLimit))
+            {
+                dailyTokenLimit = parsedDailyTokenLimit;
+            }
+            return dailyTokenLimit;
         }
 
         private async Task SyncRbacUserGroups(string email, List<string> userRbacGroups)
