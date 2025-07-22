@@ -69,17 +69,20 @@ namespace AiCoreApi.Services.ControllersServices
                 _responseAccessor.CurrentMessage.DebugMessages.Clear();
             _requestAccessor.UseDebug = _extendedConfig.UseDebugModeForWebHooks;
             
-            var publicCallsUser = _extendedConfig.WebHooksCallsUser;
+            var webHookCallsUser = _extendedConfig.WebHooksCallsUser;
 
-            var publicLogin = await _loginProcessor.GetByLogin(publicCallsUser, LoginTypeEnum.Password);
-            if (publicLogin == null)
-                throw new ExceptionHandlingMiddleware.AiCoreAuthException($"Public login '{publicCallsUser}' not found.");
+            if (string.IsNullOrWhiteSpace(webHookCallsUser))
+                throw new ExceptionHandlingMiddleware.AiCoreAuthException("WebHooksCallsUser configuration is missing or empty.");
+
+            var webHookLogin = await _loginProcessor.GetByLogin(webHookCallsUser, LoginTypeEnum.Password);
+            if (webHookLogin == null)
+                throw new ExceptionHandlingMiddleware.AiCoreAuthException($"WebHook user login '{webHookCallsUser}' not found.");
 
             _requestAccessor.IsWebHookCall = true;
-            _requestAccessor.Login = publicLogin.Login;
+            _requestAccessor.Login = webHookLogin.Login;
             _requestAccessor.LoginTypeString = LoginTypeEnum.Password.ToString();
-            _requestAccessor.UserContext.SetLoginId(publicLogin.LoginId);
-            _requestAccessor.UserContext.SetTags(publicLogin.Tags);
+            _requestAccessor.UserContext.SetLoginId(webHookLogin.LoginId);
+            _requestAccessor.UserContext.SetTags(webHookLogin.Tags);
 
             _requestAccessor.MessageDialog = new MessageDialogViewModel
             {

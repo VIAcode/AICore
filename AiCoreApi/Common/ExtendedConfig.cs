@@ -418,7 +418,7 @@ public class ExtendedConfig
 
     [Category(CategoryAttribute.ConfigCategoryEnum.PublicCalls)]
     [DataType(DataTypeAttribute.ConfigDataTypeEnum.String)]
-    [Description("Public calls acts as Login")]
+    [Description("Public user calls act as Login")]
     [Tooltip("Agents and Tools will be executed in a context of this user.")]
     public string PublicCallsUser => GetValue<string>("PublicCallsUser", "");
 
@@ -437,7 +437,7 @@ public class ExtendedConfig
 
     [Category(CategoryAttribute.ConfigCategoryEnum.WebHooksCalls)]
     [DataType(DataTypeAttribute.ConfigDataTypeEnum.String)]
-    [Description("WebHooks calls acts as Login")]
+    [Description("WebHooks user calls act as Login")]
     [Tooltip("Agents and Tools will be executed in a context of this user.")]
     public string WebHooksCallsUser => GetValue<string>("WebHooksCallsUser", "");
 }
