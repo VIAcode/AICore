@@ -21,6 +21,7 @@ namespace AiCoreApi.Services.IngestionServices
         {
             public const string LoginId = "loginId";
             public const string WorkspaceId = "workspaceId";
+            public const string EvaluationId = "evaluationId";
             public const string Answer = "answer";
             public const string Feedback = "feedback";
             public const string ChangePrompt = "changePrompt";
@@ -62,6 +63,7 @@ namespace AiCoreApi.Services.IngestionServices
             if (payloadDictionary == null ||
                 !payloadDictionary.ContainsKey(Constants.LoginId) ||
                 !payloadDictionary.ContainsKey(Constants.WorkspaceId) ||
+                !payloadDictionary.ContainsKey(Constants.EvaluationId) ||
                 !payloadDictionary.ContainsKey(Constants.Feedback) ||
                 !payloadDictionary.ContainsKey(Constants.ChangePrompt) ||
                 !payloadDictionary.ContainsKey(Constants.LlmConnectionId) ||
@@ -72,6 +74,7 @@ namespace AiCoreApi.Services.IngestionServices
             }
             var loginId = Convert.ToInt32(payloadDictionary[Constants.LoginId]);
             var workspaceId = Convert.ToInt32(payloadDictionary[Constants.WorkspaceId]);
+            var evaluationId = Convert.ToInt32(payloadDictionary[Constants.EvaluationId]);
             var feedback = payloadDictionary[Constants.Feedback];
             var changePrompt = payloadDictionary[Constants.ChangePrompt];
             var llmConnectionId = Convert.ToInt32(payloadDictionary[Constants.LlmConnectionId]);
@@ -102,22 +105,37 @@ namespace AiCoreApi.Services.IngestionServices
             userContextAccessor.SetLoginId(loginId);
             UserContextAccessor.AsyncScheduledLoginId.Value = loginId;
 
+            var changedFiles = new Dictionary<string, object>();
+            var i = 0;
             foreach (var documentId in documentIds)
             {
-                var file = await service.GetFile(ingestion, documentId);
-
-                var prompt = changePrompt
-                    .Replace("{{file}}", file)
-                    .Replace("{{feedback}}", feedback);
-
-                var newFile = await _semanticKernelProvider.ExecutePrompt(llmConnection, prompt, Constants.PromptTemperature, Constants.PromptTopP, "");
-                if (newFile.StartsWith(Constants.ArticleTitle))
+                i++;
+                try
                 {
-                    newFile = newFile.Remove(0, Constants.ArticleTitle.Length).Trim();
-                }
-                await service.SetFile(ingestion, documentId, newFile);
-            }
+                    var file = await service.GetFile(ingestion, documentId);
+                    await _taskProcessor.SetMessage(taskId, $"Processing file '{documentId}' [{i}/{documentIds.Length}]");
+                    if (evaluationId > 0)
+                    {
+                        changedFiles.Add(documentId, file);
+                    }
 
+                    var prompt = changePrompt
+                        .Replace("{{file}}", file)
+                        .Replace("{{feedback}}", feedback);
+
+                    var newFile = await _semanticKernelProvider.ExecutePrompt(llmConnection, prompt, Constants.PromptTemperature, Constants.PromptTopP, "");
+                    if (newFile.StartsWith(Constants.ArticleTitle))
+                    {
+                        newFile = newFile.Remove(0, Constants.ArticleTitle.Length).Trim();
+                    }
+                    await service.SetFile(ingestion, documentId, newFile);
+                }
+                catch (Exception ex)
+                {
+                    await _taskProcessor.SetMessage(taskId, $"Error processing file '{documentId}': {ex.Message}");
+                }
+            }
+            var syncTaskId = 0;
             if (autoSyncOnFeedback)
             {
                 var task = new TaskModel
@@ -128,8 +146,30 @@ namespace AiCoreApi.Services.IngestionServices
                     CreatedBy = runAsUser.Login,
                     IsRetriable = true,
                 };
+                var syncTask = await _taskProcessor.ScheduleTask(task);
+                syncTaskId = syncTask.TaskId;
+            }
+            if (syncTaskId > 0 && evaluationId > 0 && changedFiles.Count > 0)
+            {
+                var task = new TaskModel
+                {
+                    IngestionId = ingestion.IngestionId,
+                    Ingestion = null,
+                    Type = TaskType.Evaluate,
+                    CreatedBy = runAsUser.Login,
+                    IsRetriable = true,
+                    LockerTaskId = syncTaskId,
+                    Context = new Dictionary<string, object>
+                    {
+                        {"evaluationId", evaluationId},
+                        {"changedFiles", changedFiles},
+                        {"workspaceId", workspaceId},
+                        {"loginId", loginId}
+                    } 
+                };
                 await _taskProcessor.ScheduleTask(task);
             }
+            await _taskProcessor.SetMessage(taskId, $"Completed.");
         }
     }
 

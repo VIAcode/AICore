@@ -7,17 +7,20 @@ namespace AiCoreApi.Services.IngestionServices
         private readonly IDataIngestionService _ingestionService;
         private readonly IDataRemovalService _removalService;
         private readonly IFeedbackService _feedbackService;
+        private readonly IEvaluateService _evaluateService;
         private readonly ITagService _tagService;
 
         public IngestionDataServiceFactory(
             IDataIngestionService ingestionService, 
             IDataRemovalService removalService, 
             IFeedbackService feedbackService,
+            IEvaluateService evaluateService,
             ITagService tagService)
         {
             _ingestionService = ingestionService;
             _removalService = removalService;
             _feedbackService = feedbackService;
+            _evaluateService = evaluateService;
             _tagService = tagService;
         }
 
@@ -27,6 +30,8 @@ namespace AiCoreApi.Services.IngestionServices
             {
                 case TaskType.Feedback:
                     return _feedbackService;
+                case TaskType.Evaluate:
+                    return _evaluateService;
                 case TaskType.DataSync:
                     return _ingestionService;
                 case TaskType.Remove:

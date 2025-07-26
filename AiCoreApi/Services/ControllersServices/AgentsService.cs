@@ -59,7 +59,7 @@ public class AgentsService : IAgentsService
         await _plannerHelpers.OnAddUpdate(agentModel);
         var savedModel = await _agentsProcessor.Add(agentModel, workspaceId);
         var result = _mapper.Map<AgentViewModel>(savedModel);
-        await SaveGit();
+        await SaveGit(workspaceId);
         return result;
     }
 
@@ -72,7 +72,7 @@ public class AgentsService : IAgentsService
         await _plannerHelpers.OnAddUpdate(agentModel);
         var savedModel = await _agentsProcessor.Update(agentModel);
         var result = _mapper.Map<AgentViewModel>(savedModel);
-        await SaveGit();
+        await SaveGit(agentModel.WorkspaceId);
         return result;
     }
 
@@ -85,9 +85,10 @@ public class AgentsService : IAgentsService
 
     public async Task DeleteAgent(int agentId)
     {
+        var agent = await _agentsProcessor.GetById(agentId);
         await _plannerHelpers.OnDelete(agentId);
         await _agentsProcessor.Delete(agentId);
-        await SaveGit();
+        await SaveGit(agent?.WorkspaceId);
     }
 
     public async Task<List<ParameterModel>?> GetParameters(int agentId)
@@ -116,12 +117,12 @@ public class AgentsService : IAgentsService
         }
         agent.IsEnabled = isEnabled;
         await _agentsProcessor.Update(agent);
-        await SaveGit();
+        await SaveGit(agent.WorkspaceId);
     }
 
     public async Task<bool> IsAgentEnabled(string agentName)
     {
-        var agents = await _agentsProcessor.List(null);
+        var agents = await _agentsProcessor.List(_requestAccessor.WorkspaceId);
         var agent = agents.FirstOrDefault(a => a.Name == agentName);
         if (agent == null)
             return true;
@@ -154,7 +155,7 @@ public class AgentsService : IAgentsService
 
     private async Task<Dictionary<string, string>> PrepareAgentExportFiles(List<int> agentIdsList)
     {
-        var agents = await _agentsProcessor.List(null);
+        var agents = await _agentsProcessor.ListAll();
 
         var agentsToExportDictionary = agents
             .Where(agent => agentIdsList.Contains(agent.AgentId))
@@ -327,7 +328,7 @@ public class AgentsService : IAgentsService
         {
             _logger.LogError("Import agents process reached maximum calls limit. Some agents may not be imported.");
         }
-        await SaveGit();
+        await SaveGit(workspaceId);
     }
 
     private string GeneratePastelColor()
@@ -431,7 +432,7 @@ public class AgentsService : IAgentsService
         return repoPath;
     }
 
-    private async Task SaveGit()
+    private async Task SaveGit(int? workspaceId)
     {
         if (!_extendedConfig.UseGitStorage)
             return;
@@ -439,10 +440,10 @@ public class AgentsService : IAgentsService
         {
             var gitBranch = _extendedConfig.GitStorageBranch;
             var repoPath = await EnsureClonedGitRepo();
-            var fileMap = await PrepareAgentExportFiles((await _agentsProcessor.List(null)).Select(a => a.AgentId).ToList());
+            var fileMap = await PrepareAgentExportFiles((await _agentsProcessor.List(workspaceId)).Select(a => a.AgentId).ToList());
             foreach (var kvp in fileMap)
             {
-                var fullPath = Path.Combine(repoPath, _extendedConfig.GitStoragePath.Trim('/'), kvp.Key);
+                var fullPath = Path.Combine(repoPath, _extendedConfig.GitStoragePath.Trim('/'), (workspaceId ?? 0).ToString(), kvp.Key);
                 Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
                 await File.WriteAllTextAsync(fullPath, kvp.Value);
             }
@@ -477,9 +478,10 @@ public class AgentsService : IAgentsService
 
         var gitBranch = _extendedConfig.GitStorageBranch;
         var repoPath = await EnsureClonedGitRepo();
-        var content = agent.Content.First();
+        var content = agent.Content.FirstOrDefault(x => !string.IsNullOrEmpty(x.Value.Extension));
         var fileName = $"{agent.Name}-{content.Value.Code}.{content.Value.Extension}";
-        var relativePath = Path.Combine(_extendedConfig.GitStoragePath.Trim('/'), fileName).Replace("\\", "/");
+        var workspaceId = agent.WorkspaceId ?? 0;
+        var relativePath = Path.Combine(_extendedConfig.GitStoragePath.Trim('/'), workspaceId.ToString(), fileName).Replace("\\", "/");
 
         var history = new List<string>();
 
@@ -517,9 +519,10 @@ public class AgentsService : IAgentsService
 
         var gitBranch = _extendedConfig.GitStorageBranch;
         var repoPath = await EnsureClonedGitRepo();
-        var content = agent.Content.First();
+        var content = agent.Content.FirstOrDefault(x => !string.IsNullOrEmpty(x.Value.Extension));
         var fileName = $"{agent.Name}-{content.Value.Code}.{content.Value.Extension}";
-        var relativePath = Path.Combine(_extendedConfig.GitStoragePath.Trim('/'), fileName).Replace("\\", "/");
+        var workspaceId = agent.WorkspaceId ?? 0;
+        var relativePath = Path.Combine(_extendedConfig.GitStoragePath.Trim('/'), workspaceId.ToString(), fileName).Replace("\\", "/");
 
         using (var repo = new Repository(repoPath))
         {

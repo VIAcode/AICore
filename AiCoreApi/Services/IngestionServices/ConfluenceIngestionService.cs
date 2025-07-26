@@ -20,6 +20,7 @@ namespace AiCoreApi.Services.IngestionServices
         private readonly IDataIngestionHelperService _dataIngestionHelperService;
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly IConnectionProcessor _connectionProcessor;
+        private readonly IKernelMemoryProvider _kernelMemoryProvider;
 
         private const int DelayBeforeReUploadMilliseconds = 5000;
 
@@ -30,7 +31,8 @@ namespace AiCoreApi.Services.IngestionServices
             ILogger<ConfluenceIngestionService> logger,
             IDataIngestionHelperService dataIngestionHelperService,
             IHttpClientFactory httpClientFactory,
-            IConnectionProcessor connectionProcessor)
+            IConnectionProcessor connectionProcessor,
+            IKernelMemoryProvider kernelMemoryProvider)
         {
             _fileIngestionClient = fileIngestionClient;
             _documentMetadataProcessor = documentMetadataProcessor;
@@ -39,6 +41,7 @@ namespace AiCoreApi.Services.IngestionServices
             _dataIngestionHelperService = dataIngestionHelperService;
             _httpClientFactory = httpClientFactory;
             _connectionProcessor = connectionProcessor;
+            _kernelMemoryProvider = kernelMemoryProvider;
         }
 
         public async Task Process(IngestionModel ingestion, int taskId)
@@ -54,12 +57,20 @@ namespace AiCoreApi.Services.IngestionServices
                 _logger.LogError("ConnectionName key is missing in ingestion.Content.");
                 throw new KeyNotFoundException("The 'ConnectionName' key is required but was not found in ingestion.Content.");
             }
-            var connection = await GetConnection(ingestion, Convert.ToInt32(connectionNameValue));
+            var connections = await _connectionProcessor.List(ingestion.WorkspaceId);
+            var confluenceConnection = await GetConnection(ingestion, Convert.ToInt32(connectionNameValue), connections);
+            var llmConnection = connections.FirstOrDefault(x => x.Type.IsLlmConnection()); // Assuming there's a default LLM connection
+            var vectorDbConnectionId = ingestion.Content.ContainsKey(DataIngestionHelperService.Constants.VectorDbConnectionField) ? ingestion.Content[DataIngestionHelperService.Constants.VectorDbConnectionField] : "";
 
-            var baseUrl = connection.Content["baseUrl"];
-            var username = connection.Content["username"];
-            var apiToken = connection.Content["apiToken"];
-            var rootPageId = connection.Content["rootPageId"];
+            var vectorDbConnection = (string.IsNullOrEmpty(vectorDbConnectionId) || vectorDbConnectionId == "0")
+                ? null
+                : connections.FirstOrDefault(x => x.ConnectionId.ToString() == vectorDbConnectionId);
+
+            var kernelMemory = _kernelMemoryProvider.GetKernelMemory(llmConnection, embeddingConnection, vectorDbConnection);
+            var baseUrl = confluenceConnection.Content["baseUrl"];
+            var username = confluenceConnection.Content["username"];
+            var apiToken = confluenceConnection.Content["apiToken"];
+            var rootPageId = confluenceConnection.Content["rootPageId"];
 
             var client = _httpClientFactory.CreateClient(HttpClients.NoRetryClient);
             var authToken = Convert.ToBase64String(Encoding.ASCII.GetBytes($"{username}:{apiToken}"));
@@ -83,16 +94,20 @@ namespace AiCoreApi.Services.IngestionServices
                 if (fileInDatabase != null &&
                     fileInDatabase.Url?.Split("#")?.LastOrDefault() == contentHash)
                 {
-                    continue;
+                    var search = await kernelMemory.SearchAsync("",
+                        embeddingConnectionModel.IndexName,
+                        filter: new Microsoft.KernelMemory.MemoryFilter().ByDocument(docId));
+                    if (search.Results.Count > 0) // If the file already exists in the vector DB, skip re-upload
+                        continue;
                 }
 
                 var file = fileInDatabase ?? new DocumentMetadataModel(docId)
                 {
                     IngestionId = ingestion.IngestionId,
-                    Url = $"{baseUrl}/pages/{page.Id}#{contentHash}",
                     CreatedTime = DateTime.UtcNow,
-                    Name = $"{page.Title}.md"
                 };
+                file.Url = $"{baseUrl}/spaces/{page.Expandable.Space.Split('/').Last()}/pages/{page.Id}#{contentHash}";
+                file.Name = $"{page.Title}.md";
                 await _documentMetadataProcessor.Set(file);
 
                 // Remove previous version before re-uploading
@@ -124,11 +139,11 @@ namespace AiCoreApi.Services.IngestionServices
             await _taskProcessor.SetMessage(taskId, "Completed");
         }
 
-        private async Task<ConnectionModel> GetConnection(IngestionModel ingestion, int connectionId)
+        private async Task<ConnectionModel> GetConnection(IngestionModel ingestion, int connectionId, List<ConnectionModel>? connections = null)
         {
-            var connections = await _connectionProcessor.List(ingestion.WorkspaceId);
+            connections ??= await _connectionProcessor.List(ingestion.WorkspaceId);
             var connection = connections.FirstOrDefault(c => c.ConnectionId == Convert.ToInt32(connectionId) && c.Type == ConnectionType.Confluence)
-                 ?? throw new InvalidOperationException($"Confluence connection '{connectionId}' not found.");
+                             ?? throw new InvalidOperationException($"Connection '{connectionId}' not found.");
             return connection;
         }
 
@@ -149,9 +164,7 @@ namespace AiCoreApi.Services.IngestionServices
                 var metadata = _documentMetadataProcessor.Get(fileId)
                     ?? throw new InvalidOperationException($"File with id '{fileId}' not found in metadata.");
 
-                var pageId = metadata.Url?.Split('/').LastOrDefault()?.Split("#").FirstOrDefault()
-                    ?? throw new InvalidOperationException("Cannot extract pageId from metadata URL.");
-
+                var pageId = GetPageIdByUrl(metadata.Url);
                 return await GetPageContent(client, baseUrl, pageId);
             }
             catch (Exception ex)
@@ -160,7 +173,7 @@ namespace AiCoreApi.Services.IngestionServices
                 throw;
             }
         }
-
+        
         public async Task SetFile(IngestionModel ingestion, string fileId, string articleText)
         {
             try
@@ -178,8 +191,7 @@ namespace AiCoreApi.Services.IngestionServices
                 var metadata = _documentMetadataProcessor.Get(fileId)
                     ?? throw new InvalidOperationException($"File '{fileId}' not found.");
 
-                var pageId = metadata.Url?.Split('/').LastOrDefault()?.Split("#").FirstOrDefault()
-                    ?? throw new InvalidOperationException("Cannot extract pageId from metadata URL.");
+                var pageId = GetPageIdByUrl(metadata.Url);
 
                 await UpdatePageContent(client, baseUrl, pageId, articleText);
 
@@ -190,6 +202,14 @@ namespace AiCoreApi.Services.IngestionServices
                 _logger.LogError(ex, $"Failed to set file '{fileId}' in Confluence.");
                 throw;
             }
+        }
+
+        private string GetPageIdByUrl(string url)
+        {
+            var pagesPlaceholder = "/pages/";
+            var pageId = url.Substring(url.IndexOf(pagesPlaceholder) + pagesPlaceholder.Length).Split("#").FirstOrDefault()
+                         ?? throw new InvalidOperationException("Cannot extract pageId from metadata URL.");
+            return pageId;
         }
 
         private async Task<List<ConfluencePage>> GetAllPages(HttpClient client, string baseUrl, string rootPageId)
@@ -304,6 +324,9 @@ namespace AiCoreApi.Services.IngestionServices
             [JsonProperty("version")]
             public ConfluenceVersion Version { get; set; } = new();
 
+            [JsonProperty("_expandable")]
+            public ConfluenceExpandable Expandable { get; set; } = new();
+
             [JsonProperty("body")]
             public ConfluenceBody Body { get; set; } = new();
         }
@@ -312,6 +335,11 @@ namespace AiCoreApi.Services.IngestionServices
         {
             [JsonProperty("number")]
             public int Number { get; set; }
+        }
+        public class ConfluenceExpandable
+        {
+            [JsonProperty("space")] 
+            public string Space { get; set; } = string.Empty;
         }
 
         public class ConfluenceBody

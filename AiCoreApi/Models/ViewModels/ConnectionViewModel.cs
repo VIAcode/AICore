@@ -46,6 +46,7 @@
         OpenSearch = 31,
         Git = 32,
         MemZero = 33,
-        Confluence = 34
+        Confluence = 34,
+        GeminiLlm = 35,
     }
 }

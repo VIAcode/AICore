@@ -86,7 +86,7 @@ namespace AiCoreApi.SemanticKernel.Agents
 
             var connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
             var llmConnection = GetConnection(_requestAccessor, _responseAccessor, connections,
-                new[] { ConnectionType.AzureOpenAiLlm, ConnectionType.OpenAiLlm, ConnectionType.CohereLlm }, _debugMessageSenderName, agent.LlmType);
+                new[] { ConnectionType.AzureOpenAiLlm, ConnectionType.OpenAiLlm, ConnectionType.CohereLlm, ConnectionType.GeminiLlm, ConnectionType.DeepSeekLlm }, _debugMessageSenderName, agent.LlmType);
 
             var userInput = ApplyParameters(agent.Content[AgentContentParameters.UserInput].Value, parameters);
             var systemMessage = ApplyParameters(agent.Content[AgentContentParameters.SystemMessage].Value, parameters);

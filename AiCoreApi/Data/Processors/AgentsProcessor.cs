@@ -14,6 +14,13 @@ public class AgentsProcessor : IAgentsProcessor
         _db = db;
     }
 
+    public async Task<List<AgentModel>> ListAll()
+    {
+        var qry = _db.Agents.Include(e => e.Tags).AsNoTracking();
+        var data = await qry.ToListAsync();
+        return data;
+    }
+
     public async Task<List<AgentModel>> List(int? workspaceId)
     {
         var qry = _db.Agents.Include(e => e.Tags).AsNoTracking();
@@ -21,7 +28,7 @@ public class AgentsProcessor : IAgentsProcessor
         {
             qry = qry.Where(e => e.WorkspaceId == null || e.WorkspaceId == 0);
         }
-        else if(workspaceId != null && workspaceId > 0)
+        else if (workspaceId != null && workspaceId > 0)
         {
             qry = qry.Where(e => e.WorkspaceId == workspaceId);
         }
@@ -132,6 +139,7 @@ public class AgentsProcessor : IAgentsProcessor
 
 public interface IAgentsProcessor
 {
+    Task<List<AgentModel>> ListAll();
     Task<List<AgentModel>> List(int? workspaceId);
     Task<AgentModel?> GetById(int agentId);
     Task<AgentModel?> GetByName(string agentName, int? workspaceId);

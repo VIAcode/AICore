@@ -20,6 +20,7 @@ namespace AiCoreApi.Models.DbModels
         public Dictionary<string, object> Context { get; set; } = new();
         public string ErrorMessage { get; set; } = string.Empty;
         public bool IsRetriable { get; set; }
+        public int? LockerTaskId { get; set; }
 
         // relations
 
@@ -46,5 +47,6 @@ namespace AiCoreApi.Models.DbModels
         Remove = 2,
         TagSync = 3,
         Feedback = 4,
+        Evaluate = 5,
     }
 }

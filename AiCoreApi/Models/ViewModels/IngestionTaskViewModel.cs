@@ -1,4 +1,6 @@
-﻿namespace AiCoreApi.Models.DbModels;
+﻿using AiCoreApi.Models.DbModels;
+
+namespace AiCoreApi.Models.ViewModels;
 
 
 public class IngestionTaskViewModel
@@ -13,4 +15,5 @@ public class IngestionTaskViewModel
     public DateTime Updated { get; set; } = DateTime.UtcNow;
     public Dictionary<string, object> Context { get; set; } = new();
     public string ErrorMessage { get; set; } = string.Empty;
+    public int? LockerTaskId { get; set; }
 }

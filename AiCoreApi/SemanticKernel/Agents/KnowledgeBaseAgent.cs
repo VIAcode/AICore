@@ -11,6 +11,8 @@ using AiCoreApi.Common.Extensions;
 using ConnectionType = AiCoreApi.Models.DbModels.ConnectionType;
 using AiCoreApi.Common.Monitoring;
 using static AiCoreApi.Common.ExceptionHandlingMiddleware;
+using Microsoft.KernelMemory.AI;
+
 namespace AiCoreApi.SemanticKernel.Agents
 {
     public class KnowledgeBaseAgent : BaseAgent, IKnowledgeBaseAgent
@@ -37,6 +39,13 @@ namespace AiCoreApi.SemanticKernel.Agents
             public const string UseBingToEnrichFeedback = "useBingToEnrichFeedback";
             public const string BingConnectionName = "bingConnectionName";
             public const string BingResultsLimit = "bingResultsLimit";
+            public const string TopK = "topK";
+            public const string Evaluation = "evaluation";
+        }
+
+        private static class ConnectionContentParameters
+        {
+            public const string MaxRequestTokens = "maxRequestTokens";
         }
 
         private static class Actions
@@ -47,6 +56,15 @@ namespace AiCoreApi.SemanticKernel.Agents
             public const string Feedback = "feedback";
         }
 
+        private static class Placeholders
+        {
+            public const string Facts = "{{$facts}}";
+            public const string Question = "{{$input}}";
+            public const string Answer = "{{answer}}";
+            public const string Feedback = "{{feedback}}";
+        }
+
+
         private static class Constants
         {
             public const double PromptTemperature = 0.5;
@@ -56,7 +74,6 @@ namespace AiCoreApi.SemanticKernel.Agents
         private readonly RequestAccessor _requestAccessor;
         private readonly ResponseAccessor _responseAccessor;
         private readonly IKernelMemoryProvider _kernelMemoryProvider;
-        private readonly IDocumentMetadataProcessor _documentMetadataProcessor;
         private readonly IConnectionProcessor _connectionProcessor;
         private readonly IIngestionProcessor _ingestionProcessor;
         private readonly ILoginProcessor _loginProcessor;
@@ -64,13 +81,14 @@ namespace AiCoreApi.SemanticKernel.Agents
         private readonly ExtendedConfig _extendedConfig;
         private readonly ITaskProcessor _taskProcessor;
         private readonly ISemanticKernelProvider _semanticKernelProvider;
+        private readonly IDocumentMetadataProcessor _documentMetadataProcessor;
         private readonly IBingSearchAgent _bingSearchAgent;
+        private readonly IEvaluationProcessor _evaluationProcessor;
 
         public KnowledgeBaseAgent(
             RequestAccessor requestAccessor,
             ResponseAccessor responseAccessor,
             IKernelMemoryProvider kernelMemoryProvider,
-            IDocumentMetadataProcessor documentMetadataProcessor,
             IConnectionProcessor connectionProcessor,
             IIngestionProcessor ingestionProcessor,
             ILoginProcessor loginProcessor,
@@ -78,21 +96,24 @@ namespace AiCoreApi.SemanticKernel.Agents
             ExtendedConfig extendedConfig,
             MonitoringConfig monitoringConfig,
             ITaskProcessor taskProcessor,
-            ISemanticKernelProvider semanticKernelProvider, 
+            ISemanticKernelProvider semanticKernelProvider,
+            IDocumentMetadataProcessor documentMetadataProcessor,
             IBingSearchAgent bingSearchAgent,
+            IEvaluationProcessor evaluationProcessor,
             ILogger<RagPromptAgent> logger) : base(responseAccessor, requestAccessor, monitoringConfig, logger)
         {
             _requestAccessor = requestAccessor;
             _responseAccessor = responseAccessor;
             _kernelMemoryProvider = kernelMemoryProvider;
-            _documentMetadataProcessor = documentMetadataProcessor;
             _connectionProcessor = connectionProcessor;
             _ingestionProcessor = ingestionProcessor;
             _loginProcessor = loginProcessor;
             _featureFlags = featureFlags;
             _extendedConfig = extendedConfig;
             _taskProcessor = taskProcessor;
+            _documentMetadataProcessor = documentMetadataProcessor;
             _bingSearchAgent = bingSearchAgent;
+            _evaluationProcessor = evaluationProcessor;
             _semanticKernelProvider = semanticKernelProvider;
         }
 
@@ -127,18 +148,16 @@ namespace AiCoreApi.SemanticKernel.Agents
 
             _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Request", $"# Answer:\r\n{answer}\r\n\r\n# Feedback:\r\n{feedback}\r\n\r\n# MinRelevance: {minRelevance}");
 
-            var (kernelMemory, vectorIndexName, filters) = await PrepareKernelMemory(ingestion, tags);
+            var (kernelMemory, vectorIndexName, filters) = await PrepareKernelMemory(ingestion, tags, agent);
 
-            var connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
-            var llmConnection = GetConnection(_requestAccessor, _responseAccessor, connections,
-                new[] { ConnectionType.AzureOpenAiLlm, ConnectionType.OpenAiLlm, ConnectionType.CohereLlm }, _debugMessageSenderName, agent.LlmType);
+            var llmConnection = await GetLlmConnection(agent);
 
             var autoSyncOnFeedback = ApplyParameters(agent.Content[AgentContentParameters.AutoSyncOnFeedback].Value, parameters).ToLower() == "true";
             var useBingToEnrichFeedback = ApplyParameters(agent.Content[AgentContentParameters.UseBingToEnrichFeedback].Value, parameters).ToLower() == "true";
             var changePrompt = ApplyParameters(agent.Content[AgentContentParameters.ChangePrompt].Value, parameters);
             var searchPrompt = ApplyParameters(agent.Content[AgentContentParameters.SearchPrompt].Value, parameters)
-                .Replace("{{answer}}", answer)
-                .Replace("{{feedback}}", feedback);
+                .Replace(Placeholders.Answer, answer)
+                .Replace(Placeholders.Feedback, feedback);
             var limit = ApplyParameters(agent.Content[AgentContentParameters.Limit].Value, parameters);
             var searchString = await _semanticKernelProvider.ExecutePrompt(llmConnection, searchPrompt, Constants.PromptTemperature, Constants.PrompTopP, "");
 
@@ -151,8 +170,8 @@ namespace AiCoreApi.SemanticKernel.Agents
                 return "";
             }
             var summarizePrompt = ApplyParameters(agent.Content[AgentContentParameters.SummarizePrompt].Value, parameters)
-                .Replace("{{answer}}", answer)
-                .Replace("{{feedback}}", feedback);
+                .Replace(Placeholders.Answer, answer)
+                .Replace(Placeholders.Feedback, feedback);
             feedback = await _semanticKernelProvider.ExecutePrompt(llmConnection, summarizePrompt, Constants.PromptTemperature, Constants.PrompTopP, "");
             if (useBingToEnrichFeedback)
             {
@@ -164,6 +183,16 @@ namespace AiCoreApi.SemanticKernel.Agents
                 throw new AiCoreUiException("Invalid limit parameter. Please provide a valid integer value for the limit.");
             }
             var documentIds = searchResults.Results.Select(r => r.DocumentId).Take(limitInt).ToList();
+            var evaluationName = agent.Content.ContainsKey(AgentContentParameters.Evaluation)
+                   && !string.IsNullOrEmpty(agent.Content[AgentContentParameters.Evaluation].Value)
+                   && agent.Content[AgentContentParameters.Evaluation].Value.ToLower() != "none"
+                ? agent.Content[AgentContentParameters.Evaluation].Value
+                : "0";
+            var evaluation = await _evaluationProcessor.Get(evaluationName, agent.WorkspaceId ?? 0);
+            if (evaluation == null)
+            {
+                throw new AiCoreUiException($"No evaluation found with name: {evaluationName}");
+            }
             var task = new TaskModel
             {
                 IngestionId = ingestion.IngestionId,
@@ -179,7 +208,7 @@ namespace AiCoreApi.SemanticKernel.Agents
                     { "loginId", loginId ?? 1},
                     { "autoSyncOnFeedback", autoSyncOnFeedback},
                     { "changePrompt", changePrompt },
-
+                    { "evaluationId", evaluation.EvaluationId },
                 },
                 IsRetriable = true,
             };
@@ -247,54 +276,11 @@ namespace AiCoreApi.SemanticKernel.Agents
                 return feedback; // return original feedback if Bing enrichment fails
             }
         }
-
-        private async Task<string> AnswerAsync(AgentModel agent, Dictionary<string, string> parameters)
-        {
-            var question = ApplyParameters(agent.Content[AgentContentParameters.Question].Value, parameters);
-
-            var dataSource = ApplyParameters(agent.Content[AgentContentParameters.DataSource].Value, parameters);
-            var ingestion = await GetIngestionModel(dataSource);
-
-            var prompt = agent.Content[AgentContentParameters.Prompt].Value;
-            _responseAccessor.StepState = prompt;
-            var tags = agent.Content.ContainsKey(AgentContentParameters.Tags)
-                ? agent.Content[AgentContentParameters.Tags].Value
-                : "";
-            var minRelevance = Convert.ToDouble(ApplyParameters(agent.Content[AgentContentParameters.MinRelevance].Value, parameters));
-
-            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Request", $"# Question: {question}\r\n# Prompt: {prompt}\r\n# Tags: {tags}\r\n# MinRelevance: {minRelevance}");
-
-            var (kernelMemory, vectorIndexName, filters) = await PrepareKernelMemory(ingestion, tags);
-
-            if (filters.Count == 0 && _featureFlags.IsEnabled(FeatureFlags.Names.Tagging))
-            {
-                _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Response", $"{_extendedConfig.NoInformationFoundText} (filters)");
-                return _extendedConfig.NoInformationFoundText;
-            }
-
-            var answer = await kernelMemory.AskAsync(question, minRelevance: minRelevance,
-                index: vectorIndexName,
-                filters: _featureFlags.IsEnabled(FeatureFlags.Names.Tagging) ? filters : null);
-
-            if (answer.NoResult)
-            {
-                _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Response",
-                    _extendedConfig.NoInformationFoundText);
-                return _extendedConfig.NoInformationFoundText;
-            }
-
-            _responseAccessor.CurrentMessage.Text = answer.Result;
-            _responseAccessor.CurrentMessage.Sources = MapSources(answer);
-            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Response",
-                _responseAccessor.CurrentMessage.Text);
-            return _responseAccessor.CurrentMessage.Text;
-        }
-
         private async Task<IngestionModel> GetIngestionModel(string ingestionName)
         {
             var ingestions = await _ingestionProcessor.List(_requestAccessor.WorkspaceId);
             var ingestion = ingestions.FirstOrDefault(i => i.Name.Equals(ingestionName, StringComparison.OrdinalIgnoreCase));
-            if(ingestion == null)
+            if (ingestion == null)
             {
                 _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Response", $"No ingestion found with name: {ingestionName}");
                 throw new AiCoreUiException($"No ingestion found with name: {ingestionName}");
@@ -302,10 +288,68 @@ namespace AiCoreApi.SemanticKernel.Agents
             return ingestion;
         }
 
+        private async Task<string> AnswerAsync(AgentModel agent, Dictionary<string, string> parameters)
+        {
+            var llmConnection = await GetLlmConnection(agent);
+
+            var searchResults = await DoSearchAsync(agent, parameters);
+            _responseAccessor.CurrentMessage.Sources = MapSources(searchResults);
+
+            var resultText = string.Join($"{Environment.NewLine}{Environment.NewLine}", searchResults.SelectMany(r => r.Partitions.Select(p => p.Text).ToList()));
+            var question = ApplyParameters(agent.Content[AgentContentParameters.Question].Value, parameters);
+            var prompt = ApplyParameters(agent.Content[AgentContentParameters.Prompt].Value, parameters)
+                .Replace(Placeholders.Question, question);
+
+            var prompTokens = new O200KTokenizer().CountTokens(prompt); // Default Tokenizer for gpt-4o-* models
+            if (llmConnection.Content.ContainsKey(ConnectionContentParameters.MaxRequestTokens) && Int32.TryParse(llmConnection.Content[ConnectionContentParameters.MaxRequestTokens], out var maxRequestTokens))
+            {
+                var requestTokensCount = new O200KTokenizer().CountTokens(resultText);
+                if (requestTokensCount > maxRequestTokens - 4000 - prompTokens)
+                {
+                    // take the first maxRequestTokens - 4000 tokens
+                    var tokens = new O200KTokenizer().GetTokens(resultText);
+                    var tokensToTake = maxRequestTokens - 4000 - prompTokens;
+                    var tokensToTakeList = tokens.Take(tokensToTake).ToList();
+                    var tokensToTakeString = string.Join(" ", tokensToTakeList);
+                    resultText = tokensToTakeString;
+                }
+            }
+            prompt = prompt.Replace(Placeholders.Facts, resultText);
+
+            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "Answer Search Prompt", prompt);
+
+            if (searchResults.Count == 0)
+            {
+                _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Response", _extendedConfig.NoInformationFoundText);
+                return _extendedConfig.NoInformationFoundText;
+            }
+
+
+            var result = await _semanticKernelProvider.ExecutePrompt(llmConnection, prompt, Constants.PromptTemperature, Constants.PrompTopP, "");
+
+            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Response", resultText);
+            return result;
+        }
+
         private async Task<string> SearchAsync(AgentModel agent, Dictionary<string, string> parameters)
+        {
+            var searchResults = await DoSearchAsync(agent, parameters);
+            var resultText = searchResults.ToJson() ?? "";
+            _responseAccessor.CurrentMessage.Sources = searchResults.Select(r => new MessageDialogViewModel.MessageSource
+            {
+                Name = r.SourceName,
+                Url = r.SourceUrl
+            }).ToList();
+
+            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Response", resultText);
+            return resultText;
+        }
+
+        private async Task<List<SearchResult>> DoSearchAsync(AgentModel agent, Dictionary<string, string> parameters)
         {
             var question = ApplyParameters(agent.Content[AgentContentParameters.Question].Value, parameters);
             var dataSource = ApplyParameters(agent.Content[AgentContentParameters.DataSource].Value, parameters);
+            var topK = agent.Content.ContainsKey(AgentContentParameters.TopK) ? ApplyParameters(agent.Content[AgentContentParameters.TopK].Value, parameters) : "10";
             var ingestion = await GetIngestionModel(dataSource);
 
             var tags = agent.Content.ContainsKey(AgentContentParameters.Tags)
@@ -316,10 +360,9 @@ namespace AiCoreApi.SemanticKernel.Agents
                     ? agent.Content[AgentContentParameters.MinRelevance].Value
                     : "0");
 
-            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Request",
-                $"# Search Question: {question}\r\n# Tags: {tags}\r\n# MinRelevance: {minRelevance}");
+            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Request", $"# Search Question: {question}\r\n# Tags: {tags}\r\n# MinRelevance: {minRelevance}");
 
-            var (kernelMemory, vectorIndexName, filters) = await PrepareKernelMemory(ingestion, tags);
+            var (kernelMemory, vectorIndexName, filters) = await PrepareKernelMemory(ingestion, tags, agent);
 
             var searchResults = await kernelMemory.SearchAsync(question, minRelevance: minRelevance,
                 index: vectorIndexName,
@@ -328,40 +371,34 @@ namespace AiCoreApi.SemanticKernel.Agents
             if (searchResults.Results.Count == 0)
             {
                 _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Response", _extendedConfig.NoInformationFoundText);
-                return "[]";
+                return new List<SearchResult>();
             }
 
-            var result = searchResults.Results.Select(r => new
+            var result = searchResults.Results.Select(r => new SearchResult
             {
-                r.SourceName,
-                r.DocumentId,
-                r.FileId,
-                Partitions = r.Partitions.Select(p => new
+                SourceName = r.SourceName,
+                SourceUrl = r.SourceUrl ?? "",
+                DocumentId = r.DocumentId,
+                FileId = r.FileId,
+                Partitions = r.Partitions.Select(p => new SearchResultPartition
                 {
-                    p.Text,
-                    p.Relevance,
-                    p.SectionNumber,
-                    p.LastUpdate,
-                    Tags = p.Tags.Select(t => new
+                    Text = p.Text,
+                    Relevance = p.Relevance,
+                    SectionNumber = p.SectionNumber,
+                    LastUpdate = p.LastUpdate,
+                    Tags = p.Tags.Select(t => new SearchResultPartitionKeyValuePair
                     {
-                        t.Key,
-                        t.Value
+                        Key = t.Key,
+                        Value = string.Join(",", t.Value)
                     }).ToList()
                 }).ToList()
-            }).ToList();
+            }).Take(Convert.ToInt32(topK))
+            .ToList();
 
-            var resultText = result.ToJson();
-            _responseAccessor.CurrentMessage.Sources = searchResults.Results.Select(r => new MessageDialogViewModel.MessageSource
-            {
-                Name = r.SourceName,
-                Url = r.SourceUrl
-            }).ToList();
-
-            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Response", resultText);
-            return resultText;
+            return result;
         }
 
-        private async Task<(IKernelMemory kernelMemory, string vectorIndexName, List<MemoryFilter> filters)> PrepareKernelMemory(IngestionModel ingestionModel, string tags)
+        private async Task<(IKernelMemory kernelMemory, string vectorIndexName, List<MemoryFilter> filters)> PrepareKernelMemory(IngestionModel ingestionModel, string tags, AgentModel agent)
         {
             var allUserTags = await _loginProcessor.GetTagsByLogin(_requestAccessor.Login, _requestAccessor.LoginType);
             var agentTags = string.IsNullOrEmpty(tags)
@@ -390,8 +427,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             var embeddingConnection = GetConnection(_requestAccessor, _responseAccessor, connections,
                 new[] { ConnectionType.AzureOpenAiEmbedding, ConnectionType.OpenAiEmbedding }, _debugMessageSenderName, connectionId: Convert.ToInt32(embeddingConnectionId));
 
-            var llmConnection = GetConnection(_requestAccessor, _responseAccessor, connections,
-                new[] { ConnectionType.AzureOpenAiLlm, ConnectionType.OpenAiLlm, ConnectionType.CohereLlm }, _debugMessageSenderName);
+            var llmConnection = await GetLlmConnection(agent, connections);
 
             var vectorIndexName = embeddingConnection.Content.ContainsKey("indexName")
                 ? embeddingConnection.Content["indexName"]
@@ -402,30 +438,71 @@ namespace AiCoreApi.SemanticKernel.Agents
             return (kernelMemory, vectorIndexName, filters);
         }
 
-        private List<MessageDialogViewModel.MessageSource> MapSources(MemoryAnswer answer)
+        private async Task<ConnectionModel> GetLlmConnection(AgentModel agent, List<ConnectionModel>? connections = null)
         {
-            return answer.RelevantSources.Select(s =>
-            {
-                var documentMetadata = _documentMetadataProcessor.Get(s.DocumentId);
-                if (documentMetadata == null)
+            connections ??= await _connectionProcessor.List(_requestAccessor.WorkspaceId);
+            var llmConnection = GetConnection(_requestAccessor, _responseAccessor, connections,
+                new[]
                 {
+                    ConnectionType.AzureOpenAiLlm, 
+                    ConnectionType.OpenAiLlm,
+                    ConnectionType.DeepSeekLlm,
+                    ConnectionType.CohereLlm,
+                    ConnectionType.GeminiLlm
+                }, _debugMessageSenderName, agent.LlmType);
+            return llmConnection;
+        }
+
+        private List<MessageDialogViewModel.MessageSource> MapSources(List<SearchResult>? searchResults)
+        {
+            var documentIds = searchResults?.Select(r => r.DocumentId).Distinct().ToList();
+            var documents = _documentMetadataProcessor.Get(documentIds);
+
+            return searchResults.Select(s =>
+                {
+                    var documentMetadata = documents.FirstOrDefault(x => x.DocumentId == s.DocumentId);
+                    if (documentMetadata == null)
+                    {
+                        return new MessageDialogViewModel.MessageSource
+                        {
+                            Name = s.SourceUrl,
+                            Url = s.SourceUrl
+                        };
+                    }
                     return new MessageDialogViewModel.MessageSource
                     {
-                        Name = s.SourceUrl,
-                        Url = s.SourceUrl
+                        Name = documentMetadata.Name ?? "",
+                        Url = documentMetadata.Url
                     };
-                }
-
-                return new MessageDialogViewModel.MessageSource
-                {
-                    Name = documentMetadata.Name,
-                    Url = documentMetadata.Url
-                };
-            })
-            .GroupBy(x => $"{x.Url}|{x.Name}")
-            .Select(x => x.First())
-            .ToList();
+                })
+                .GroupBy(x => $"{x.Url}|{x.Name}")
+                .Select(x => x.First())
+                .ToList();
         }
+    }
+
+    public class SearchResult
+    {
+        public string SourceName { get; set; } = "";
+        public string SourceUrl { get; set; } = "";
+        public string DocumentId { get; set; } = "";
+        public string FileId { get; set; } = "";
+        public List<SearchResultPartition> Partitions { get; set; } = new();
+    }
+
+    public class SearchResultPartition
+    {
+        public string Text { get; set; } = "";
+        public double Relevance { get; set; } = 0;
+        public int SectionNumber { get; set; } = 0;
+        public DateTimeOffset LastUpdate { get; set; } = DateTimeOffset.UtcNow;
+        public List<SearchResultPartitionKeyValuePair> Tags { get; set; } = new();
+    }
+
+    public class SearchResultPartitionKeyValuePair
+    {
+        public string Key { get; set; } = "";
+        public string Value { get; set; } = "";
     }
 
     public interface IKnowledgeBaseAgent

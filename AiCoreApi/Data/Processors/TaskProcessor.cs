@@ -19,8 +19,8 @@ namespace AiCoreApi.Data.Processors
         public List<TaskModel> GetNew()
         {
             return _db.Tasks.AsNoTracking()
-                .Where(t => t.State == TaskState.New)
-                .OrderBy(t => t.Created).ToList();
+                .Where(t => t.State == TaskState.New && t.LockerTaskId == null)
+                .OrderBy(t => t.TaskId).ToList();
         }
 
         public List<TaskModel> GetByIngestion(int ingestionId)
@@ -39,8 +39,9 @@ namespace AiCoreApi.Data.Processors
             var active = _db.Tasks.AsNoTracking()
                 .FirstOrDefault(t =>
                     t.IngestionId == taskModel.IngestionId && 
-                    t.Type == taskModel.Type && 
-                    t.State == TaskState.New);
+                    t.Type == taskModel.Type &&
+                    t.State == TaskState.New &&
+                    t.LockerTaskId == taskModel.LockerTaskId);
             if (active != null)
             {
                 return active;
@@ -69,6 +70,20 @@ namespace AiCoreApi.Data.Processors
             }
 
             await _db.SaveChangesAsync();
+            // Unlock all tasks that were locked by this task if it is completed
+            if (taskModel.State == TaskState.Completed)
+            {
+                var tasksToUpdate = _db.Tasks
+                    .Where(t => t.LockerTaskId == taskModel.TaskId && t.State == TaskState.New)
+                    .ToList();
+                foreach (var task in tasksToUpdate)
+                {
+                    task.LockerTaskId = null;
+                    task.Updated = DateTime.UtcNow;
+                    _db.Tasks.Update(task);
+                }
+                await _db.SaveChangesAsync();
+            }
             return entity;
         }
 

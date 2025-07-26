@@ -83,6 +83,15 @@ namespace AiCoreApi.SemanticKernel
                     connectionModel.Content["temperature"],
                     httpClient: httpClient);
             }
+            else if (connectionModel.Type == ConnectionType.GeminiLlm)
+            {
+                kernelBuilder = kernelBuilder.AddGeminiChatCompletion(
+                    connectionModel.Content["modelName"],
+                    connectionModel.Content["apiKey"],
+                    connectionModel.Content["temperature"],
+                    connectionModel.Content["maxAnswersTokens"],
+                    httpClient: httpClient);
+            }
             return kernelBuilder.Build();
         }
 

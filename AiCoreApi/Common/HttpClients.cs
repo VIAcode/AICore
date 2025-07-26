@@ -23,7 +23,7 @@ namespace AiCoreApi.Common
                     ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator,
                     AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate | DecompressionMethods.Brotli
                 })
-                .ConfigurePrimaryHttpMessageHandler<OpenAiHttpCallHandler>();
+                .ConfigurePrimaryHttpMessageHandler<LlmHttpCallHandler>();
 
             services.AddHttpClient(NoRetryClient, httpClient =>
                 {
@@ -36,7 +36,7 @@ namespace AiCoreApi.Common
                     ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator,
                     AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate | DecompressionMethods.Brotli
                 })
-                .ConfigurePrimaryHttpMessageHandler<OpenAiHttpCallHandler>();
+                .ConfigurePrimaryHttpMessageHandler<LlmHttpCallHandler>();
         }
 
         private static IAsyncPolicy<HttpResponseMessage> GetRetryPolicy(ILogger<Startup> logger) => HttpPolicyExtensions

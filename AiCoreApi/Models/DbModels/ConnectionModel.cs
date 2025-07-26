@@ -53,7 +53,8 @@ namespace AiCoreApi.Models.DbModels
         OpenSearch = 31,
         Git = 32,
         MemZero = 33,
-        Confluence = 34
+        Confluence = 34,
+        GeminiLlm = 35,
     }
 
     public static class ConnectionTypeExtensions
@@ -62,7 +63,8 @@ namespace AiCoreApi.Models.DbModels
             connectionType == ConnectionType.AzureOpenAiLlm ||
             connectionType == ConnectionType.OpenAiLlm ||
             connectionType == ConnectionType.CohereLlm ||
-            connectionType == ConnectionType.DeepSeekLlm;
+            connectionType == ConnectionType.DeepSeekLlm ||
+            connectionType == ConnectionType.GeminiLlm;
         public static bool IsEmbeddingConnection(this ConnectionType connectionType) =>
             connectionType == ConnectionType.AzureOpenAiEmbedding ||
             connectionType == ConnectionType.OpenAiEmbedding;

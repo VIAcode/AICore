@@ -89,8 +89,7 @@ public class Startup
         };
         services.AddSingleton(tokenValidationParameters);
         services.AddHttpContextAccessor();
-        services.AddScoped<OpenAiHttpCallHandler>();
-        //services.AddTransient(sp => new OpenAiHttpCallHandler(extendedConfig, sp));
+        services.AddScoped<LlmHttpCallHandler>();
         services.AddHttpClients(extendedConfig, _logger);
         
         var combinedAuthenticationScheme = "Combined";
@@ -114,7 +113,6 @@ public class Startup
             .AddJwtBearer(options => { options.TokenValidationParameters = tokenValidationParameters; })
             .AddBasic<BasicUserValidationService>(options => { options.SuppressWWWAuthenticateHeader = true; });
 
-        //services.AddTransient(sp => new HttpClient(new OpenAiHttpCallHandler(extendedConfig, sp)));
         services.AddAutoMapper(typeof(Startup));
         services.AddHealthChecks();
         services.AddControllers().AddNewtonsoftJson(options => options.SerializerSettings.ReferenceLoopHandling = Newtonsoft.Json.ReferenceLoopHandling.Ignore);

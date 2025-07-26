@@ -19,11 +19,49 @@ namespace AiCoreApi.SemanticKernel.Agents
         {
             public const string EnabledAgents = "enabledAgents";
             public const string Prompt = "prompt";
+            public const string CodeGenerationPrompt = "codeGenerationPrompt";
             public const string Temperature = "temperature";
             public const string TopP = "top_p";
         }
 
-        private const string SystemMessage = "You are an expert Python developer. You generate Python agents with a 'run' function.";
+        private const string SystemMessage = "You are an expert Python developer.";
+        private const string CodeGenerationPromptText = $@"# Introduction
+You are an expert Python developer. Complete the code based on the given task.
+- Output only Python code. No explanation or comments.
+- The result must be a complete and executable script from ""Code to finish"" section, not just your part.
+- result must be set to 'result' variable
+- Use existing Agents where applicable. Do not re-implement Agent functionality.
+- Do not include any pip install lines unless the imported module is directly used in the code.
+- Do not include # cmd:pip install package_name for 'openai' or any LLM-related packages unless they are directly imported and used (not just mentioned in prompt).
+- No ""def run(Parameters)"", just continue the code from ""Code to finish"".
+- No ""return"", just set the output to ""result"" variable
+
+{{{{agentsDescription}}}}
+
+# Code to finish
+\`\`\`python
+# include only required imports
+import json  
+
+{{{{parametersDescription}}}}
+
+# your code here
+
+# Output: {{{{outputDescription}}}}
+return result
+\`\`\`
+
+# Task Description:
+{{{{taskDescription}}}}";
+
+        private static class CodeGenerationPromptPlaceHolders
+        {
+            public const string AgentsDescription = "{{agentsDescription}}";
+            public const string ParametersDescription = "{{parametersDescription}}";
+            public const string OutputDescription = "{{outputDescription}}";
+            public const string TaskDescription = "{{taskDescription}}";
+        }
+
         private const int RegenerationAttempts = 3;
 
         private readonly IPythonCodeAgent _pythonCodeAgent;
@@ -61,49 +99,29 @@ namespace AiCoreApi.SemanticKernel.Agents
 
             var connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
             var llmConnection = GetConnection(_requestAccessor, _responseAccessor, connections,
-                new[] { ConnectionType.AzureOpenAiLlm, ConnectionType.OpenAiLlm, ConnectionType.CohereLlm }, _debugMessageSenderName, agent.LlmType);
+                new[] { ConnectionType.AzureOpenAiLlm, ConnectionType.OpenAiLlm, ConnectionType.CohereLlm, ConnectionType.DeepSeekLlm, ConnectionType.GeminiLlm }, _debugMessageSenderName, agent.LlmType);
             var temperature = GetTemperature(llmConnection, agent);
             var topP = GetTopP(agent);
             var prompt = ApplyParameters(agent.Content[AgentContentParameters.Prompt].Value, parameters);
 
             var parameterDescription = agent.Content["parameterDescription"].Value
                 .Split(',')
-                .Select((p, i) => $@"# Parameter{i + 1}: {p}
+                .Select((p, i) => $@"# Parameter{i + 1}: {p} (string)
 parameter{i + 1} = Parameters['parameter{i + 1}']")
                 .ToList();
             var parametersDescription = string.Join(Environment.NewLine, parameterDescription);
 
             string agentsDescription = await GetAgentsDescriptions(agent);
 
-            string promptTemplate = $@"
-# Introduction
-You are an expert Python developer. Complete the code based on the given task.
-- Output only Python code. No explanation or comments.
-- The result must be a complete and executable script.
-- result must be set to 'result' variable
-- Use existing Agents where applicable. Do not re-implement Agent functionality.
-- Do not include any pip install lines unless the imported module is directly used in the code.
-- Do not include # cmd:pip install package_name for 'openai' or any LLM-related packages unless they are directly imported and used (not just mentioned in prompt).
-- No ""def run(Parameters)"", just continue the code from ""Code to finish"".
-- No ""return"", just set the output to ""result"" variable
-
-{agentsDescription}
-
-# Code to finish
-```python
-# include only required imports
-import json  
-
-{parametersDescription}
-
-# your code here
-
-# Output: {agent.Content["outputDescription"].Value}
-return result
-```
-
-# Task Description:
-{prompt}".Trim();
+            string promptTemplate = agent.Content.ContainsKey(AgentContentParameters.CodeGenerationPrompt)
+                ? ApplyParameters(agent.Content[AgentContentParameters.CodeGenerationPrompt].Value, parameters)
+                : CodeGenerationPromptText;
+            promptTemplate = promptTemplate
+                .Replace(CodeGenerationPromptPlaceHolders.AgentsDescription, agentsDescription)
+                .Replace(CodeGenerationPromptPlaceHolders.ParametersDescription, parametersDescription)
+                .Replace(CodeGenerationPromptPlaceHolders.OutputDescription, agent.Content["outputDescription"].Value)
+                .Replace(CodeGenerationPromptPlaceHolders.TaskDescription, prompt)
+                .Trim();
 
             _responseAccessor.AddDebugMessage(_debugMessageSenderName, "Prompt", promptTemplate);
             var cachekey = promptTemplate.GetHash();

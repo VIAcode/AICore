@@ -20,6 +20,15 @@ public class DocumentMetadataProcessor : IDocumentMetadataProcessor
         return _db.DocumentMetadata.AsNoTracking().FirstOrDefault(item => item.DocumentId == documentId);
     }
 
+    public List<DocumentMetadataModel> Get(List<string>? documentIds)
+    {
+        if (documentIds == null || !documentIds.Any())
+            return new List<DocumentMetadataModel>();
+        return _db.DocumentMetadata.AsNoTracking()
+            .Where(item => documentIds.Contains(item.DocumentId))
+            .ToList();
+    }
+
     public List<DocumentMetadataModel> GetByIngestion(int ingestionId)
     {
         return _db.DocumentMetadata.AsNoTracking().Where(t => t.IngestionId == ingestionId).ToList();
@@ -49,6 +58,7 @@ public class DocumentMetadataProcessor : IDocumentMetadataProcessor
 public interface IDocumentMetadataProcessor
 {
     DocumentMetadataModel? Get(string documentId);
+    List<DocumentMetadataModel> Get(List<string>? documentIds);
     List<DocumentMetadataModel> GetByIngestion(int ingestionId);
     Task Set(DocumentMetadataModel ingestionTaskModel);
     Task Remove(DocumentMetadataModel documentMetadataModel);
