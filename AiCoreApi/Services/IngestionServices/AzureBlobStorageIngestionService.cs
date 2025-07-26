@@ -7,6 +7,7 @@ using Azure.Storage.Blobs;
 using Azure.Storage;
 using System.Security.Cryptography;
 using System.Text;
+using Microsoft.KernelMemory;
 
 namespace AiCoreApi.Services.IngestionServices
 {
@@ -20,6 +21,8 @@ namespace AiCoreApi.Services.IngestionServices
         private readonly ILogger<AzureBlobStorageIngestionService> _logger;
         private readonly IDataIngestionHelperService _dataIngestionHelperService;
         private readonly IEntraTokenProvider _entraTokenProvider;
+        private readonly IKernelMemoryProvider _kernelMemoryProvider;
+        private readonly IConnectionProcessor _connectionProcessor;
 
         public AzureBlobStorageIngestionService(
             IFileIngestionClient fileIngestionClient,
@@ -27,7 +30,9 @@ namespace AiCoreApi.Services.IngestionServices
             ITaskProcessor taskProcessor,
             ILogger<AzureBlobStorageIngestionService> logger,
             IDataIngestionHelperService dataIngestionHelperService,
-            IEntraTokenProvider entraTokenProvider)
+            IEntraTokenProvider entraTokenProvider,
+            IKernelMemoryProvider kernelMemoryProvider,
+            IConnectionProcessor connectionProcessor)
         {
             _fileIngestionClient = fileIngestionClient;
             _documentMetadataProcessor = documentMetadataProcessor;
@@ -35,6 +40,8 @@ namespace AiCoreApi.Services.IngestionServices
             _logger = logger;
             _dataIngestionHelperService = dataIngestionHelperService;
             _entraTokenProvider = entraTokenProvider;
+            _kernelMemoryProvider = kernelMemoryProvider;
+            _connectionProcessor = connectionProcessor;
         }
 
         public async Task Process(IngestionModel ingestion, int taskId)
@@ -45,7 +52,16 @@ namespace AiCoreApi.Services.IngestionServices
             var embeddingConnectionModel = new EmbeddingConnectionModel().Populate(embeddingConnection);
             await _dataIngestionHelperService.FillVectorDbConnection(ingestion, embeddingConnectionModel);
 
-            var docIds = await IngestBlobs(ingestion, taskId, translateStepModel, embeddingConnectionModel);
+            var connections = await _connectionProcessor.List(ingestion.WorkspaceId);
+            var llmConnection = connections.FirstOrDefault(x => x.Type.IsLlmConnection()); // Assuming there's a default LLM connection
+            var vectorDbConnectionId = ingestion.Content.ContainsKey(DataIngestionHelperService.Constants.VectorDbConnectionField) ? ingestion.Content[DataIngestionHelperService.Constants.VectorDbConnectionField] : "";
+
+            var vectorDbConnection = (string.IsNullOrEmpty(vectorDbConnectionId) || vectorDbConnectionId == "0")
+                ? null
+                : connections.FirstOrDefault(x => x.ConnectionId.ToString() == vectorDbConnectionId);
+            var kernelMemory = _kernelMemoryProvider.GetKernelMemory(llmConnection, embeddingConnection, vectorDbConnection);
+
+            var docIds = await IngestBlobs(ingestion, taskId, translateStepModel, embeddingConnectionModel, kernelMemory);
             await RemoveDeletedFiles(embeddingConnectionModel, ingestion, docIds, taskId);
 
             await _taskProcessor.SetMessage(taskId, "Completed");
@@ -137,7 +153,7 @@ namespace AiCoreApi.Services.IngestionServices
         }
 
         private async Task<HashSet<string>> IngestBlobs(IngestionModel ingestion, int taskId,
-            TranslateStepModel translateStepModel, EmbeddingConnectionModel embeddingConnectionModel)
+            TranslateStepModel translateStepModel, EmbeddingConnectionModel embeddingConnectionModel, IKernelMemory kernelMemory)
         {
             var connection = await _dataIngestionHelperService.GetDataSourceConnection(ingestion, ConnectionType.StorageAccount, "ConnectionId");
             var accountName = connection.Content["accountName"];
@@ -167,15 +183,22 @@ namespace AiCoreApi.Services.IngestionServices
 
                 var fileInDatabase = _documentMetadataProcessor.Get(docId);
                 if (fileInDatabase != null && fileInDatabase.Url?.Split("#").LastOrDefault() == contentHash)
-                    continue;
+                {
+                    var search = await kernelMemory.SearchAsync("",
+                        embeddingConnectionModel.IndexName,
+                        filter: new MemoryFilter().ByDocument(docId));
+                    if (search.Results.Count > 0) // If the file already exists in the vector DB, skip re-upload
+                        continue;
+                }
 
                 var file = fileInDatabase ?? new DocumentMetadataModel(docId)
                 {
                     IngestionId = ingestion.IngestionId,
-                    Url = $"https://{accountName}.blob.core.windows.net/{containerName}/{blob.Name}#{contentHash}",
                     CreatedTime = DateTime.UtcNow,
-                    Name = blob.Name
                 };
+                file.Name = blob.Name;
+                file.Url = $"https://{accountName}.blob.core.windows.net/{containerName}/{blob.Name}#{contentHash}";
+
                 await _documentMetadataProcessor.Set(file);
 
                 if (fileInDatabase != null)

@@ -9,11 +9,11 @@ using Newtonsoft.Json;
 
 namespace AiCoreApi.Common
 {
-    public class OpenAiHttpCallHandler : DelegatingHandler
+    public class LlmHttpCallHandler : DelegatingHandler
     {
         private readonly IServiceProvider _serviceProvider;
 
-        public OpenAiHttpCallHandler(
+        public LlmHttpCallHandler(
             ExtendedConfig config, 
             IServiceProvider serviceProvider) : base(
             string.IsNullOrEmpty(config.Proxy)
@@ -48,7 +48,9 @@ namespace AiCoreApi.Common
             var connection = connections.FirstOrDefault(conn => conn.Type == connectionType.Value &&
                 (conn.Type == ConnectionType.AzureOpenAiLlm && conn.Content["deploymentName"].ToLower() == modelDeploymentName) ||
                 (conn.Type == ConnectionType.DeepSeekLlm && conn.Content["modelName"].ToLower() == modelDeploymentName) ||
-                (conn.Type == ConnectionType.OpenAiLlm && conn.Content["modelName"].ToLower() == modelDeploymentName));
+                (conn.Type == ConnectionType.OpenAiLlm && conn.Content["modelName"].ToLower() == modelDeploymentName) ||
+                (conn.Type == ConnectionType.CohereLlm && conn.Content["modelName"].ToLower() == modelDeploymentName) ||
+                (conn.Type == ConnectionType.GeminiLlm && conn.Content["modelName"].ToLower() == modelDeploymentName));
             connection = await ApplyAzureOpenAiLlmCarousel(serviceProvider, request, connections, connection, modelDeploymentName);
             if (connection == null)
                 throw new TokensLimitException($"Model Deployment was not found in LLM connections: {modelDeploymentName}");
@@ -56,7 +58,7 @@ namespace AiCoreApi.Common
             var userContextAccessor = serviceProvider.GetService<UserContextAccessor>();
             var spentProcessor = serviceProvider.GetService<ISpentProcessor>();
             var loginProcessor = serviceProvider.GetService<ILoginProcessor>();
-            var logger = serviceProvider.GetService<ILogger<OpenAiHttpCallHandler>>();
+            var logger = serviceProvider.GetService<ILogger<LlmHttpCallHandler>>();
 
             var loginId = (await userContextAccessor?.GetLoginIdAsync()) ?? UserContextAccessor.AsyncScheduledLoginId.Value;
             if (loginId == null)
@@ -74,7 +76,7 @@ namespace AiCoreApi.Common
 
             var response = await base.SendAsync(request, cancellationToken);
 
-            var currentRequestSpent = await GetCurrentRequestSpent(request, response, cancellationToken);
+            var currentRequestSpent = await GetCurrentRequestSpent(request, response, connectionType, cancellationToken);
             spent.TokensIncoming += currentRequestSpent.TokensIncoming;
             spent.TokensOutgoing += currentRequestSpent.TokensOutgoing;
             logger.LogInformation("{Login}, Action:{Action}, Model: {Model}, Incoming: {Incoming}, Outgoing: {Outgoing}",
@@ -177,6 +179,10 @@ namespace AiCoreApi.Common
                 return ConnectionType.AzureOpenAiLlm;
             if (request.Method == HttpMethod.Post && request.RequestUri.AbsoluteUri.Contains("api.deepseek.com"))
                 return ConnectionType.DeepSeekLlm;
+            if (request.Method == HttpMethod.Post && request.RequestUri.AbsoluteUri.Contains("generativelanguage.googleapis.com"))
+                return ConnectionType.GeminiLlm;
+            if (request.Method == HttpMethod.Post && request.RequestUri.AbsoluteUri.Contains("api.cohere.com"))
+                return ConnectionType.CohereLlm;
             return null;
         }
 
@@ -191,11 +197,17 @@ namespace AiCoreApi.Common
                 if (azureOpenAiMatch.Success)
                     return azureOpenAiMatch.Groups[1].Value;
             }
-            if (connectionType == ConnectionType.OpenAiLlm || 
-                connectionType == ConnectionType.DeepSeekLlm)
+            if (connectionType == ConnectionType.OpenAiLlm ||
+                connectionType == ConnectionType.DeepSeekLlm ||
+                connectionType == ConnectionType.CohereLlm)
             {
                 var requestText = await request.Content?.ReadAsStringAsync(cancellationToken)!;
                 return requestText.JsonGet<string>("model") ?? string.Empty;
+            }
+            if (connectionType == ConnectionType.GeminiLlm)
+            {
+                var model = request.RequestUri.PathAndQuery.Split('/').Last().Split(':').First();
+                return model;
             }
             return string.Empty;
         }
@@ -208,7 +220,7 @@ namespace AiCoreApi.Common
             return requestTokensCount;
         }
 
-        private async Task<SpentModel> GetCurrentRequestSpent(HttpRequestMessage request, HttpResponseMessage response, CancellationToken cancellationToken)
+        private async Task<SpentModel> GetCurrentRequestSpent(HttpRequestMessage request, HttpResponseMessage response, ConnectionType? connectionType, CancellationToken cancellationToken)
         {
             var spentModel = new SpentModel();
             string responseTextContent;
@@ -216,6 +228,26 @@ namespace AiCoreApi.Common
             // one time call contains JSON output - parse it
             if (responseText.StartsWith("{"))
             {
+                if (connectionType == ConnectionType.CohereLlm)
+                {
+                    var cohereResponseUsage = responseText.JsonGet<CohereResponseUsage>();
+                    if (cohereResponseUsage?.CohereTokens?.CohereUsage != null)
+                    {
+                        spentModel.TokensIncoming = cohereResponseUsage.CohereTokens.CohereUsage.CompletionTokens;
+                        spentModel.TokensOutgoing = cohereResponseUsage.CohereTokens.CohereUsage.PromptTokens;
+                        return spentModel;
+                    }
+                }
+                if (connectionType == ConnectionType.GeminiLlm)
+                {
+                    var geminiResponseUsage = responseText.JsonGet<GeminiResponseUsage>();
+                    if (geminiResponseUsage?.GeminiUsage != null)
+                    {
+                        spentModel.TokensIncoming = geminiResponseUsage.GeminiUsage.CompletionTokens;
+                        spentModel.TokensOutgoing = geminiResponseUsage.GeminiUsage.PromptTokens;
+                        return spentModel;
+                    }
+                }
                 var responseUsage = responseText.JsonGet<ResponseUsage>();
                 // if response contains usage info
                 if (responseUsage?.Usage != null)
@@ -270,6 +302,40 @@ namespace AiCoreApi.Common
             [JsonProperty("completion_tokens")]
             public int CompletionTokens { get; set; }
             [JsonProperty("prompt_tokens")]
+            public int PromptTokens { get; set; }
+        }
+
+        public class GeminiResponseUsage
+        {
+            [JsonProperty("usageMetadata")]
+            public GeminiUsage? GeminiUsage { get; set; }
+        }
+
+        public class GeminiUsage
+        {
+            [JsonProperty("candidatesTokenCount")]
+            public int CompletionTokens { get; set; }
+            [JsonProperty("promptTokenCount")]
+            public int PromptTokens { get; set; }
+        }
+
+        public class CohereResponseUsage
+        {
+            [JsonProperty("meta")]
+            public CohereTokens? CohereTokens { get; set; }
+        }
+
+        public class CohereTokens
+        {
+            [JsonProperty("tokens")]
+            public CohereUsage? CohereUsage { get; set; }
+        }
+
+        public class CohereUsage
+        {
+            [JsonProperty("input_tokens")]
+            public int CompletionTokens { get; set; }
+            [JsonProperty("output_tokens")]
             public int PromptTokens { get; set; }
         }
     }

@@ -98,11 +98,11 @@ public class EvaluationService : IEvaluationService
         return updatedEvaluationViewModel;
     }
 
-    public async Task Run(int evaluationId)
+    public async Task<int> Run(int evaluationId)
     {
         var evaluation = await _evaluationProcessor.Get(evaluationId);
         if (evaluation == null) 
-            return;
+            return 0;
         evaluation.LastRun = DateTime.UtcNow;
         _requestAccessor.WorkspaceId = evaluation.WorkspaceId;
 
@@ -167,6 +167,7 @@ public class EvaluationService : IEvaluationService
         await _evaluationProcessor.Update(evaluation);
         evaluationHistory.Status = $"Completed [{evaluationHistory.Questions.Count}/{evaluation.Questions.Count}], Score: {evaluation.LastScore}";
         await _evaluationHistoryProcessor.Update(evaluationHistory);
+        return evaluation.LastScore;
     }
 
     private async Task<ConnectionModel?> GetConnection(EvaluationModel evaluation)
@@ -261,7 +262,7 @@ public interface IEvaluationService
     Task<EvaluationHistoryViewModel> GetHistoryItem(int evaluationHistoryId);
     Task<List<EvaluationViewModel>> List();
     Task Delete(int evaluationId);
-    Task Run(int evaluationId); 
+    Task<int> Run(int evaluationId); 
     Task<EvaluationViewModel> Add(EvaluationViewModel evaluationViewModel);
     Task<EvaluationViewModel> Update(EvaluationViewModel evaluationViewModel);
     Task<List<DebugMessageViewModel>> GetDebugMessages(int evaluationHistoryId, int logId);

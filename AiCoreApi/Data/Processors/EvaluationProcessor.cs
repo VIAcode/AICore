@@ -18,6 +18,14 @@ public class EvaluationProcessor: IEvaluationProcessor
         return await _db.Evaluation.AsNoTracking().FirstOrDefaultAsync(e => e.EvaluationId == evaluationId);
     }
 
+    public async Task<EvaluationModel?> Get(string evaluationName, int workspaceId)
+    {
+        if (string.IsNullOrEmpty(evaluationName))
+            return null;
+        var qry = _db.Evaluation.AsNoTracking().Where(e => e.Name == evaluationName && e.WorkspaceId == workspaceId);
+        return await qry.FirstOrDefaultAsync();
+    }
+
     public async Task<List<EvaluationModel>> List(int workspaceId)
     {
         var qry = _db.Evaluation.OrderByDescending(item => item.EvaluationId).AsNoTracking();
@@ -61,6 +69,7 @@ public class EvaluationProcessor: IEvaluationProcessor
 public interface IEvaluationProcessor
 {
     Task<EvaluationModel?> Get(int evaluationId);
+    Task<EvaluationModel?> Get(string evaluationName, int workspaceId);
     Task<List<EvaluationModel>> List(int workspaceId);
     Task Delete(int evaluationId);
     Task<EvaluationModel> Add(EvaluationModel evaluationModel);

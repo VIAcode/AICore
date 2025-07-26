@@ -19,6 +19,8 @@ namespace AiCoreApi.Services.IngestionServices
         private readonly ILogger<AzDoWikiIngestionService> _logger;
         private readonly IDataIngestionHelperService _dataIngestionHelperService;
         private readonly IHttpClientFactory _httpClientFactory;
+        private readonly IKernelMemoryProvider _kernelMemoryProvider;
+        private readonly IConnectionProcessor _connectionProcessor;
 
         public AzDoWikiIngestionService(
             IFileIngestionClient fileIngestionClient,
@@ -26,7 +28,9 @@ namespace AiCoreApi.Services.IngestionServices
             ITaskProcessor taskProcessor,
             ILogger<AzDoWikiIngestionService> logger,
             IDataIngestionHelperService dataIngestionHelperService,
-            IHttpClientFactory httpClientFactory)
+            IHttpClientFactory httpClientFactory,
+            IKernelMemoryProvider kernelMemoryProvider,
+            IConnectionProcessor connectionProcessor)
         {
             _fileIngestionClient = fileIngestionClient;
             _documentMetadataProcessor = documentMetadataProcessor;
@@ -34,6 +38,8 @@ namespace AiCoreApi.Services.IngestionServices
             _logger = logger;
             _dataIngestionHelperService = dataIngestionHelperService;
             _httpClientFactory = httpClientFactory;
+            _kernelMemoryProvider = kernelMemoryProvider;
+            _connectionProcessor = connectionProcessor;
         }
 
         public async Task Process(IngestionModel ingestion, int taskId)
@@ -53,6 +59,15 @@ namespace AiCoreApi.Services.IngestionServices
             var patToken = Convert.ToBase64String(Encoding.ASCII.GetBytes($":{pat}"));
             client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", patToken);
 
+            var connections = await _connectionProcessor.List(ingestion.WorkspaceId);
+            var llmConnection = connections.FirstOrDefault(x => x.Type.IsLlmConnection()); // Assuming there's a default LLM connection
+            var vectorDbConnectionId = ingestion.Content.ContainsKey(DataIngestionHelperService.Constants.VectorDbConnectionField) ? ingestion.Content[DataIngestionHelperService.Constants.VectorDbConnectionField] : "";
+
+            var vectorDbConnection = (string.IsNullOrEmpty(vectorDbConnectionId) || vectorDbConnectionId == "0")
+                ? null
+                : connections.FirstOrDefault(x => x.ConnectionId.ToString() == vectorDbConnectionId);
+            var kernelMemory = _kernelMemoryProvider.GetKernelMemory(llmConnection, embeddingConnection, vectorDbConnection);
+
             var pages = await GetWikiPages(client, org, project, wiki);
             var pageDocIds = new HashSet<string>();
 
@@ -67,26 +82,31 @@ namespace AiCoreApi.Services.IngestionServices
                 pageDocIds.Add(docId);
 
                 var fileInDatabase = _documentMetadataProcessor.Get(docId);
-                if (fileInDatabase != null)
+                if (fileInDatabase != null &&
+                    fileInDatabase.Url?.Split("#")?.LastOrDefault() == contentHash)
                 {
-                    if (fileInDatabase.Url?.Split("#")?.LastOrDefault() == contentHash)
+                    var search = await kernelMemory.SearchAsync("",
+                        embeddingConnectionModel.IndexName,
+                        filter: new Microsoft.KernelMemory.MemoryFilter().ByDocument(docId));
+                    if (search.Results.Count > 0) // If the file already exists in the vector DB, skip re-upload
                         continue;
                 }
 
                 var file = fileInDatabase ?? new DocumentMetadataModel(docId)
                 {
                     IngestionId = ingestion.IngestionId,
-                    Url = $"https://dev.azure.com/{org}/{project}/_wiki/wikis/{wiki}/{page.Id}#{contentHash}",
                     CreatedTime = DateTime.UtcNow,
-                    Name = page.Path + ".md"
                 };
+                file.Url = $"https://dev.azure.com/{org}/{project}/_wiki/wikis/{wiki}/{page.Id}#{contentHash}";
+                file.Name = page.Path + ".md";
+
                 await _documentMetadataProcessor.Set(file);
 
                 // Remove previous version before re-uploading
                 if (fileInDatabase != null)
                 {
                     await _fileIngestionClient.Delete(embeddingConnectionModel, docId);
-                    await Task.Delay(10000);
+                    await Task.Delay(5000);
                 }
 
                 if (!string.IsNullOrEmpty(page.Content) && page.Id != 0)

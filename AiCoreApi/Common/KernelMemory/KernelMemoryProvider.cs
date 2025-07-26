@@ -34,8 +34,8 @@ namespace AiCoreApi.Common.KernelMemory
             var searchClientConfig = new SearchClientConfig
             {
                 EmptyAnswer = _extendedConfig.NoInformationFoundText,
-                AnswerTokens = Convert.ToInt32(llmConnection.Content["maxAnswersTokens"]),
-                Temperature = Convert.ToDouble(llmConnection.Content["temperature"]),
+                AnswerTokens = Convert.ToInt32(llmConnection.Content.ContainsKey("maxAnswersTokens") ? llmConnection.Content["maxAnswersTokens"] : "4096"),
+                Temperature = Convert.ToDouble(llmConnection.Content.ContainsKey("temperature") ? llmConnection.Content["temperature"] : "0.5"),
             };
 
             var memoryBuilder = new KernelMemoryBuilder()
@@ -47,6 +47,13 @@ namespace AiCoreApi.Common.KernelMemory
                 memoryBuilder = memoryBuilder.WithAzureOpenAITextGeneration(GetAzureOpenAIConfig(llmConnection), httpClient: httpClient);
             if (llmConnection.Type == ConnectionType.OpenAiLlm)
                 memoryBuilder = memoryBuilder.WithOpenAITextGeneration(GetOpenAIConfig(llmConnection), httpClient: httpClient);
+            if (llmConnection.Type == ConnectionType.DeepSeekLlm)
+                memoryBuilder = memoryBuilder.WithCustomTextGenerator(new EmptyTextGenerator()); // DeepSeek does not support text generation in KernelMemory yet, use EmptyTextGenerator to avoid errors
+            if (llmConnection.Type == ConnectionType.GeminiLlm)
+                memoryBuilder = memoryBuilder.WithCustomTextGenerator(new EmptyTextGenerator()); // Gemini does not support text generation in KernelMemory yet, use EmptyTextGenerator to avoid errors
+            if (llmConnection.Type == ConnectionType.CohereLlm)
+                memoryBuilder = memoryBuilder.WithCustomTextGenerator(new EmptyTextGenerator()); // Cohere does not support text generation in KernelMemory yet, use EmptyTextGenerator to avoid errors
+
 
             // Add AzureOpenAI or OpenAI embedding generation
             if (embeddingConnection.Type == ConnectionType.AzureOpenAiEmbedding)

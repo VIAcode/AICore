@@ -9,6 +9,7 @@ using AiCoreApi.Common.Extensions;
 using Microsoft.KernelMemory.Pipeline;
 using AiCoreApi.Common.KernelMemory;
 using static AiCoreApi.Common.ExceptionHandlingMiddleware;
+using Microsoft.KernelMemory;
 
 namespace AiCoreApi.Services.IngestionServices
 {
@@ -22,6 +23,7 @@ namespace AiCoreApi.Services.IngestionServices
         private readonly HttpClient _httpClient;
         private readonly ILogger<SharePointIngestionService> _logger;
         private readonly IDataIngestionHelperService _dataIngestionHelperService;
+        private readonly IKernelMemoryProvider _kernelMemoryProvider;
 
         public SharePointIngestionService(
             ExtendedConfig config,
@@ -31,7 +33,8 @@ namespace AiCoreApi.Services.IngestionServices
             ITaskProcessor taskProcessor,
             IHttpClientFactory httpClientFactory,
             ILogger<SharePointIngestionService> logger,
-            IDataIngestionHelperService dataIngestionHelperService)
+            IDataIngestionHelperService dataIngestionHelperService,
+            IKernelMemoryProvider kernelMemoryProvider)
         {
             _config = config;
             _fileIngestionClient = fileIngestionClient;
@@ -41,6 +44,7 @@ namespace AiCoreApi.Services.IngestionServices
             _httpClient = httpClientFactory.CreateClient(HttpClients.NoRetryClient);
             _logger = logger;
             _dataIngestionHelperService = dataIngestionHelperService;
+            _kernelMemoryProvider = kernelMemoryProvider;
         }
 
         private static string[]? _ext;
@@ -275,6 +279,15 @@ namespace AiCoreApi.Services.IngestionServices
             var embeddingConnectionModel = new EmbeddingConnectionModel().Populate(embeddingConnection);
             await _dataIngestionHelperService.FillVectorDbConnection(ingestion, embeddingConnectionModel);
 
+            var connections = await _connectionProcessor.List(ingestion.WorkspaceId);
+            var llmConnection = connections.FirstOrDefault(x => x.Type.IsLlmConnection()); // Assuming there's a default LLM connection
+            var vectorDbConnectionId = ingestion.Content.ContainsKey(DataIngestionHelperService.Constants.VectorDbConnectionField) ? ingestion.Content[DataIngestionHelperService.Constants.VectorDbConnectionField] : "";
+
+            var vectorDbConnection = (string.IsNullOrEmpty(vectorDbConnectionId) || vectorDbConnectionId == "0")
+                ? null
+                : connections.FirstOrDefault(x => x.ConnectionId.ToString() == vectorDbConnectionId);
+            var kernelMemory = _kernelMemoryProvider.GetKernelMemory(llmConnection, embeddingConnection, vectorDbConnection);
+
             var excludedExtensions = GetExcludedExtensions(ingestion);
             var sharePointConnectionId = Convert.ToInt32(ingestion.Content["ConnectionId"]);
             var sharePointConnection = await _connectionProcessor.GetById(sharePointConnectionId);
@@ -298,7 +311,7 @@ namespace AiCoreApi.Services.IngestionServices
             await _taskProcessor.SetMessage(taskId, "Files calculation");
             var files = await GetFiles(graph, drive, driveItem, foldersToExclude, string.Empty, excludedExtensions);
 
-            await IndexDocuments(embeddingConnectionModel, ingestion, graph, files, taskId, translateStepModel);
+            await IndexDocuments(embeddingConnectionModel, ingestion, graph, files, taskId, translateStepModel, kernelMemory);
         }
 
         private static List<string> GetFoldersToExcludeAsList(string? excludeFolders)
@@ -339,7 +352,7 @@ namespace AiCoreApi.Services.IngestionServices
             }
         }
 
-        private async Task IndexDocuments(EmbeddingConnectionModel embeddingConnectionModel, IngestionModel ingestion, GraphServiceClient graph, List<File> filesInSharePoint, int taskId, TranslateStepModel translateStepModel)
+        private async Task IndexDocuments(EmbeddingConnectionModel embeddingConnectionModel, IngestionModel ingestion, GraphServiceClient graph, List<File> filesInSharePoint, int taskId, TranslateStepModel translateStepModel, IKernelMemory kernelMemory)
         {
             var filesInDatabase = _documentMetadataProcessor.GetByIngestion(ingestion.IngestionId);
             // Remove files that were deleted from SharePoint
@@ -355,8 +368,11 @@ namespace AiCoreApi.Services.IngestionServices
                     filesInDatabase.Remove(fileInDatabase);
                     if (fileInDatabase.LastModifiedTime >= fileInSharePoint.LastModifiedTime)
                     {
-                        // File in database is up to date
-                        continue;
+                        var search = await kernelMemory.SearchAsync("",
+                            embeddingConnectionModel.IndexName,
+                            filter: new MemoryFilter().ByDocument(fileInSharePoint.UniqueId));
+                        if (search.Results.Count > 0) // If the file already exists in the vector DB, skip re-upload
+                            continue;
                     }
                     // Remove file from kernel memory to update it
                     await _fileIngestionClient.Delete(embeddingConnectionModel, fileInSharePoint.UniqueId);

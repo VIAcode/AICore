@@ -18,12 +18,64 @@ namespace AiCoreApi.SemanticKernel.Agents
         {
             public const string EnabledAgents = "enabledAgents";
             public const string Prompt = "prompt";
+            public const string CodeGenerationPrompt = "codeGenerationPrompt";
             public const string Temperature = "temperature";
             public const string TopP = "top_p";
         }
 
-        private const string SystemMessage = "You are an expert C# developer. You generate C# agents code with 'Run' method.";
+        private const string SystemMessage = "You are an expert C# developer.";
         private const int RegenerationAttempts = 3;
+
+        private const string CodeGenerationPromptText = @$"
+# Introduction
+You are an expert C# developer. Complete the code based on the given task.
+- Output only C# code. No explanation or comments.
+- The result must be a complete and executable script from ""Code to finish"" section, not just your part.
+- Do not change the class name or method signature.
+- Ensure the code is fully compilable and free of undefined variables.
+- Use existing Agents where applicable. Do not re-implement Agent functionality.
+- Import only required NuGet packages in the format: #r ""nuget: PackageName, Version""
+- Do NOT import AiCoreApi.Common — it is already available.
+
+{{{{agentsDescription}}}}
+# Code to finish
+// Add necessary packages to import only when needed, use the following format:
+#r ""nuget: PackageNameSample, 1.00""
+
+using System; 
+using System.Collections.Generic;
+using System.Linq;
+// add other necessary namespaces
+
+class Agent
+{{
+    public string Run(
+        Dictionary<string, string> Parameters,
+        AiCoreApi.Common.RequestAccessor RequestAccessor,
+        AiCoreApi.Common.ResponseAccessor ResponseAccessor,
+        Func<string, List<string>?, string> ExecuteAgent,
+        Func<string, string> GetCacheValue,
+        Func<string, string, int, string> SetCacheValue)
+    {{
+{{{{parametersDescription}}}}
+
+        //your code here
+
+        // Output: {{{{outputDescription}}}}
+        return result; 
+    }}
+}}
+
+
+# Task Description:
+{{{{taskDescription}}}}";
+        private static class CodeGenerationPromptPlaceHolders
+        {
+            public const string AgentsDescription = "{{agentsDescription}}";
+            public const string ParametersDescription = "{{parametersDescription}}";
+            public const string OutputDescription = "{{outputDescription}}";
+            public const string TaskDescription = "{{taskDescription}}";
+        }
 
         private readonly ICsharpCodeAgent _csharpCodeAgent;
         private readonly RequestAccessor _requestAccessor;
@@ -60,7 +112,7 @@ namespace AiCoreApi.SemanticKernel.Agents
 
             var connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
             var llmConnection = GetConnection(_requestAccessor, _responseAccessor, connections,
-                new[] { ConnectionType.AzureOpenAiLlm, ConnectionType.OpenAiLlm, ConnectionType.CohereLlm }, _debugMessageSenderName, agent.LlmType);
+                new[] { ConnectionType.AzureOpenAiLlm, ConnectionType.OpenAiLlm, ConnectionType.CohereLlm, ConnectionType.DeepSeekLlm, ConnectionType.GeminiLlm }, _debugMessageSenderName, agent.LlmType);
             var temperature = GetTemperature(llmConnection, agent);
             var topP = GetTopP(agent);
             var prompt = ApplyParameters(agent.Content[AgentContentParameters.Prompt].Value, parameters);
@@ -75,48 +127,15 @@ namespace AiCoreApi.SemanticKernel.Agents
 
             string agentsDescription = await GetAgentsDescriptions(agent);
 
-            string promptTemplate = @$"
-# Introduction
-You are an expert C# developer. Complete the code based on the given task.
-- Output only C# code. No explanation or comments.
-- Do not change the class name or method signature.
-- Ensure the code is fully compilable and free of undefined variables.
-- Use existing Agents where applicable. Do not re-implement Agent functionality.
-- Import only required NuGet packages in the format: #r ""nuget: PackageName, Version""
-- Do NOT import AiCoreApi.Common — it is already available.
-
-{agentsDescription}
-# Code to finish
-// Add necessary packages to import only when needed, use the following format:
-#r ""nuget: PackageNameSample, 1.00""
-
-using System; 
-using System.Collections.Generic;
-using System.Linq;
-// add other necessary namespaces
-
-class Agent
-{{
-    public string Run(
-        Dictionary<string, string> Parameters,
-        AiCoreApi.Common.RequestAccessor RequestAccessor,
-        AiCoreApi.Common.ResponseAccessor ResponseAccessor,
-        Func<string, List<string>?, string> ExecuteAgent,
-        Func<string, string> GetCacheValue,
-        Func<string, string, int, string> SetCacheValue)
-    {{
-{parametersDescription}
-
-        //your code here
-
-        // Output: {agent.Content["outputDescription"].Value}
-        return result; 
-    }}
-}}
-
-
-# Task Description:
-{prompt}";
+            string promptTemplate = agent.Content.ContainsKey(AgentContentParameters.CodeGenerationPrompt)
+                ? ApplyParameters(agent.Content[AgentContentParameters.CodeGenerationPrompt].Value, parameters)
+                : CodeGenerationPromptText;
+            promptTemplate = promptTemplate
+                .Replace(CodeGenerationPromptPlaceHolders.AgentsDescription, agentsDescription)
+                .Replace(CodeGenerationPromptPlaceHolders.ParametersDescription, parametersDescription)
+                .Replace(CodeGenerationPromptPlaceHolders.OutputDescription, agent.Content["outputDescription"].Value)
+                .Replace(CodeGenerationPromptPlaceHolders.TaskDescription, prompt)
+                .Trim();
 
             _responseAccessor.AddDebugMessage(_debugMessageSenderName, "Prompt", promptTemplate);
             var cachekey = promptTemplate.GetHash();

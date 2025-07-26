@@ -44,9 +44,7 @@ namespace AiCoreApi.Services.ProcessingServices
 
             try
             {
-                var taskProcessor =
-                    _serviceProvider.GetService<ITaskProcessor>() ??
-                    throw new InvalidOperationException($"'{nameof(ITaskProcessor)}' service not found.");
+                var taskProcessor = _serviceProvider.GetService<ITaskProcessor>() ?? throw new InvalidOperationException($"'{nameof(ITaskProcessor)}' service not found.");
                 var tasks = taskProcessor.GetNew();
                 foreach (var task in tasks)
                 {
