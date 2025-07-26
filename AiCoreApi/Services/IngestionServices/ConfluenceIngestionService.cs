@@ -23,6 +23,7 @@ namespace AiCoreApi.Services.IngestionServices
         private readonly IKernelMemoryProvider _kernelMemoryProvider;
 
         private const int DelayBeforeReUploadMilliseconds = 5000;
+        private const string PagesPlaceholder = "/pages/";
 
         public ConfluenceIngestionService(
             IFileIngestionClient fileIngestionClient,
@@ -206,8 +207,7 @@ namespace AiCoreApi.Services.IngestionServices
 
         private string GetPageIdByUrl(string url)
         {
-            var pagesPlaceholder = "/pages/";
-            var pageId = url.Substring(url.IndexOf(pagesPlaceholder) + pagesPlaceholder.Length).Split("#").FirstOrDefault()
+            var pageId = url.Substring(url.IndexOf(PagesPlaceholder, StringComparison.Ordinal) + PagesPlaceholder.Length).Split("#").FirstOrDefault()
                          ?? throw new InvalidOperationException("Cannot extract pageId from metadata URL.");
             return pageId;
         }

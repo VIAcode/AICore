@@ -56,21 +56,30 @@ public sealed class GeminiChatCompletionService : IChatCompletionService
             // --- Handle images (ImageContent objects) ---
             foreach (var item in ch.Items)
             {
-                if (item is Microsoft.SemanticKernel.ImageContent img && img.DataUri != null)
+                if (item is ImageContent img && img.DataUri != null)
                 {
                     // img.DataUri = "data:image/png;base64,iVBORw0K..."
                     var dataUri = img.DataUri;
                     var mimeType = img.MimeType ?? "image/png";
-                    var base64Data = dataUri.Substring(dataUri.IndexOf(",") + 1);
-
-                    parts.Add(new GeminiPart
+                    var commaIndex = dataUri.IndexOf(",");
+                    if (commaIndex != -1)
                     {
-                        InlineData = new GeminiInlineData
+                        var base64Data = dataUri.Substring(commaIndex + 1);
+                        parts.Add(new GeminiPart
                         {
-                            MimeType = mimeType,
-                            Data = base64Data
-                        }
-                    });
+                            InlineData = new GeminiInlineData
+                            {
+                                MimeType = mimeType,
+                                Data = base64Data
+                            }
+                        });
+                    }
+                    else
+                    {
+                        // Log or handle the malformed dataUri case if necessary
+                        // For now, we skip adding this part
+                        continue;
+                    }
                 }
             }
             if (parts.Count == 0) return null;

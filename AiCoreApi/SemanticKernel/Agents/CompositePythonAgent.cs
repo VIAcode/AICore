@@ -34,7 +34,7 @@ You are an expert Python developer. Complete the code based on the given task.
 - Do not include any pip install lines unless the imported module is directly used in the code.
 - Do not include # cmd:pip install package_name for 'openai' or any LLM-related packages unless they are directly imported and used (not just mentioned in prompt).
 - No ""def run(Parameters)"", just continue the code from ""Code to finish"".
-- No ""return"", just set the output to ""result"" variable
+- No ""return"", just set the output to ""result"" variable (string)
 
 {{{{agentsDescription}}}}
 
@@ -48,7 +48,7 @@ import json
 # your code here
 
 # Output: {{{{outputDescription}}}}
-return result
+result = ..expected_output..
 \`\`\`
 
 # Task Description:

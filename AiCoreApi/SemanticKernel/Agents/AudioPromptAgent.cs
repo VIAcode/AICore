@@ -241,7 +241,11 @@ public class AudioPromptAgent : BaseAgent, IAudioPromptAgent
 
         var jsonResponse = await ExecuteHttpPostAsync(requestUri, requestBody);
 
-        var candidates = JsonDocument.Parse(jsonResponse).RootElement.GetProperty("candidates");
+        if (!JsonDocument.Parse(jsonResponse).RootElement.TryGetProperty("candidates", out var candidates))
+        {
+            return "";
+        }
+
         if (candidates.GetArrayLength() == 0) return "";
 
         return candidates[0].GetProperty("content").GetProperty("parts")[0].GetProperty("text").GetString() ?? "";

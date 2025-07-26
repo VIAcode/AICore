@@ -64,6 +64,10 @@ namespace AiCoreApi.Services.IngestionServices
 
             var evaluationId = Convert.ToInt32(payloadDictionary[Constants.EvaluationId]);
             var changedFiles = payloadDictionary[Constants.ChangedFiles].JsonGet<Dictionary<string, string>>();
+            if (changedFiles == null)
+            {
+                throw new ArgumentException("Failed to deserialize 'changedFiles' from the payload.");
+            }
             var workspaceId = Convert.ToInt32(payloadDictionary[Constants.WorkspaceId]);
             var loginId = Convert.ToInt32(payloadDictionary[Constants.LoginId]);
 

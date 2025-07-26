@@ -191,7 +191,10 @@ namespace AiCoreApi.SemanticKernel.Agents
             var evaluation = await _evaluationProcessor.Get(evaluationName, agent.WorkspaceId ?? 0);
             if (evaluation == null)
             {
-                throw new AiCoreUiException($"No evaluation found with name: {evaluationName}");
+                var errorMessage = evaluationName == "0"
+                    ? "No evaluation configured for the agent."
+                    : $"No evaluation found with name: {evaluationName}";
+                throw new AiCoreUiException(errorMessage);
             }
             var task = new TaskModel
             {
@@ -374,6 +377,7 @@ namespace AiCoreApi.SemanticKernel.Agents
                 return new List<SearchResult>();
             }
 
+            var topKValue = int.TryParse(topK, out var topKInt) ? topKInt : 10;
             var result = searchResults.Results.Select(r => new SearchResult
             {
                 SourceName = r.SourceName,
@@ -392,7 +396,7 @@ namespace AiCoreApi.SemanticKernel.Agents
                         Value = string.Join(",", t.Value)
                     }).ToList()
                 }).ToList()
-            }).Take(Convert.ToInt32(topK))
+            }).Take(Convert.ToInt32(topKValue))
             .ToList();
 
             return result;
