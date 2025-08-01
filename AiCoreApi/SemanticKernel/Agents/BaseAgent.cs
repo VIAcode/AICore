@@ -4,6 +4,9 @@ using AiCoreApi.Models.DbModels;
 using AiCoreApi.Common;
 using System.Text;
 using AiCoreApi.Common.Monitoring;
+using System.Web;
+using AiCoreApi.Services.IngestionServices;
+using AiCoreApi.Data.Processors;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
@@ -12,18 +15,24 @@ namespace AiCoreApi.SemanticKernel.Agents
         private readonly ResponseAccessor _responseAccessor;
         private readonly RequestAccessor _requestAccessor;
         private readonly MonitoringConfig _monitoringConfig;
-        private readonly ILogger<BaseAgent> _logger;
+        private readonly IDataIngestionWorkerFactory _dataIngestionWorkerFactory;
+        private readonly IIngestionProcessor _ingestionProcessor;
+        private readonly ICacheAccessor _cacheAccessor;
 
-        protected BaseAgent(
-            ResponseAccessor responseAccessor,
-            RequestAccessor requestAccessor,
-            MonitoringConfig monitoringConfig,
+        private readonly ILogger<BaseAgent> _logger;
+        private Dictionary<string, string>? _parameters;
+        private AgentModel _agent = new();
+
+        protected BaseAgent(IBaseAgentHelper baseAgentHelper,
             ILogger<BaseAgent> logger)
         {
-            _responseAccessor = responseAccessor;
-            _requestAccessor = requestAccessor;
+            _responseAccessor = baseAgentHelper.ResponseAccessor;
+            _requestAccessor = baseAgentHelper.RequestAccessor;
+            _monitoringConfig = baseAgentHelper.MonitoringConfig;
+            _dataIngestionWorkerFactory = baseAgentHelper.DataIngestionWorkerFactory;
+            _cacheAccessor = baseAgentHelper.CacheAccessor;
+            _ingestionProcessor = baseAgentHelper.IngestionProcessor;
             _logger = logger;
-            _monitoringConfig = monitoringConfig;
         }
 
         private static class AgentContentParameters
@@ -80,58 +89,142 @@ namespace AiCoreApi.SemanticKernel.Agents
             }
         }
 
-
-        protected string ApplyParameters(string text, Dictionary<string, string>? parameters)
+        protected async Task<string?> GetParameterValueAsync(string parameterName, string? defaultValue = "")
         {
-            if (string.IsNullOrEmpty(text) || parameters == null || parameters.Count == 0)
+            var text = _agent.Content.ContainsKey(parameterName) ? _agent.Content[parameterName].Value : string.Empty;
+
+            if (string.IsNullOrEmpty(text))
+                return defaultValue;
+
+            if (_parameters == null || _parameters.Count == 0)
                 return text;
 
-            var inputSpan = text.AsSpan();
-            var stringBuilder = new StringBuilder(text.Length);
-            var startIndex = 0;
-            while (true)
+            return await ApplyParametersAsync(text, null);
+        }
+
+        protected async Task<string> ApplyParametersAsync(string text, Dictionary<string, string>? additionalParameters = null)
+        {
+            var sb = new StringBuilder(text.Length);
+            int i = 0;
+            var resolvedDsCache = new Dictionary<string, string>();
+
+            while (i < text.Length)
             {
-                var openBraceIndex = inputSpan[startIndex..].IndexOf("{{");
-                if (openBraceIndex == -1)
+                // Handle escaped braces: \{{ or \}}
+                if (i + 2 < text.Length && text[i] == '\\' && text[i + 1] == '{' && text[i + 2] == '{')
                 {
-                    stringBuilder.Append(inputSpan[startIndex..]);
-                    break;
+                    sb.Append("{{");
+                    i += 3;
+                    continue;
                 }
-                var closeBraceIndex = inputSpan[(startIndex + openBraceIndex + 2)..].IndexOf("}}");
-                if (closeBraceIndex == -1)
+                if (i + 2 < text.Length && text[i] == '\\' && text[i + 1] == '}' && text[i + 2] == '}')
                 {
-                    stringBuilder.Append(inputSpan[startIndex..]);
-                    break;
+                    sb.Append("}}");
+                    i += 3;
+                    continue;
                 }
-                // Handle nested braces ({{...{{...}}...}})
-                while (true)
+
+                if (i + 1 < text.Length && text[i] == '{' && text[i + 1] == '{')
                 {
-                    var nextOpenBraceIndex = inputSpan[(startIndex + openBraceIndex + 2)..].IndexOf("{{");
-                    if (nextOpenBraceIndex != -1 && (nextOpenBraceIndex + openBraceIndex) < closeBraceIndex)
+                    int start = i + 2;
+                    int braceDepth = 1;
+                    int j = start;
+
+                    while (j < text.Length - 1)
                     {
-                        openBraceIndex = nextOpenBraceIndex + openBraceIndex + 2;
-                        closeBraceIndex = inputSpan[(startIndex + openBraceIndex + 2)..].IndexOf("}}");
+                        if (text[j] == '{' && text[j + 1] == '{')
+                        {
+                            braceDepth++;
+                            j += 2;
+                        }
+                        else if (text[j] == '}' && text[j + 1] == '}')
+                        {
+                            braceDepth--;
+                            j += 2;
+                            if (braceDepth == 0) break;
+                        }
+                        else
+                        {
+                            j++;
+                        }
+                    }
+
+                    if (braceDepth != 0 || j > text.Length)
+                    {
+                        sb.Append(text.Substring(i));
+                        break;
+                    }
+
+                    string key = text.Substring(start, j - start - 2).Trim(); 
+                    if (string.IsNullOrWhiteSpace(key))
+                    {
+                        sb.Append("{{}}");
+                        i = j;
                         continue;
                     }
-                    break;
-                }
-                
-                openBraceIndex += startIndex;
-                closeBraceIndex += openBraceIndex + 2;
-                stringBuilder.Append(inputSpan[startIndex..openBraceIndex]);
-                var parameterKeySpan = inputSpan[(openBraceIndex + 2)..closeBraceIndex];
-                var parameterKey = parameterKeySpan.ToString();
-                if (parameters.TryGetValue(parameterKey, out var value))
-                {
-                    stringBuilder.Append(value);
+
+                    string? value = null;
+
+                    if (_parameters.TryGetValue(key, out var paramValue))
+                    {
+                        value = paramValue;
+                    }
+                    else if (additionalParameters != null && additionalParameters.TryGetValue(key, out var extra))
+                    {
+                        value = extra;
+                    }
+                    else if (key.StartsWith("DS:"))
+                    {
+                        if (!resolvedDsCache.TryGetValue(key, out value!))
+                        {
+                            value = await ResolveDataSourceValueAsync(key);
+                            resolvedDsCache[key] = value;
+                        }
+                    }
+
+                    sb.Append(value ?? $"{{{{{key}}}}}");
+
+                    i = j;
                 }
                 else
                 {
-                    stringBuilder.Append("{{").Append(parameterKeySpan).Append("}}");
+                    sb.Append(text[i]);
+                    i++;
                 }
-                startIndex = closeBraceIndex + 2;
             }
-            return stringBuilder.ToString();
+
+            return sb.ToString();
+        }
+
+
+        private async Task<string?> ResolveDataSourceValueAsync(string key)
+        {
+            var parts = key.Split(':');
+            if (parts.Length < 3 || parts.Length > 4)
+                return "Invalid Data Source parameters count";
+
+            var dsName = parts[1];
+            var dsPath = parts[2];
+            var cacheSeconds = (parts.Length == 4 && int.TryParse(parts[3], out var c)) ? c : 0;
+            var cacheKey = $"{HttpUtility.UrlEncode(dsName)}_{HttpUtility.UrlEncode(dsPath)}";
+
+            var cachedValue = _cacheAccessor.GetCacheValue(cacheKey);
+            if (!string.IsNullOrEmpty(cachedValue))
+                return cachedValue;
+
+            var ingestion = await _ingestionProcessor.Get(dsName, _requestAccessor.WorkspaceId);
+            if (ingestion == null)
+                return $"Data Source '{dsName}' not found";
+
+            var worker = _dataIngestionWorkerFactory.GetService(ingestion);
+            var file = await worker.GetFileByPath(ingestion, dsPath);
+            if (string.IsNullOrEmpty(file))
+                return $"File '{dsPath}' not found in Data Source '{dsName}'";
+
+            if (cacheSeconds > 0)
+                _cacheAccessor.SetCacheValue(cacheKey, file, cacheSeconds);
+
+            return file;
         }
 
         public virtual async Task OnAddUpdate(AgentModel agentModel)
@@ -183,7 +276,9 @@ namespace AiCoreApi.SemanticKernel.Agents
                     _logger.LogCritical("[{DateTime}][Run] {Login}, Action:{Action}, Agent: {Agent}, Parameters: {url}",
                         DateTime.UtcNow.ToString("g"), _requestAccessor.Login, "ApiCall", agent.Name, parametersString);
                 }
-
+                parameters.ToList().ForEach(p => parameters[p.Key] = HttpUtility.HtmlDecode(p.Value));
+                _parameters = parameters;
+                _agent = agent;
                 var result = await DoCall(agent, parameters);
 
                 if (_monitoringConfig.LogAgentResult)
@@ -200,7 +295,7 @@ namespace AiCoreApi.SemanticKernel.Agents
 
         public abstract Task<string> DoCall(AgentModel agent, Dictionary<string, string> parameters);
 
-        protected ConnectionModel GetConnection(
+        protected async Task<ConnectionModel> GetConnectionAsync(
             RequestAccessor requestAccessor,
             ResponseAccessor responseAccessor,
             List<ConnectionModel> connections,
@@ -209,10 +304,10 @@ namespace AiCoreApi.SemanticKernel.Agents
             int? connectionId = 0,
             string? connectionName = "")
         {
-            return GetConnection(requestAccessor, responseAccessor, connections, new[]{connectionType} , debugMessageSenderName, connectionId, connectionName);
+            return await GetConnectionAsync(requestAccessor, responseAccessor, connections, new[]{connectionType} , debugMessageSenderName, connectionId, connectionName);
         }
 
-        protected ConnectionModel GetConnection(
+        protected async Task<ConnectionModel> GetConnectionAsync(
             RequestAccessor requestAccessor,
             ResponseAccessor responseAccessor,
             List<ConnectionModel> connections, 
@@ -221,6 +316,9 @@ namespace AiCoreApi.SemanticKernel.Agents
             int? connectionId = 0,
             string? connectionName = "")
         {
+            if (!string.IsNullOrEmpty(connectionName) && connectionName.Contains("{{"))
+                connectionName = await ApplyParametersAsync(connectionName);
+
             var connectionSpecified = connectionId > 0 || !string.IsNullOrEmpty(connectionName);
             // Check connection specified for Agent
             var connection = connections.FirstOrDefault(conn =>

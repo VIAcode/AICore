@@ -2,10 +2,8 @@ using AiCoreApi.Common.Extensions;
 using Microsoft.SemanticKernel;
 using AiCoreApi.Models.DbModels;
 using JUST;
-using System.Web;
 using AiCoreApi.Common;
 using Newtonsoft.Json.Linq;
-using AiCoreApi.Common.Monitoring;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
@@ -15,10 +13,9 @@ namespace AiCoreApi.SemanticKernel.Agents
 
         private readonly ResponseAccessor _responseAccessor;
         public JsonTransformAgent(
+            IBaseAgentHelper baseAgentHelper,
             ResponseAccessor responseAccessor,
-            RequestAccessor requestAccessor,
-            MonitoringConfig monitoringConfig,
-            ILogger<JsonTransformAgent> logger) : base(responseAccessor, requestAccessor, monitoringConfig, logger)
+            ILogger<JsonTransformAgent> logger) : base(baseAgentHelper, logger)
         {
             _responseAccessor = responseAccessor;
         }
@@ -30,7 +27,6 @@ namespace AiCoreApi.SemanticKernel.Agents
 
         public override async Task<string> DoCall(AgentModel agent, Dictionary<string, string> parameters)
         {
-            parameters.ToList().ForEach(p => parameters[p.Key] = HttpUtility.HtmlDecode(p.Value));
             _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
             try

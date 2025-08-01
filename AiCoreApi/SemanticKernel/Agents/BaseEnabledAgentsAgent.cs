@@ -1,6 +1,5 @@
 using AiCoreApi.Models.DbModels;
 using AiCoreApi.Common;
-using AiCoreApi.Common.Monitoring;
 using AiCoreApi.Common.Extensions;
 using AiCoreApi.Data.Processors;
 using AiCoreApi.Models.ViewModels;
@@ -17,15 +16,12 @@ namespace AiCoreApi.SemanticKernel.Agents
         public const string AgentsList = "agentsList"; 
 
         public BaseEnabledAgentsAgent(
-            IAgentsProcessor agentsProcessor,
-            ResponseAccessor responseAccessor,
-            RequestAccessor requestAccessor,
-            MonitoringConfig monitoringConfig,
+            IBaseAgentHelper baseAgentHelper,
             ILogger<BaseEnabledAgentsAgent> logger)
-            : base(responseAccessor, requestAccessor, monitoringConfig, logger)
+            : base(baseAgentHelper, logger)
         {
-            _agentsProcessor = agentsProcessor;
-            _requestAccessor = requestAccessor;
+            _agentsProcessor = baseAgentHelper.AgentsProcessor;
+            _requestAccessor = baseAgentHelper.RequestAccessor;
         }
 
         private string GetParameterName(AgentModel agentModel)

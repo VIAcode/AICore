@@ -1,11 +1,9 @@
 using System.Text.Json;
 using Microsoft.SemanticKernel;
 using AiCoreApi.Models.DbModels;
-using System.Web;
 using AiCoreApi.Common;
 using AiCoreApi.Data.Processors;
 using Microsoft.Data.SqlClient;
-using AiCoreApi.Common.Monitoring;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
@@ -25,12 +23,12 @@ namespace AiCoreApi.SemanticKernel.Agents
         private readonly ResponseAccessor _responseAccessor;
 
         public SqlServerAgent(
+            IBaseAgentHelper baseAgentHelper,
             IConnectionProcessor connectionProcessor,
             IEntraTokenProvider entraTokenProvider,
             RequestAccessor requestAccessor,
             ResponseAccessor responseAccessor,
-            MonitoringConfig monitoringConfig,
-            ILogger<SqlServerAgent> logger) : base(responseAccessor, requestAccessor, monitoringConfig, logger)
+            ILogger<SqlServerAgent> logger) : base(baseAgentHelper, logger)
         {
             _connectionProcessor = connectionProcessor;
             _entraTokenProvider = entraTokenProvider;
@@ -40,14 +38,13 @@ namespace AiCoreApi.SemanticKernel.Agents
 
         public override async Task<string> DoCall(AgentModel agent, Dictionary<string, string> parameters)
         {
-            parameters.ToList().ForEach(p => parameters[p.Key] = HttpUtility.HtmlDecode(p.Value));
             _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
             var connectionName = agent.Content[AgentContentParameters.ConnectionName].Value;
-            var sqlQuery = ApplyParameters(agent.Content[AgentContentParameters.SqlQuery].Value, parameters);
+            var sqlQuery = await GetParameterValueAsync(AgentContentParameters.SqlQuery);
             _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Request", sqlQuery);
             var connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
-            var connection = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.SqlServer, _debugMessageSenderName, connectionName: connectionName);
+            var connection = await GetConnectionAsync(_requestAccessor, _responseAccessor, connections, ConnectionType.SqlServer, _debugMessageSenderName, connectionName: connectionName);
             var result = await ExecuteScript(sqlQuery, connection);
             _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Response", result);
             return result;

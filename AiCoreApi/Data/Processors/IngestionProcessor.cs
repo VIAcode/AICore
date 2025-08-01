@@ -18,6 +18,34 @@ namespace AiCoreApi.Data.Processors
             _config = config;
         }
 
+        public async Task<IngestionModel?> Get(string ingestionName, int? workspaceId)
+        {
+            var qry = _db.Ingestions.Include(e => e.Tags)
+                .Where(t => t.Name == ingestionName);
+            if (workspaceId == 0)
+                qry = qry.Where(t => t.WorkspaceId == null);
+            else if (workspaceId != null)
+                qry = qry.Where(t => t.WorkspaceId == workspaceId);
+            var result = await qry.Select(item => new IngestionModel
+            {
+                Content = item.Content,
+                Created = item.Created,
+                CreatedBy = item.CreatedBy,
+                Updated = item.Updated,
+                IngestionId = item.IngestionId,
+                Note = item.Note,
+                Name = item.Name,
+                Type = item.Type,
+                Tags = item.Tags,
+                LastSync = item.LastSync,
+            })
+            .AsNoTracking()
+            .FirstOrDefaultAsync();
+            if (result?.Content.ContainsKey("File") == true)
+                result.Content["File"] = "..file content..";
+            return result;
+        }
+
         public async Task<IngestionModel?> GetIngestionById(int ingestionId, bool excludeFile = false)
         {
             var result = await _db.Ingestions.Include(e => e.Tags)
@@ -167,6 +195,7 @@ namespace AiCoreApi.Data.Processors
     public interface IIngestionProcessor
     {
         Task<List<IngestionModel>> List(int? workspaceId);
+        Task<IngestionModel?> Get(string ingestionName, int? workspaceId);
         Task<IngestionModel?> GetIngestionById(int ingestionId, bool excludeFile = false);
         Task<IngestionModel> Set(IngestionModel ingestionModel, int? workspaceId);
         Task<IngestionModel> SetSyncTime(int ingestionId, DateTime syncTime);

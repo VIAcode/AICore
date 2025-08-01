@@ -3,7 +3,6 @@ using Microsoft.SemanticKernel;
 using AiCoreApi.Models.DbModels;
 using AiCoreApi.Common;
 using AiCoreApi.Data.Processors;
-using AiCoreApi.Common.Monitoring;
 using AiCoreApi.Common.Extensions;
 using Newtonsoft.Json;
 
@@ -37,12 +36,12 @@ namespace AiCoreApi.SemanticKernel.Agents
         }
 
         public GitAgent(
+            IBaseAgentHelper baseAgentHelper,
             IConnectionProcessor connectionProcessor,
             RequestAccessor requestAccessor,
             ResponseAccessor responseAccessor,
-            MonitoringConfig monitoringConfig,
             ILogger<GitAgent> logger)
-            : base(responseAccessor, requestAccessor, monitoringConfig, logger)
+            : base(baseAgentHelper, logger)
         {
             _connectionProcessor = connectionProcessor;
             _requestAccessor = requestAccessor;
@@ -51,25 +50,22 @@ namespace AiCoreApi.SemanticKernel.Agents
 
         public override async Task<string> DoCall(AgentModel agent, Dictionary<string, string> parameters)
         {
-            foreach (var key in parameters.Keys.ToList())
-                parameters[key] = System.Web.HttpUtility.HtmlDecode(parameters[key]);
-
             _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
             var action = agent.Content[AgentContentParameters.Action].Value;
             var connectionName = agent.Content[AgentContentParameters.ConnectionName].Value;
-            var path = ApplyParameters(agent.Content.GetValueOrDefault(AgentContentParameters.Path)?.Value ?? "", parameters);
-            var branch = ApplyParameters(agent.Content.GetValueOrDefault(AgentContentParameters.Branch)?.Value ?? "main", parameters);
-            var payload = ApplyParameters(agent.Content.GetValueOrDefault(AgentContentParameters.Payload)?.Value ?? "", parameters);
-            var payloadType = ApplyParameters(agent.Content.GetValueOrDefault(AgentContentParameters.PayloadType)?.Value ?? "text", parameters);
-            var commitMessage = ApplyParameters(agent.Content.GetValueOrDefault(AgentContentParameters.CommitMessage)?.Value ?? "AI Core commit", parameters);
-            var commitEmail = ApplyParameters(agent.Content.GetValueOrDefault(AgentContentParameters.CommitEmail)?.Value ?? "", parameters);
+            var path = await GetParameterValueAsync(AgentContentParameters.Path);
+            var branch = await GetParameterValueAsync(AgentContentParameters.Branch);
+            var payload = await GetParameterValueAsync(AgentContentParameters.Payload);
+            var payloadType = await GetParameterValueAsync(AgentContentParameters.PayloadType);
+            var commitMessage = await GetParameterValueAsync(AgentContentParameters.CommitMessage, "AI Core commit");
+            var commitEmail = await GetParameterValueAsync(AgentContentParameters.CommitEmail);
 
             _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Request",
                 $"Action: {action}, ConnectionName: {connectionName}, Path: {path}, Branch: {branch}, CommitMessage: {commitMessage}");
 
             var connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
-            var connection = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.Git, _debugMessageSenderName, connectionName: connectionName);
+            var connection = await GetConnectionAsync(_requestAccessor, _responseAccessor, connections, ConnectionType.Git, _debugMessageSenderName, connectionName: connectionName);
             var login = connection.Content[ConnectionContentParameters.Login];
             var password = connection.Content[ConnectionContentParameters.Password];
             var gitStorageUrl = connection.Content[ConnectionContentParameters.GitStorageUrl];

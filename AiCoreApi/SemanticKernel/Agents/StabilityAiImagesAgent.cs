@@ -2,10 +2,8 @@
 using AiCoreApi.Models.DbModels;
 using System.Net.Http.Headers;
 using AiCoreApi.Common;
-using System.Web;
 using AiCoreApi.Data.Processors;
 using AiCoreApi.Common.Extensions;
-using AiCoreApi.Common.Monitoring;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
@@ -84,12 +82,12 @@ namespace AiCoreApi.SemanticKernel.Agents
         private readonly IConnectionProcessor _connectionProcessor;
 
         public StabilityAiImagesAgent(
+            IBaseAgentHelper baseAgentHelper,
             IConnectionProcessor connectionProcessor,
             ILogger<ApiCallAgent> logger,
-            MonitoringConfig monitoringConfig,
             IHttpClientFactory httpClientFactory,
             ResponseAccessor responseAccessor,
-            RequestAccessor requestAccessor) : base(responseAccessor, requestAccessor, monitoringConfig, logger)
+            RequestAccessor requestAccessor) : base(baseAgentHelper, logger)
         {
             _connectionProcessor = connectionProcessor;
             _httpClientFactory = httpClientFactory;
@@ -99,12 +97,11 @@ namespace AiCoreApi.SemanticKernel.Agents
 
         public override async Task<string> DoCall(AgentModel agent, Dictionary<string, string> parameters)
         {
-            parameters.ToList().ForEach(p => parameters[p.Key] = HttpUtility.HtmlDecode(p.Value));
             _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
             var connectionName = agent.Content[AgentContentParameters.StabilityAiConnectionName].Value;
             var connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
-            var connection = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.StabilityAi, _debugMessageSenderName, connectionName: connectionName);
+            var connection = await GetConnectionAsync(_requestAccessor, _responseAccessor, connections, ConnectionType.StabilityAi, _debugMessageSenderName, connectionName: connectionName);
             if (connection == null)
             {
                 throw new Exception("Connection not found");
@@ -225,13 +222,13 @@ namespace AiCoreApi.SemanticKernel.Agents
 
         public async Task<string> StableImageUltra(string apiKey, AgentModel agent, Dictionary<string, string> parameters)
         {
-            var image = GetImageBytes(parameters, agent, AgentContentParameters.GenerateInputImageBase64);
-            var generatePrompt = ApplyParameters(agent, parameters, AgentContentParameters.GeneratePrompt);
-            var promptNegative = ApplyParameters(agent, parameters, AgentContentParameters.GeneratePromptNegative);
-            var aspectRatio = ApplyParameters(agent, parameters, AgentContentParameters.GenerateAspectRatio);
-            var seed = ApplyParameters(agent, parameters, AgentContentParameters.GenerateSeed);
-            var stylePreset = ApplyParameters(agent, parameters, AgentContentParameters.GenerateStylePreset);
-            var strength = ApplyParameters(agent, parameters, AgentContentParameters.GenerateStrength);
+            var image = await GetImageBytes(parameters, agent, AgentContentParameters.GenerateInputImageBase64);
+            var generatePrompt = await GetParameterValueAsync(AgentContentParameters.GeneratePrompt);
+            var promptNegative = await GetParameterValueAsync(AgentContentParameters.GeneratePromptNegative);
+            var aspectRatio = await GetParameterValueAsync(AgentContentParameters.GenerateAspectRatio);
+            var seed = await GetParameterValueAsync(AgentContentParameters.GenerateSeed);
+            var stylePreset = await GetParameterValueAsync(AgentContentParameters.GenerateStylePreset);
+            var strength = await GetParameterValueAsync(AgentContentParameters.GenerateStrength);
             using var formData = new MultipartFormDataContent
             {
                 ImageFormField("image", image, "image.png", "image/png"),
@@ -253,15 +250,15 @@ namespace AiCoreApi.SemanticKernel.Agents
 
         public async Task<string> StableDiffusion35(string apiKey, AgentModel agent, Dictionary<string, string> parameters)
         {
-            var image = GetImageBytes(parameters, agent, AgentContentParameters.GenerateInputImageBase64);
-            var generatePrompt = ApplyParameters(agent, parameters, AgentContentParameters.GeneratePrompt);
-            var mode = ApplyParameters(agent, parameters, AgentContentParameters.GenerateMode);
-            var promptNegative = ApplyParameters(agent, parameters, AgentContentParameters.GeneratePromptNegative);
-            var aspectRatio = ApplyParameters(agent, parameters, AgentContentParameters.GenerateAspectRatio);
-            var seed = ApplyParameters(agent, parameters, AgentContentParameters.GenerateSeed);
-            var stylePreset = ApplyParameters(agent, parameters, AgentContentParameters.GenerateStylePreset);
-            var strength = ApplyParameters(agent, parameters, AgentContentParameters.GenerateStrength);
-            var model = ApplyParameters(agent, parameters, AgentContentParameters.GenerateModel);
+            var image = await GetImageBytes(parameters, agent, AgentContentParameters.GenerateInputImageBase64);
+            var generatePrompt = await GetParameterValueAsync(AgentContentParameters.GeneratePrompt);
+            var mode = await GetParameterValueAsync(AgentContentParameters.GenerateMode);
+            var promptNegative = await GetParameterValueAsync(AgentContentParameters.GeneratePromptNegative);
+            var aspectRatio = await GetParameterValueAsync(AgentContentParameters.GenerateAspectRatio);
+            var seed = await GetParameterValueAsync(AgentContentParameters.GenerateSeed);
+            var stylePreset = await GetParameterValueAsync(AgentContentParameters.GenerateStylePreset);
+            var strength = await GetParameterValueAsync(AgentContentParameters.GenerateStrength);
+            var model = await GetParameterValueAsync(AgentContentParameters.GenerateModel);
             using var formData = new MultipartFormDataContent
             {
                 ImageFormField("image", image, "image.png", "image/png"),
@@ -287,11 +284,11 @@ namespace AiCoreApi.SemanticKernel.Agents
         
         public async Task<string> StableImageCore(string apiKey, AgentModel agent, Dictionary<string, string> parameters)
         {
-            var generatePrompt = ApplyParameters(agent, parameters, AgentContentParameters.GeneratePrompt);
-            var promptNegative = ApplyParameters(agent, parameters, AgentContentParameters.GeneratePromptNegative);
-            var aspectRatio = ApplyParameters(agent, parameters, AgentContentParameters.GenerateAspectRatio);
-            var seed = ApplyParameters(agent, parameters, AgentContentParameters.GenerateSeed);
-            var stylePreset = ApplyParameters(agent, parameters, AgentContentParameters.GenerateStylePreset);
+            var generatePrompt = await GetParameterValueAsync(AgentContentParameters.GeneratePrompt);
+            var promptNegative = await GetParameterValueAsync(AgentContentParameters.GeneratePromptNegative);
+            var aspectRatio = await GetParameterValueAsync(AgentContentParameters.GenerateAspectRatio);
+            var seed = await GetParameterValueAsync(AgentContentParameters.GenerateSeed);
+            var stylePreset = await GetParameterValueAsync(AgentContentParameters.GenerateStylePreset);
             using var formData = new MultipartFormDataContent
             {
                 StringFormField("prompt", generatePrompt),
@@ -312,10 +309,10 @@ namespace AiCoreApi.SemanticKernel.Agents
 
         public async Task<string> Conservative(string apiKey, AgentModel agent, Dictionary<string, string> parameters)
         {
-            var image = GetImageBytes(parameters, agent, AgentContentParameters.UpscaleInputImageBase64);
-            var upscalePrompt = ApplyParameters(agent, parameters, AgentContentParameters.UpscalePrompt);
-            var promptNegative = ApplyParameters(agent, parameters, AgentContentParameters.UpscalePromptNegative);
-            var upscaleCreativity = ApplyParameters(agent, parameters, AgentContentParameters.UpscaleCreativity);
+            var image = await GetImageBytes(parameters, agent, AgentContentParameters.UpscaleInputImageBase64);
+            var upscalePrompt = await GetParameterValueAsync(AgentContentParameters.UpscalePrompt);
+            var promptNegative = await GetParameterValueAsync(AgentContentParameters.UpscalePromptNegative);
+            var upscaleCreativity = await GetParameterValueAsync(AgentContentParameters.UpscaleCreativity);
             using var formData = new MultipartFormDataContent
             {
                 ImageFormField("image", image, "image.png", "image/png"),
@@ -332,7 +329,7 @@ namespace AiCoreApi.SemanticKernel.Agents
 
         public async Task<string> Fast(string apiKey, AgentModel agent, Dictionary<string, string> parameters)
         {
-            var image = GetImageBytes(parameters, agent, AgentContentParameters.UpscaleInputImageBase64);
+            var image = await GetImageBytes(parameters, agent, AgentContentParameters.UpscaleInputImageBase64);
             using var formData = new MultipartFormDataContent
             {
                 ImageFormField("image", image, "image.png", "image/png"),
@@ -345,8 +342,8 @@ namespace AiCoreApi.SemanticKernel.Agents
 
         public async Task<string> Outpaint(string apiKey, AgentModel agent, Dictionary<string, string> parameters)
         {
-            var image = GetImageBytes(parameters, agent, AgentContentParameters.EditInputImageBase64);
-            var outpaintDirection = ApplyParameters(agent, parameters, AgentContentParameters.EditOutpaintDirection);
+            var image = await GetImageBytes(parameters, agent, AgentContentParameters.EditInputImageBase64);
+            var outpaintDirection = await GetParameterValueAsync(AgentContentParameters.EditOutpaintDirection);
             var outpaintDirectionParts = outpaintDirection.Split(';', ',');
             using var formData = new MultipartFormDataContent
             {
@@ -363,7 +360,7 @@ namespace AiCoreApi.SemanticKernel.Agents
 
         public async Task<string> RemoveBackground(string apiKey, AgentModel agent, Dictionary<string, string> parameters)
         {
-            var image = GetImageBytes(parameters, agent, AgentContentParameters.EditInputImageBase64);
+            var image = await GetImageBytes(parameters, agent, AgentContentParameters.EditInputImageBase64);
             using var formData = new MultipartFormDataContent
             {
                 ImageFormField("image", image, "image.png", "image/png"),
@@ -374,10 +371,10 @@ namespace AiCoreApi.SemanticKernel.Agents
         
         public async Task<string> SearchAndRecolor(string apiKey, AgentModel agent, Dictionary<string, string> parameters)
         {
-            var image = GetImageBytes(parameters, agent, AgentContentParameters.EditInputImageBase64);
-            var promptToAdd = ApplyParameters(agent, parameters, AgentContentParameters.EditPromptToAdd);
-            var promptToReplace = ApplyParameters(agent, parameters, AgentContentParameters.EditPromptToReplace);
-            var promptNegative = ApplyParameters(agent, parameters, AgentContentParameters.EditPromptNegative);
+            var image = await GetImageBytes(parameters, agent, AgentContentParameters.EditInputImageBase64);
+            var promptToAdd = await GetParameterValueAsync(AgentContentParameters.EditPromptToAdd);
+            var promptToReplace = await GetParameterValueAsync(AgentContentParameters.EditPromptToReplace);
+            var promptNegative = await GetParameterValueAsync(AgentContentParameters.EditPromptNegative);
             using var formData = new MultipartFormDataContent
             {
                 ImageFormField("image", image, "image.png", "image/png"),
@@ -392,10 +389,10 @@ namespace AiCoreApi.SemanticKernel.Agents
 
         public async Task<string> SearchAndReplace(string apiKey, AgentModel agent, Dictionary<string, string> parameters)
         {
-            var image = GetImageBytes(parameters, agent, AgentContentParameters.EditInputImageBase64);
-            var promptToAdd = ApplyParameters(agent, parameters, AgentContentParameters.EditPromptToAdd);
-            var promptToReplace = ApplyParameters(agent, parameters, AgentContentParameters.EditPromptToReplace);
-            var promptNegative = ApplyParameters(agent, parameters, AgentContentParameters.EditPromptNegative);
+            var image = await GetImageBytes(parameters, agent, AgentContentParameters.EditInputImageBase64);
+            var promptToAdd = await GetParameterValueAsync(AgentContentParameters.EditPromptToAdd);
+            var promptToReplace = await GetParameterValueAsync(AgentContentParameters.EditPromptToReplace);
+            var promptNegative = await GetParameterValueAsync(AgentContentParameters.EditPromptNegative);
             using var formData = new MultipartFormDataContent
             {
                 ImageFormField("image", image, "image.png", "image/png"),
@@ -412,11 +409,11 @@ namespace AiCoreApi.SemanticKernel.Agents
 
         public async Task<string> Structure(string apiKey, AgentModel agent, Dictionary<string, string> parameters)
         {
-            var image = GetImageBytes(parameters, agent, AgentContentParameters.ControlInputImageBase64);
-            var controlPrompt = ApplyParameters(agent, parameters, AgentContentParameters.ControlPrompt);
-            var controlStrength = ApplyParameters(agent, parameters, AgentContentParameters.ControlStrength);
-            var promptNegative = ApplyParameters(agent, parameters, AgentContentParameters.ControlPromptNegative);
-            var controlStylePreset = ApplyParameters(agent, parameters, AgentContentParameters.ControlStylePreset);
+            var image = await GetImageBytes(parameters, agent, AgentContentParameters.ControlInputImageBase64);
+            var controlPrompt = await GetParameterValueAsync(AgentContentParameters.ControlPrompt);
+            var controlStrength = await GetParameterValueAsync(AgentContentParameters.ControlStrength);
+            var promptNegative = await GetParameterValueAsync(AgentContentParameters.ControlPromptNegative);
+            var controlStylePreset = await GetParameterValueAsync(AgentContentParameters.ControlStylePreset);
             using var formData = new MultipartFormDataContent
             {
                 ImageFormField("image", image, "image.png", "image/png"),
@@ -433,11 +430,11 @@ namespace AiCoreApi.SemanticKernel.Agents
         
         public async Task<string> Sketch(string apiKey, AgentModel agent, Dictionary<string, string> parameters)
         {
-            var image = GetImageBytes(parameters, agent, AgentContentParameters.ControlInputImageBase64);
-            var controlPrompt = ApplyParameters(agent, parameters, AgentContentParameters.ControlPrompt);
-            var controlStrength = ApplyParameters(agent, parameters, AgentContentParameters.ControlStrength);
-            var promptNegative = ApplyParameters(agent, parameters, AgentContentParameters.ControlPromptNegative);
-            var controlStylePreset = ApplyParameters(agent, parameters, AgentContentParameters.ControlStylePreset);
+            var image = await GetImageBytes(parameters, agent, AgentContentParameters.ControlInputImageBase64);
+            var controlPrompt = await GetParameterValueAsync(AgentContentParameters.ControlPrompt);
+            var controlStrength = await GetParameterValueAsync(AgentContentParameters.ControlStrength);
+            var promptNegative = await GetParameterValueAsync(AgentContentParameters.ControlPromptNegative);
+            var controlStylePreset = await GetParameterValueAsync(AgentContentParameters.ControlStylePreset);
             using var formData = new MultipartFormDataContent
             {
                 ImageFormField("image", image, "image.png", "image/png"),
@@ -454,12 +451,12 @@ namespace AiCoreApi.SemanticKernel.Agents
 
         public async Task<string> Style(string apiKey, AgentModel agent, Dictionary<string, string> parameters)
         {
-            var image = GetImageBytes(parameters, agent, AgentContentParameters.ControlInputImageBase64);
-            var controlPrompt = ApplyParameters(agent, parameters, AgentContentParameters.ControlPrompt);
-            var promptNegative = ApplyParameters(agent, parameters, AgentContentParameters.ControlPromptNegative);
-            var controlStylePreset = ApplyParameters(agent, parameters, AgentContentParameters.ControlStylePreset);
-            var controlAspectRatio = ApplyParameters(agent, parameters, AgentContentParameters.ControlAspectRatio);
-            var controlFidelity = ApplyParameters(agent, parameters, AgentContentParameters.ControlFidelity);
+            var image = await GetImageBytes(parameters, agent, AgentContentParameters.ControlInputImageBase64);
+            var controlPrompt = await GetParameterValueAsync(AgentContentParameters.ControlPrompt);
+            var promptNegative = await GetParameterValueAsync(AgentContentParameters.ControlPromptNegative);
+            var controlStylePreset = await GetParameterValueAsync(AgentContentParameters.ControlStylePreset);
+            var controlAspectRatio = await GetParameterValueAsync(AgentContentParameters.ControlAspectRatio);
+            var controlFidelity = await GetParameterValueAsync(AgentContentParameters.ControlFidelity);
             using var formData = new MultipartFormDataContent
             {
                 ImageFormField("image", image, "image.png", "image/png"),
@@ -478,9 +475,6 @@ namespace AiCoreApi.SemanticKernel.Agents
         }
 
         // API end
-
-        private string ApplyParameters(AgentModel agent, Dictionary<string, string> parameters, string key) => 
-            !agent.Content.ContainsKey(key) ? "" : ApplyParameters(agent.Content[key].Value, parameters);
 
         private async Task<string> CallStabilityAi(string url, string apiKey, MultipartFormDataContent formData)
         {
@@ -521,9 +515,9 @@ namespace AiCoreApi.SemanticKernel.Agents
             return formField;
         }
 
-        private byte[] GetImageBytes(Dictionary<string, string> parameters, AgentModel agent, string? parameterName)
+        private async Task<byte[]> GetImageBytes(Dictionary<string, string> parameters, AgentModel agent, string? parameterName)
         {
-            var imageString = ApplyParameters(agent, parameters, parameterName);
+            var imageString = await GetParameterValueAsync(parameterName);
             if (string.IsNullOrEmpty(imageString) && !_requestAccessor.MessageDialog!.Messages!.Last().HasFiles())
                 throw new Exception("Image not found");
             var image = string.IsNullOrEmpty(imageString)

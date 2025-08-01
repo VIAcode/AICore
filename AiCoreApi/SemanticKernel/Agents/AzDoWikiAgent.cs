@@ -4,7 +4,6 @@ using AiCoreApi.Common;
 using System.Web;
 using System.Net.Http.Headers;
 using AiCoreApi.Data.Processors;
-using AiCoreApi.Common.Monitoring;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
@@ -41,13 +40,13 @@ namespace AiCoreApi.SemanticKernel.Agents
         }
 
         public AzDoWikiAgent(
+            IBaseAgentHelper baseAgentHelper,
             IHttpClientFactory httpClientFactory,
             IConnectionProcessor connectionProcessor,
             RequestAccessor requestAccessor,
             ResponseAccessor responseAccessor,
-            MonitoringConfig monitoringConfig,
             ILogger<AzDoWikiAgent> logger)
-            : base(responseAccessor, requestAccessor, monitoringConfig, logger)
+            : base(baseAgentHelper, logger)
         {
             _connectionProcessor = connectionProcessor;
             _httpClientFactory = httpClientFactory;
@@ -57,15 +56,14 @@ namespace AiCoreApi.SemanticKernel.Agents
 
         public override async Task<string> DoCall(AgentModel agent, Dictionary<string, string> parameters)
         {
-            parameters.ToList().ForEach(p => parameters[p.Key] = HttpUtility.HtmlDecode(p.Value));
             _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
-            var path = agent.Content.ContainsKey(AgentContentParameters.Path) ? ApplyParameters(agent.Content[AgentContentParameters.Path].Value, parameters) : string.Empty;
+            var path = await GetParameterValueAsync(AgentContentParameters.Path);
             var action = agent.Content[AgentContentParameters.Action].Value;
             var connectionName = agent.Content[AgentContentParameters.ConnectionName].Value;
 
             var connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
-            var connection = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.AzDoWiki, _debugMessageSenderName, connectionName: connectionName);
+            var connection = await GetConnectionAsync(_requestAccessor, _responseAccessor, connections, ConnectionType.AzDoWiki, _debugMessageSenderName, connectionName: connectionName);
 
             var pat = connection.Content[ConnectionParameters.Pat];
             var org = connection.Content[ConnectionParameters.Organization];
@@ -85,7 +83,7 @@ namespace AiCoreApi.SemanticKernel.Agents
                 case Actions.List:
                     return await ListWikiPages(client, org, project, wiki);
                 case Actions.AddOrUpdate:
-                    var content = agent.Content.ContainsKey(AgentContentParameters.Content) ? ApplyParameters(agent.Content[AgentContentParameters.Content].Value, parameters) : string.Empty;
+                    var content = await GetParameterValueAsync(AgentContentParameters.Content);
                     return await AddOrUpdateWikiPage(client, org, project, wiki, path, content);
                 case Actions.Delete:
                     return await DeleteWikiPage(client, org, project, wiki, path);

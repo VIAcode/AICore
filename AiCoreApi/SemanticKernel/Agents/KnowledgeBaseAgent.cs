@@ -6,10 +6,8 @@ using AiCoreApi.Common.KernelMemory;
 using AiCoreApi.Models.ViewModels;
 using Microsoft.KernelMemory;
 using AiCoreApi.Data.Processors;
-using System.Web;
 using AiCoreApi.Common.Extensions;
 using ConnectionType = AiCoreApi.Models.DbModels.ConnectionType;
-using AiCoreApi.Common.Monitoring;
 using static AiCoreApi.Common.ExceptionHandlingMiddleware;
 using Microsoft.KernelMemory.AI;
 
@@ -86,6 +84,7 @@ namespace AiCoreApi.SemanticKernel.Agents
         private readonly IEvaluationProcessor _evaluationProcessor;
 
         public KnowledgeBaseAgent(
+            IBaseAgentHelper baseAgentHelper,
             RequestAccessor requestAccessor,
             ResponseAccessor responseAccessor,
             IKernelMemoryProvider kernelMemoryProvider,
@@ -94,13 +93,12 @@ namespace AiCoreApi.SemanticKernel.Agents
             ILoginProcessor loginProcessor,
             IFeatureFlags featureFlags,
             ExtendedConfig extendedConfig,
-            MonitoringConfig monitoringConfig,
             ITaskProcessor taskProcessor,
             ISemanticKernelProvider semanticKernelProvider,
             IDocumentMetadataProcessor documentMetadataProcessor,
             IBingSearchAgent bingSearchAgent,
             IEvaluationProcessor evaluationProcessor,
-            ILogger<RagPromptAgent> logger) : base(responseAccessor, requestAccessor, monitoringConfig, logger)
+            ILogger<RagPromptAgent> logger) : base(baseAgentHelper, logger)
         {
             _requestAccessor = requestAccessor;
             _responseAccessor = responseAccessor;
@@ -119,7 +117,6 @@ namespace AiCoreApi.SemanticKernel.Agents
 
         public override async Task<string> DoCall(AgentModel agent, Dictionary<string, string> parameters)
         {
-            parameters.ToList().ForEach(p => parameters[p.Key] = HttpUtility.HtmlDecode(p.Value));
             _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
             var action = agent.Content.ContainsKey(AgentContentParameters.Action)
@@ -129,7 +126,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             return action switch
             {
                 Actions.Search => await SearchAsync(agent, parameters),
-                Actions.Sync => await SyncAsync(agent, parameters),
+                Actions.Sync => await SyncAsync(),
                 Actions.Feedback => await SyncFeedback(agent, parameters),
 
                 _ => await AnswerAsync(agent, parameters)
@@ -138,9 +135,9 @@ namespace AiCoreApi.SemanticKernel.Agents
 
         private async Task<string> SyncFeedback(AgentModel agent, Dictionary<string, string> parameters)
         {
-            var answer = ApplyParameters(agent.Content[AgentContentParameters.Answer].Value, parameters);
-            var feedback = ApplyParameters(agent.Content[AgentContentParameters.Feedback].Value, parameters);
-            var dataSource = ApplyParameters(agent.Content[AgentContentParameters.DataSource].Value, parameters);
+            var answer = await GetParameterValueAsync(AgentContentParameters.Answer);
+            var feedback = await GetParameterValueAsync(AgentContentParameters.Feedback);
+            var dataSource = await GetParameterValueAsync(AgentContentParameters.DataSource);
             var ingestion = await GetIngestionModel(dataSource);
 
             var tags = agent.Content.ContainsKey(AgentContentParameters.Tags) ? agent.Content[AgentContentParameters.Tags].Value : "";
@@ -152,13 +149,13 @@ namespace AiCoreApi.SemanticKernel.Agents
 
             var llmConnection = await GetLlmConnection(agent);
 
-            var autoSyncOnFeedback = ApplyParameters(agent.Content[AgentContentParameters.AutoSyncOnFeedback].Value, parameters).ToLower() == "true";
-            var useBingToEnrichFeedback = ApplyParameters(agent.Content[AgentContentParameters.UseBingToEnrichFeedback].Value, parameters).ToLower() == "true";
-            var changePrompt = ApplyParameters(agent.Content[AgentContentParameters.ChangePrompt].Value, parameters);
-            var searchPrompt = ApplyParameters(agent.Content[AgentContentParameters.SearchPrompt].Value, parameters)
+            var autoSyncOnFeedback = (await GetParameterValueAsync(AgentContentParameters.AutoSyncOnFeedback)).ToLower() == "true";
+            var useBingToEnrichFeedback = (await GetParameterValueAsync(AgentContentParameters.UseBingToEnrichFeedback)).ToLower() == "true";
+            var changePrompt = await GetParameterValueAsync(AgentContentParameters.ChangePrompt);
+            var searchPrompt = (await GetParameterValueAsync(AgentContentParameters.SearchPrompt))
                 .Replace(Placeholders.Answer, answer)
                 .Replace(Placeholders.Feedback, feedback);
-            var limit = ApplyParameters(agent.Content[AgentContentParameters.Limit].Value, parameters);
+            var limit = await GetParameterValueAsync(AgentContentParameters.Limit);
             var searchString = await _semanticKernelProvider.ExecutePrompt(llmConnection, searchPrompt, Constants.PromptTemperature, Constants.PrompTopP, "");
 
             var searchResults = await kernelMemory.SearchAsync(searchString, minRelevance: minRelevance,
@@ -169,7 +166,7 @@ namespace AiCoreApi.SemanticKernel.Agents
                 _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Response", "Nothing to update");
                 return "";
             }
-            var summarizePrompt = ApplyParameters(agent.Content[AgentContentParameters.SummarizePrompt].Value, parameters)
+            var summarizePrompt = (await GetParameterValueAsync(AgentContentParameters.SummarizePrompt))
                 .Replace(Placeholders.Answer, answer)
                 .Replace(Placeholders.Feedback, feedback);
             feedback = await _semanticKernelProvider.ExecutePrompt(llmConnection, summarizePrompt, Constants.PromptTemperature, Constants.PrompTopP, "");
@@ -189,12 +186,9 @@ namespace AiCoreApi.SemanticKernel.Agents
                 ? agent.Content[AgentContentParameters.Evaluation].Value
                 : "0";
             var evaluation = await _evaluationProcessor.Get(evaluationName, agent.WorkspaceId ?? 0);
-            if (evaluation == null)
+            if (evaluation == null && evaluationName != "0")
             {
-                var errorMessage = evaluationName == "0"
-                    ? "No evaluation configured for the agent."
-                    : $"No evaluation found with name: {evaluationName}";
-                throw new AiCoreUiException(errorMessage);
+                throw new AiCoreUiException($"No evaluation found with name: {evaluationName}");
             }
             var task = new TaskModel
             {
@@ -221,9 +215,9 @@ namespace AiCoreApi.SemanticKernel.Agents
             return "Feedback task scheduled successfully for ingestion: " + ingestion.Name;
         }
 
-        private async Task<string> SyncAsync(AgentModel agent, Dictionary<string, string> parameters)
+        private async Task<string> SyncAsync()
         {
-            var dataSource = ApplyParameters(agent.Content[AgentContentParameters.DataSource].Value, parameters);
+            var dataSource = await GetParameterValueAsync(AgentContentParameters.DataSource);
             var ingestion = await GetIngestionModel(dataSource);
             _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Request", $"# Syncing ingestion: {ingestion.Name}");
             var task = new TaskModel
@@ -243,8 +237,8 @@ namespace AiCoreApi.SemanticKernel.Agents
         {
             try
             {
-                var bingConnectionName = ApplyParameters(agent.Content[AgentContentParameters.BingConnectionName].Value, parameters);
-                var bingResultsLimit = ApplyParameters(agent.Content[AgentContentParameters.BingResultsLimit].Value, parameters);
+                var bingConnectionName = await GetParameterValueAsync(AgentContentParameters.BingConnectionName);
+                var bingResultsLimit = await GetParameterValueAsync(AgentContentParameters.BingResultsLimit);
                 var bingAgentModel = new AgentModel
                 {
                     Name = "FeedbackEnrichmentBing",
@@ -295,12 +289,12 @@ namespace AiCoreApi.SemanticKernel.Agents
         {
             var llmConnection = await GetLlmConnection(agent);
 
-            var searchResults = await DoSearchAsync(agent, parameters);
+            var searchResults = await DoSearchAsync(agent);
             _responseAccessor.CurrentMessage.Sources = MapSources(searchResults);
 
             var resultText = string.Join($"{Environment.NewLine}{Environment.NewLine}", searchResults.SelectMany(r => r.Partitions.Select(p => p.Text).ToList()));
-            var question = ApplyParameters(agent.Content[AgentContentParameters.Question].Value, parameters);
-            var prompt = ApplyParameters(agent.Content[AgentContentParameters.Prompt].Value, parameters)
+            var question = await GetParameterValueAsync(AgentContentParameters.Question);
+            var prompt = (await GetParameterValueAsync(AgentContentParameters.Prompt))
                 .Replace(Placeholders.Question, question);
 
             var prompTokens = new O200KTokenizer().CountTokens(prompt); // Default Tokenizer for gpt-4o-* models
@@ -336,7 +330,7 @@ namespace AiCoreApi.SemanticKernel.Agents
 
         private async Task<string> SearchAsync(AgentModel agent, Dictionary<string, string> parameters)
         {
-            var searchResults = await DoSearchAsync(agent, parameters);
+            var searchResults = await DoSearchAsync(agent);
             var resultText = searchResults.ToJson() ?? "";
             _responseAccessor.CurrentMessage.Sources = searchResults.Select(r => new MessageDialogViewModel.MessageSource
             {
@@ -348,11 +342,11 @@ namespace AiCoreApi.SemanticKernel.Agents
             return resultText;
         }
 
-        private async Task<List<SearchResult>> DoSearchAsync(AgentModel agent, Dictionary<string, string> parameters)
+        private async Task<List<SearchResult>> DoSearchAsync(AgentModel agent)
         {
-            var question = ApplyParameters(agent.Content[AgentContentParameters.Question].Value, parameters);
-            var dataSource = ApplyParameters(agent.Content[AgentContentParameters.DataSource].Value, parameters);
-            var topK = agent.Content.ContainsKey(AgentContentParameters.TopK) ? ApplyParameters(agent.Content[AgentContentParameters.TopK].Value, parameters) : "10";
+            var question = await GetParameterValueAsync(AgentContentParameters.Question);
+            var dataSource = await GetParameterValueAsync(AgentContentParameters.DataSource);
+            var topK = await GetParameterValueAsync(AgentContentParameters.TopK, "10");
             var ingestion = await GetIngestionModel(dataSource);
 
             var tags = agent.Content.ContainsKey(AgentContentParameters.Tags)
@@ -426,9 +420,9 @@ namespace AiCoreApi.SemanticKernel.Agents
 
             var vectorDbConnection = (string.IsNullOrEmpty(vectorDbConnectionId) || vectorDbConnectionId == "0")
                 ? null
-                : GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.AzureAiSearch, _debugMessageSenderName, connectionId: Convert.ToInt32(vectorDbConnectionId));
+                : await GetConnectionAsync(_requestAccessor, _responseAccessor, connections, ConnectionType.AzureAiSearch, _debugMessageSenderName, connectionId: Convert.ToInt32(vectorDbConnectionId));
 
-            var embeddingConnection = GetConnection(_requestAccessor, _responseAccessor, connections,
+            var embeddingConnection = await GetConnectionAsync(_requestAccessor, _responseAccessor, connections,
                 new[] { ConnectionType.AzureOpenAiEmbedding, ConnectionType.OpenAiEmbedding }, _debugMessageSenderName, connectionId: Convert.ToInt32(embeddingConnectionId));
 
             var llmConnection = await GetLlmConnection(agent, connections);
@@ -445,7 +439,7 @@ namespace AiCoreApi.SemanticKernel.Agents
         private async Task<ConnectionModel> GetLlmConnection(AgentModel agent, List<ConnectionModel>? connections = null)
         {
             connections ??= await _connectionProcessor.List(_requestAccessor.WorkspaceId);
-            var llmConnection = GetConnection(_requestAccessor, _responseAccessor, connections,
+            var llmConnection = await GetConnectionAsync(_requestAccessor, _responseAccessor, connections,
                 new[]
                 {
                     ConnectionType.AzureOpenAiLlm, 

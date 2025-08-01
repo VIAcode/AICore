@@ -4,7 +4,6 @@ using System.Web;
 using AiCoreApi.Common;
 using AiCoreApi.Data.Processors;
 using ConnectionType = AiCoreApi.Models.DbModels.ConnectionType;
-using AiCoreApi.Common.Monitoring;
 using System.Text.Json;
 using System.Net.Http.Headers;
 
@@ -29,8 +28,14 @@ namespace AiCoreApi.SemanticKernel.Agents
         private readonly RequestAccessor _requestAccessor;
         private readonly ResponseAccessor _responseAccessor;
         private readonly IHttpClientFactory _httpFactory;
-        public MemZeroAgent(IConnectionProcessor connProc, RequestAccessor requestAccessor, ResponseAccessor responseAccessor, IHttpClientFactory httpFactory, MonitoringConfig cfg, ILogger<MemZeroAgent> log)
-            : base(responseAccessor, requestAccessor, cfg, log)
+        public MemZeroAgent(
+            IBaseAgentHelper baseAgentHelper, 
+            IConnectionProcessor connProc, 
+            RequestAccessor requestAccessor, 
+            ResponseAccessor responseAccessor, 
+            IHttpClientFactory httpFactory, 
+            ILogger<MemZeroAgent> logger)
+            : base(baseAgentHelper, logger)
         {
             _connProc = connProc;
             _requestAccessor = requestAccessor;
@@ -40,15 +45,13 @@ namespace AiCoreApi.SemanticKernel.Agents
 
         public override async Task<string> DoCall(AgentModel agent, Dictionary<string, string> parameters)
         {
-            foreach (var k in parameters.Keys.ToList())
-                parameters[k] = HttpUtility.HtmlDecode(parameters[k]);
             _sender = $"{agent.Name} ({agent.Type})";
 
             var connName = agent.Content[Param.ConnectionName].Value;
-            var action = ApplyParameters(agent.Content[Param.Action].Value, parameters).ToUpper();
+            var action = (await GetParameterValueAsync(Param.Action)).ToUpper();
 
             var connections = await _connProc.List(_requestAccessor.WorkspaceId);
-            var connection = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.MemZero, _sender, connectionName: connName);
+            var connection = await GetConnectionAsync(_requestAccessor, _responseAccessor, connections, ConnectionType.MemZero, _sender, connectionName: connName);
             var baseUrl = connection.Content["baseUrl"].TrimEnd('/', ' ');
             var apiKey = connection.Content["apiKey"];
             var projectId = connection.Content["projectId"];
@@ -60,17 +63,17 @@ namespace AiCoreApi.SemanticKernel.Agents
 
             HttpResponseMessage resp;
             var result = "";
-            var userId = ApplyParameters(agent.Content[Param.UserId].Value, parameters);
+            var userId = await GetParameterValueAsync(Param.UserId);
 
             switch (action)
             {
                 case "ADD":
                     {
-                        var message = ApplyParameters(agent.Content[Param.Message].Value, parameters);
+                        var message = await GetParameterValueAsync(Param.Message);
                         var expirationDate = agent.Content.ContainsKey(Param.ExpirationDate)
-                            ? ApplyParameters(agent.Content[Param.ExpirationDate].Value, parameters)
+                            ? await GetParameterValueAsync(Param.ExpirationDate)
                             : "";
-                        var asyncMode = ApplyParameters(agent.Content[Param.AsyncMode].Value, parameters);
+                        var asyncMode = await GetParameterValueAsync(Param.AsyncMode);
                         var addPayload = new Dictionary<string, object>
                         {
                             { "messages", new[] { new { role = "user", content = message } } },
@@ -93,8 +96,8 @@ namespace AiCoreApi.SemanticKernel.Agents
                     }
                 case "SEARCH":
                     {
-                        var searchString = ApplyParameters(agent.Content[Param.SearchString].Value, parameters);
-                        var topK = ApplyParameters(agent.Content[Param.TopK].Value, parameters);
+                        var searchString = await GetParameterValueAsync(Param.SearchString);
+                        var topK = await GetParameterValueAsync(Param.TopK);
                         var searchPayload = new Dictionary<string, object>
                         {
                             { "query", searchString },

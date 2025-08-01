@@ -1,12 +1,10 @@
 using Microsoft.SemanticKernel;
 using AiCoreApi.Models.DbModels;
-using System.Web;
 using AiCoreApi.Common;
 using AiCoreApi.Data.Processors;
 using Microsoft.SemanticKernel.ChatCompletion;
 using Microsoft.SemanticKernel.Connectors.OpenAI;
 using AiCoreApi.Common.Extensions;
-using AiCoreApi.Common.Monitoring;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
@@ -32,12 +30,12 @@ namespace AiCoreApi.SemanticKernel.Agents
         private readonly IConnectionProcessor _connectionProcessor;
 
         public ImageToTextAgent(
+            IBaseAgentHelper baseAgentHelper,
             ISemanticKernelProvider semanticKernelProvider,
             RequestAccessor requestAccessor,
             ResponseAccessor responseAccessor,
             IConnectionProcessor connectionProcessor,
-            MonitoringConfig monitoringConfig,
-            ILogger<ImageToTextAgent> logger) : base(responseAccessor, requestAccessor, monitoringConfig, logger)
+            ILogger<ImageToTextAgent> logger) : base(baseAgentHelper, logger)
         {
             _semanticKernelProvider = semanticKernelProvider;
             _requestAccessor = requestAccessor;
@@ -49,17 +47,16 @@ namespace AiCoreApi.SemanticKernel.Agents
             AgentModel agent, 
             Dictionary<string, string> parameters)
         {
-            parameters.ToList().ForEach(p => parameters[p.Key] = HttpUtility.HtmlDecode(p.Value));
             _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
-            var base64Image = ApplyParameters(agent.Content[AgentContentParameters.Base64Image].Value, parameters);
-            var mimeType = ApplyParameters(agent.Content[AgentContentParameters.MimeType].Value, parameters);
-            var prompt = ApplyParameters(agent.Content[AgentContentParameters.Prompt].Value, parameters);
-            var systemMessage = agent.Content.ContainsKey(AgentContentParameters.SystemMessage) ? agent.Content[AgentContentParameters.SystemMessage].Value : string.Empty;
+            var base64Image = await GetParameterValueAsync(AgentContentParameters.Base64Image);
+            var mimeType = await GetParameterValueAsync(AgentContentParameters.MimeType);
+            var prompt = await GetParameterValueAsync(AgentContentParameters.Prompt);
+            var systemMessage = await GetParameterValueAsync(AgentContentParameters.SystemMessage); 
 
             if (_requestAccessor.MessageDialog.Messages!.Last().HasFiles())
             {
-                base64Image = ApplyParameters(base64Image, new Dictionary<string, string>
+                base64Image = await ApplyParametersAsync(base64Image, new Dictionary<string, string>
                 {
                     {AgentPromptPlaceholders.FileDataPlaceholder, _requestAccessor.MessageDialog.Messages!.Last().Files!.First().Base64Data},
                 });
@@ -68,7 +65,7 @@ namespace AiCoreApi.SemanticKernel.Agents
 
             var imageData = Convert.FromBase64String(base64Image.StripBase64());
             var connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
-            var llmConnection = GetConnection(_requestAccessor, _responseAccessor, connections, 
+            var llmConnection = await GetConnectionAsync(_requestAccessor, _responseAccessor, connections, 
                 new[] { ConnectionType.AzureOpenAiLlm, ConnectionType.OpenAiLlm, ConnectionType.GeminiLlm }, _debugMessageSenderName, agent.LlmType);
             var kernel = _semanticKernelProvider.GetKernel(llmConnection);
             var chat = kernel.GetRequiredService<IChatCompletionService>();

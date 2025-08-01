@@ -2,9 +2,7 @@ using AiCoreApi.Models.DbModels;
 using AiCoreApi.Common;
 using AiCoreApi.Data.Processors;
 using static AiCoreApi.Common.ExceptionHandlingMiddleware;
-using System.Web;
 using AiCoreApi.Common.Extensions;
-using AiCoreApi.Common.Monitoring;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
@@ -62,15 +60,14 @@ namespace AiCoreApi.SemanticKernel.Agents
         }
 
         public CompositeLoopAgent(
-            IAgentsProcessor agentsProcessor,
+            IBaseAgentHelper baseAgentHelper,
             IPlannerHelpers plannerHelpers,
             ISemanticKernelProvider semanticKernelProvider,
             IConnectionProcessor connectionProcessor,
             RequestAccessor requestAccessor,
             ResponseAccessor responseAccessor,
-            MonitoringConfig monitoringConfig,
             ILogger<CompositeLoopAgent> logger)
-            : base(agentsProcessor, responseAccessor, requestAccessor, monitoringConfig, logger)
+            : base(baseAgentHelper, logger)
         {
             _requestAccessor = requestAccessor;
             _responseAccessor = responseAccessor;
@@ -81,19 +78,18 @@ namespace AiCoreApi.SemanticKernel.Agents
 
         public override async Task<string> DoCall(AgentModel agent, Dictionary<string, string> parameters)
         {
-            parameters.ToList().ForEach(p => parameters[p.Key] = HttpUtility.HtmlDecode(p.Value));
             _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
             var connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
-            var llmConnection = GetConnection(_requestAccessor, _responseAccessor, connections,
+            var llmConnection = await GetConnectionAsync(_requestAccessor, _responseAccessor, connections,
                 new[] { ConnectionType.AzureOpenAiLlm, ConnectionType.OpenAiLlm, ConnectionType.CohereLlm, ConnectionType.GeminiLlm, ConnectionType.DeepSeekLlm }, _debugMessageSenderName, agent.LlmType);
 
-            var userInput = ApplyParameters(agent.Content[AgentContentParameters.UserInput].Value, parameters);
-            var systemMessage = ApplyParameters(agent.Content[AgentContentParameters.SystemMessage].Value, parameters);
-            var maxIterations = Convert.ToInt32(ApplyParameters(agent.Content[AgentContentParameters.MaxIterations].Value, parameters));
-            var preprocessPromptTemplate = ApplyParameters(agent.Content.GetValueOrDefault(AgentContentParameters.PreprocessPromptTemplate)?.Value ?? "", parameters);
-            var finalPolishPrompt = ApplyParameters(agent.Content.GetValueOrDefault(AgentContentParameters.FinalPolishPrompt)?.Value ?? "", parameters);
-            var plannerPromptTemplate = ApplyParameters(agent.Content.GetValueOrDefault(AgentContentParameters.PlannerPromptTemplate)?.Value ?? "", parameters);
+            var userInput = await GetParameterValueAsync(AgentContentParameters.UserInput);
+            var systemMessage = await GetParameterValueAsync(AgentContentParameters.SystemMessage);
+            var maxIterations = Convert.ToInt32(await GetParameterValueAsync(AgentContentParameters.MaxIterations));
+            var preprocessPromptTemplate = await GetParameterValueAsync(AgentContentParameters.PreprocessPromptTemplate);
+            var finalPolishPrompt = await GetParameterValueAsync(AgentContentParameters.FinalPolishPrompt);
+            var plannerPromptTemplate = await GetParameterValueAsync(AgentContentParameters.PlannerPromptTemplate);
             var temperature = GetTemperature(llmConnection, agent);
             var topP = GetTopP(agent);
 
