@@ -1,3 +1,4 @@
+using AiCoreApi.Common;
 using AiCoreApi.Common.Extensions;
 using AiCoreApi.Common.KernelMemory;
 using AiCoreApi.Data.Processors;
@@ -10,17 +11,20 @@ namespace AiCoreApi.Services.IngestionServices
         private readonly ILogger<WebUrlIngestionService> _logger;
         private readonly IFileIngestionClient _fileIngestionClient;
         private readonly IDocumentMetadataProcessor _documentMetadataProcessor;
+        private readonly IHttpClientFactory _httpClientFactory;
         private readonly IDataIngestionHelperService _dataIngestionHelperService;
 
         public WebUrlIngestionService(
             ILogger<WebUrlIngestionService> logger,
             IFileIngestionClient fileIngestionClient,
             IDocumentMetadataProcessor documentMetadataProcessor,
+            IHttpClientFactory httpClientFactory,
             IDataIngestionHelperService dataIngestionHelperService)
         {
             _logger = logger;
             _fileIngestionClient = fileIngestionClient;
             _documentMetadataProcessor = documentMetadataProcessor;
+            _httpClientFactory = httpClientFactory;
             _dataIngestionHelperService = dataIngestionHelperService;
         }
         
@@ -66,7 +70,7 @@ namespace AiCoreApi.Services.IngestionServices
 
         public async Task<string> GetFileByPath(IngestionModel ingestion, string filePath)
         {
-            var httpClient = new HttpClient();
+            var httpClient = _httpClientFactory.CreateClient(HttpClients.NoRetryClient);
             var uri = new Uri(filePath);
             try
             {

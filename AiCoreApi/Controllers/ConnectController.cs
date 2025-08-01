@@ -289,7 +289,7 @@ namespace AiCoreApi.Controllers
                 return BadRequest("AccessToken is required");
             var jsonToken = new JwtSecurityTokenHandler().ReadToken(connectionCreateModel.AccessToken) as JwtSecurityToken;
             var jwtPayload = jsonToken!.Payload!;
-            if(jwtPayload.ValidTo < DateTime.UtcNow)
+            if (jwtPayload.ValidTo < DateTime.UtcNow)
                 return Unauthorized("Access token is expired");
 
             var credentials = await _entraTokenProvider.GetCredentialsFromKeyVaultAsync(connectionCreateModel.ManagedIdentity);
@@ -359,15 +359,9 @@ namespace AiCoreApi.Controllers
     <h1>Refresh Token Creation Complete. Now you can close this tab.</h1>
     <script>
       const token = {System.Text.Json.JsonSerializer.Serialize(refreshToken)};
-      // Option 1: Post message to opener
-      debugger;
       if (window.opener) {{
         window.opener.postMessage({{ type: 'refresh_token', token: token }}, '*');
         window.close();
-      }} else {{
-        // Option 2: Store in localStorage (use a shared domain if needed)
-        localStorage.setItem('refresh_token', token);
-        document.body.innerHTML = 'Token saved. You can close this window.';
       }}
     </script>
   </body>

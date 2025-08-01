@@ -147,7 +147,7 @@ namespace AiCoreApi.SemanticKernel.Agents
                         var dsPath = parts[2];
                         var cacheSeconds = (parts.Length == 4 && int.TryParse(parts[3], out var c)) ? c : 0;
 
-                        var cacheKey = $"{HttpUtility.UrlEncode(dsName)}_{HttpUtility.UrlEncode(dsPath)}";
+                        var cacheKey = $"DS_{HttpUtility.UrlEncode(_requestAccessor.WorkspaceId.ToString())}_{HttpUtility.UrlEncode(dsName)}_{HttpUtility.UrlEncode(dsPath)}";
                         var cachedValue = _cacheAccessor.GetCacheValue(cacheKey);
 
                         if (!string.IsNullOrEmpty(cachedValue))
