@@ -37,10 +37,10 @@ namespace AiCoreApi.SemanticKernel.Agents
         public override async Task<string> DoCall(AgentModel agent, Dictionary<string, string> parameters)
         {
             var connectionName = agent.Content[AgentContentParameters.EmbeddingConnectionName].Value;
-            var inputText = GetParameterValue(AgentContentParameters.Text);
+            var inputText = await GetParameterValueAsync(AgentContentParameters.Text);
 
             var connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
-            var connection = GetConnection(_requestAccessor, _responseAccessor, connections,
+            var connection = await GetConnectionAsync(_requestAccessor, _responseAccessor, connections,
                 new[] { ConnectionType.AzureOpenAiEmbedding, ConnectionType.OpenAiEmbedding }, agent.Name, connectionName: connectionName);
 
             _responseAccessor.AddDebugMessage(agent.Name, "DoCall Request", inputText);

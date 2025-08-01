@@ -55,11 +55,11 @@ namespace AiCoreApi.SemanticKernel.Agents
         {
             _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
-            var queryString = GetParameterValue(AgentContentParameters.QueryString);
-            var maxContentLength = GetParameterValue(AgentContentParameters.MaxContentLength);
+            var queryString = await GetParameterValueAsync(AgentContentParameters.QueryString);
+            var maxContentLength = await GetParameterValueAsync(AgentContentParameters.MaxContentLength);
             if(string.IsNullOrEmpty(maxContentLength))
                 maxContentLength = DefaultMaxContentLength.ToString();
-            queryString = ApplyParameters(queryString, new Dictionary<string, string>
+            queryString = await ApplyParametersAsync(queryString, new Dictionary<string, string>
             {
                 {AgentPromptPlaceholders.HasFilesPlaceholder, _requestAccessor.MessageDialog.Messages.Last().HasFiles().ToString()},
                 {AgentPromptPlaceholders.FilesDataPlaceholder, _requestAccessor.MessageDialog.Messages.Last().GetFileContents()},
@@ -69,7 +69,7 @@ namespace AiCoreApi.SemanticKernel.Agents
 
             var bingConnectionName = agent.Content[AgentContentParameters.BingConnection].Value;
             var connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
-            var bingConnection = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.BingApi, _debugMessageSenderName, connectionName: bingConnectionName);
+            var bingConnection = await GetConnectionAsync(_requestAccessor, _responseAccessor, connections, ConnectionType.BingApi, _debugMessageSenderName, connectionName: bingConnectionName);
 
             var count = int.Parse(agent.Content[AgentContentParameters.Count].Value);
             var outputType = agent.Content.TryGetValue(AgentContentParameters.OutputType, out var ot) ? ot.Value : "snippetTexts";

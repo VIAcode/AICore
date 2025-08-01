@@ -39,14 +39,14 @@ namespace AiCoreApi.SemanticKernel.Agents
         {
             _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
-            var url = GetParameterValue(AgentContentParameters.Url);
+            var url = await GetParameterValueAsync(AgentContentParameters.Url);
             var uri = new Uri(url);
             using var httpRequestMessage = new HttpRequestMessage(GetHttpMethod(agent), uri);
             var body = string.Empty;
             if (agent.Content.ContainsKey(AgentContentParameters.Body) 
                 && !string.IsNullOrWhiteSpace(agent.Content[AgentContentParameters.Body].Value))
             {
-                body = GetParameterValue(AgentContentParameters.Body);
+                body = await GetParameterValueAsync(AgentContentParameters.Body);
                 if (agent.Content.ContainsKey(AgentContentParameters.ContentType) 
                     && !string.IsNullOrWhiteSpace(agent.Content[AgentContentParameters.ContentType].Value))
                 {
@@ -55,13 +55,13 @@ namespace AiCoreApi.SemanticKernel.Agents
                 }
             }
             _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Request", $"{GetHttpMethod(agent)}: {uri}\r\nBody: \r\n{body}");
-            var httpClient = GetHttpClient(agent, parameters);
+            var httpClient = await GetHttpClient(agent, parameters);
             var responseBody = await httpClient.GetCompressedStringAsync(httpRequestMessage);
             _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Response", responseBody);
             return responseBody;
         }
 
-        private HttpClient GetHttpClient(AgentModel agent, Dictionary<string, string> parameters)
+        private async Task<HttpClient> GetHttpClient(AgentModel agent, Dictionary<string, string> parameters)
         {
             var noRetry = agent.Content.ContainsKey(AgentContentParameters.UseRetry) && agent.Content[AgentContentParameters.UseRetry].Value.ToLower() == "false";
 
@@ -78,8 +78,8 @@ namespace AiCoreApi.SemanticKernel.Agents
             }
             if (agent.Content.ContainsKey(AgentContentParameters.CustomHeaderName) && agent.Content.ContainsKey(AgentContentParameters.CustomHeaderValue))
             {
-                var customHeaderName = GetParameterValue(AgentContentParameters.CustomHeaderName);
-                var customHeaderValue = GetParameterValue(AgentContentParameters.CustomHeaderValue);
+                var customHeaderName = await GetParameterValueAsync(AgentContentParameters.CustomHeaderName);
+                var customHeaderValue = await GetParameterValueAsync(AgentContentParameters.CustomHeaderValue);
                 if (!string.IsNullOrWhiteSpace(customHeaderName) && !string.IsNullOrWhiteSpace(customHeaderValue))
                    httpClient.DefaultRequestHeaders.Add(customHeaderName, customHeaderValue);
             }

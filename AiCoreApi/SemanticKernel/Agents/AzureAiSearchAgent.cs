@@ -41,14 +41,14 @@ namespace AiCoreApi.SemanticKernel.Agents
         {
             _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
-            var queryString = GetParameterValue(AgentContentParameters.QueryString);
+            var queryString = await GetParameterValueAsync(AgentContentParameters.QueryString);
             var azureAiSearchConnectionName = agent.Content[AgentContentParameters.AzureAiSearchConnectionName].Value;
             var indexName = agent.Content[AgentContentParameters.IndexName].Value;
             // Check if the action is search or add-update-delete, different actions have different endpoints
             var action = queryString.Contains("@search.action") ? "index" : "search";
             _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall", $"Connection: {azureAiSearchConnectionName}\r\nAction: {action}\r\nIndex: {indexName}\r\nQuery: {queryString}");
             var connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
-            var aiSearchConnection = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.AzureAiSearch, _debugMessageSenderName, connectionName: azureAiSearchConnectionName);
+            var aiSearchConnection = await GetConnectionAsync(_requestAccessor, _responseAccessor, connections, ConnectionType.AzureAiSearch, _debugMessageSenderName, connectionName: azureAiSearchConnectionName);
             var apiKey = aiSearchConnection.Content["apiKey"];
             var resourceName = aiSearchConnection.Content["resourceName"];
 

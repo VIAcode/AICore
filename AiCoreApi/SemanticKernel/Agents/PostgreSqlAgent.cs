@@ -47,11 +47,11 @@ SET aicore_session_context.login_type = '{1}';
             _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
             var connectionName = agent.Content[AgentContentParameters.ConnectionName].Value;
-            var sqlQuery = GetParameterValue(AgentContentParameters.SqlQuery);
+            var sqlQuery = await GetParameterValueAsync(AgentContentParameters.SqlQuery);
 
             _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Request", sqlQuery);
             var connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
-            var connection = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.PostgreSql, _debugMessageSenderName, connectionName: connectionName);
+            var connection = await GetConnectionAsync(_requestAccessor, _responseAccessor, connections, ConnectionType.PostgreSql, _debugMessageSenderName, connectionName: connectionName);
             var result = await ExecuteScript(sqlQuery, connection, parameters);
             _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Response", result);
             return result;

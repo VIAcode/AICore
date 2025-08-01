@@ -94,11 +94,11 @@ result = ..expected_output..
             _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
             var connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
-            var llmConnection = GetConnection(_requestAccessor, _responseAccessor, connections,
+            var llmConnection = await GetConnectionAsync(_requestAccessor, _responseAccessor, connections,
                 new[] { ConnectionType.AzureOpenAiLlm, ConnectionType.OpenAiLlm, ConnectionType.CohereLlm, ConnectionType.DeepSeekLlm, ConnectionType.GeminiLlm }, _debugMessageSenderName, agent.LlmType);
             var temperature = GetTemperature(llmConnection, agent);
             var topP = GetTopP(agent);
-            var prompt = GetParameterValue(AgentContentParameters.Prompt);
+            var prompt = await GetParameterValueAsync(AgentContentParameters.Prompt);
 
             var parameterDescription = agent.Content["parameterDescription"].Value
                 .Split(',')
@@ -109,7 +109,7 @@ parameter{i + 1} = Parameters['parameter{i + 1}']")
 
             string agentsDescription = await GetAgentsDescriptions(agent);
 
-            string promptTemplate = GetParameterValue(AgentContentParameters.CodeGenerationPrompt);
+            string promptTemplate = await GetParameterValueAsync(AgentContentParameters.CodeGenerationPrompt);
             if(string.IsNullOrEmpty(promptTemplate))
                 promptTemplate = CodeGenerationPromptText;
             promptTemplate = promptTemplate

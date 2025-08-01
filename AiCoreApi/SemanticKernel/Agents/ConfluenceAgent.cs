@@ -69,7 +69,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             var connectionName = agent.Content[AgentContentParameters.ConnectionName].Value;
 
             var connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
-            var connection = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.Confluence, _debugMessageSenderName, connectionName: connectionName);
+            var connection = await GetConnectionAsync(_requestAccessor, _responseAccessor, connections, ConnectionType.Confluence, _debugMessageSenderName, connectionName: connectionName);
 
             var baseUrl = connection.Content[ConnectionParameters.BaseUrl];
             var username = connection.Content[ConnectionParameters.Username];
@@ -83,29 +83,29 @@ namespace AiCoreApi.SemanticKernel.Agents
             switch (action)
             {
                 case Actions.List:
-                    var listExpand = GetParameterValue(AgentContentParameters.Expand);
+                    var listExpand = await GetParameterValueAsync(AgentContentParameters.Expand);
                     return await ListPages(client, baseUrl, rootPageId, listExpand);
 
                 case Actions.Get:
-                    var getExpand = GetParameterValue(AgentContentParameters.Expand);
-                    var pageId = GetParameterValue(AgentContentParameters.PageId);
+                    var getExpand = await GetParameterValueAsync(AgentContentParameters.Expand);
+                    var pageId = await GetParameterValueAsync(AgentContentParameters.PageId);
                     return await GetPage(client, baseUrl, pageId, getExpand);
 
                 case Actions.Add:
-                    var addSpaceKey = GetParameterValue(AgentContentParameters.SpaceKey);
-                    var addTitle = GetParameterValue(AgentContentParameters.Title);
-                    var addContent = GetParameterValue(AgentContentParameters.Content);
-                    var parentPageId = GetParameterValue(AgentContentParameters.ParentPageId, rootPageId);
+                    var addSpaceKey = await GetParameterValueAsync(AgentContentParameters.SpaceKey);
+                    var addTitle = await GetParameterValueAsync(AgentContentParameters.Title);
+                    var addContent = await GetParameterValueAsync(AgentContentParameters.Content);
+                    var parentPageId = await GetParameterValueAsync(AgentContentParameters.ParentPageId, rootPageId);
                     return await AddPage(client, baseUrl, addSpaceKey, addTitle, addContent, parentPageId);
 
                 case Actions.Update:
-                    var updateTitle = GetParameterValue(AgentContentParameters.Title);
-                    var updateContent = GetParameterValue(AgentContentParameters.Content);
-                    var updatePageId = GetParameterValue(agent.Content[AgentContentParameters.PageId].Value);
+                    var updateTitle = await GetParameterValueAsync(AgentContentParameters.Title);
+                    var updateContent = await GetParameterValueAsync(AgentContentParameters.Content);
+                    var updatePageId = await GetParameterValueAsync(AgentContentParameters.PageId);
                     return await UpdatePage(client, baseUrl, updateTitle, updateContent, updatePageId);
 
                 case Actions.Delete:
-                    var deletePageId = GetParameterValue(AgentContentParameters.PageId);
+                    var deletePageId = await GetParameterValueAsync(AgentContentParameters.PageId);
                     return await DeletePage(client, baseUrl, deletePageId);
 
                 default:

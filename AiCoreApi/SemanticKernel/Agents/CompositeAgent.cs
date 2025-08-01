@@ -50,7 +50,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
             var connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
-            var llmConnection = GetConnection(_requestAccessor, _responseAccessor, connections, 
+            var llmConnection = await GetConnectionAsync(_requestAccessor, _responseAccessor, connections, 
                 new [] { ConnectionType.AzureOpenAiLlm, ConnectionType.OpenAiLlm, ConnectionType.CohereLlm }, _debugMessageSenderName, agent.LlmType);
             var kernel = _semanticKernelProvider.GetKernel(llmConnection);
             var agents = agent.Content[AgentContentParameters.AgentsList].Value.JsonGet<Dictionary<string, bool>>();
@@ -64,13 +64,13 @@ namespace AiCoreApi.SemanticKernel.Agents
             plannerPrompt = await AddPlugins(kernel, plannerPrompt, agents);
             if (string.IsNullOrWhiteSpace(plan))
             {
-                plannerPrompt = ApplyParameters(plannerPrompt);
+                plannerPrompt = await ApplyParametersAsync(plannerPrompt);
                 plan = await GetPlan(kernel, agent, plannerPrompt);
                 _responseAccessor.AddDebugMessage(_debugMessageSenderName, "Generated Plan", $"{plan}");
             }
             else
             {
-                plan = ApplyParameters(plan);
+                plan = await ApplyParametersAsync(plan);
             }
             try
             {

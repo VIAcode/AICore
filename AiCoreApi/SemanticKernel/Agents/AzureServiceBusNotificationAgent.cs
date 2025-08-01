@@ -44,12 +44,12 @@ namespace AiCoreApi.SemanticKernel.Agents
             _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
             var connectionName = agent.Content[AgentContentParameters.ConnectionName].Value;
-            var queueOrTopicName = GetParameterValue(AgentContentParameters.QueueOrTopicName);
-            var notificationPayload = GetParameterValue(AgentContentParameters.NotificationPayload);
+            var queueOrTopicName = await GetParameterValueAsync(AgentContentParameters.QueueOrTopicName);
+            var notificationPayload = await GetParameterValueAsync(AgentContentParameters.NotificationPayload);
 
             _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Request", notificationPayload);
             var connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
-            var connection = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.AzureServiceBus, _debugMessageSenderName, connectionName: connectionName);
+            var connection = await GetConnectionAsync(_requestAccessor, _responseAccessor, connections, ConnectionType.AzureServiceBus, _debugMessageSenderName, connectionName: connectionName);
 
             var accessType = connection.Content.ContainsKey("accessType") ? connection.Content["accessType"] : "apiKey";
             ServiceBusClient serviceBusClient;

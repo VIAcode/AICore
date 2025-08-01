@@ -107,11 +107,11 @@ class Agent
             _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
             var connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
-            var llmConnection = GetConnection(_requestAccessor, _responseAccessor, connections,
+            var llmConnection = await GetConnectionAsync(_requestAccessor, _responseAccessor, connections,
                 new[] { ConnectionType.AzureOpenAiLlm, ConnectionType.OpenAiLlm, ConnectionType.CohereLlm, ConnectionType.DeepSeekLlm, ConnectionType.GeminiLlm }, _debugMessageSenderName, agent.LlmType);
             var temperature = GetTemperature(llmConnection, agent);
             var topP = GetTopP(agent);
-            var prompt = GetParameterValue(AgentContentParameters.Prompt);
+            var prompt = await GetParameterValueAsync(AgentContentParameters.Prompt);
 
             // Prompt to GPT for generating the class
             var parameterDescription = agent.Content["parameterDescription"].Value
@@ -123,7 +123,7 @@ class Agent
 
             string agentsDescription = await GetAgentsDescriptions(agent);
 
-            string promptTemplate = GetParameterValue(AgentContentParameters.CodeGenerationPrompt);
+            string promptTemplate = await GetParameterValueAsync(AgentContentParameters.CodeGenerationPrompt);
             if(string.IsNullOrEmpty(promptTemplate))
                 promptTemplate = CodeGenerationPromptText;
             

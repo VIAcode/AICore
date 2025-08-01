@@ -54,10 +54,10 @@ namespace AiCoreApi.SemanticKernel.Agents
         {
             _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
-            var base64Image = GetParameterValue(AgentContentParameters.Base64Image);
+            var base64Image = await GetParameterValueAsync(AgentContentParameters.Base64Image);
             if (_requestAccessor.MessageDialog != null && _requestAccessor.MessageDialog.Messages!.Last().HasFiles() && base64Image.Contains(AgentPromptPlaceholders.FileDataPlaceholder))
             {
-                base64Image = ApplyParameters(base64Image, new Dictionary<string, string>
+                base64Image = await ApplyParametersAsync(base64Image, new Dictionary<string, string>
                 {
                     {AgentPromptPlaceholders.FileDataPlaceholder, _requestAccessor.MessageDialog.Messages!.Last().Files!.First().Base64Data},
                 });
@@ -65,12 +65,12 @@ namespace AiCoreApi.SemanticKernel.Agents
 
             var documentIntelligenceConnection = agent.Content[AgentContentParameters.DocumentIntelligenceConnection].Value;
             var connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
-            var connection = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.DocumentIntelligence, _debugMessageSenderName, connectionName: documentIntelligenceConnection);
+            var connection = await GetConnectionAsync(_requestAccessor, _responseAccessor, connections, ConnectionType.DocumentIntelligence, _debugMessageSenderName, connectionName: documentIntelligenceConnection);
 
             var splitMode = GetParameterValueOrNull(agent, AgentContentParameters.SplitMode);
-            var pages = GetParameterValue(AgentContentParameters.Pages, null);
+            var pages = await GetParameterValueAsync(AgentContentParameters.Pages, null);
 
-            var classifierId = GetParameterValue(AgentContentParameters.ClassifierId);
+            var classifierId = await GetParameterValueAsync(AgentContentParameters.ClassifierId);
 
             if (string.IsNullOrWhiteSpace(classifierId))
             {

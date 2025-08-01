@@ -51,17 +51,17 @@ namespace AiCoreApi.SemanticKernel.Agents
             _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
             var connectionName = agent.Content[AgentContentParameters.ConnectionName].Value;
-            var targetType = GetParameterValue(AgentContentParameters.TargetType);
-            var userEmail = GetParameterValue(AgentContentParameters.UserEmail);
-            var meetingTitle = GetParameterValue(AgentContentParameters.MeetingTitle);
-            var channelId = GetParameterValue(AgentContentParameters.ChannelId);
-            var teamId = GetParameterValue(AgentContentParameters.TeamId);
-            var body = GetParameterValue(AgentContentParameters.Body);
+            var targetType = await GetParameterValueAsync(AgentContentParameters.TargetType);
+            var userEmail = await GetParameterValueAsync(AgentContentParameters.UserEmail);
+            var meetingTitle = await GetParameterValueAsync(AgentContentParameters.MeetingTitle);
+            var channelId = await GetParameterValueAsync(AgentContentParameters.ChannelId);
+            var teamId = await GetParameterValueAsync(AgentContentParameters.TeamId);
+            var body = await GetParameterValueAsync(AgentContentParameters.Body);
 
             _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Request", $"TargetType: {targetType}, TargetId: {userEmail}{meetingTitle}{teamId}{channelId}");
 
             var connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
-            var connection = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.GraphApi, _debugMessageSenderName, connectionName: connectionName);
+            var connection = await GetConnectionAsync(_requestAccessor, _responseAccessor, connections, ConnectionType.GraphApi, _debugMessageSenderName, connectionName: connectionName);
 
             var resourceName = connection.Content["resourceName"];
             var accessType = connection.Content.GetValueOrDefault("accessType") ?? EntraTokenProvider.DefaultStorageName;

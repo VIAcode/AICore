@@ -54,14 +54,14 @@ namespace AiCoreApi.SemanticKernel.Agents
             _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
             var action = agent.Content[AgentContentParameters.Action].Value;
-            var indexName = GetParameterValue(AgentContentParameters.IndexName);
-            var query = GetParameterValue(AgentContentParameters.Query);
-            var documentId = GetParameterValue(AgentContentParameters.DocumentId);
-            var payload = GetParameterValue(AgentContentParameters.Payload);
+            var indexName = await GetParameterValueAsync(AgentContentParameters.IndexName);
+            var query = await GetParameterValueAsync(AgentContentParameters.Query);
+            var documentId = await GetParameterValueAsync(AgentContentParameters.DocumentId);
+            var payload = await GetParameterValueAsync(AgentContentParameters.Payload);
             var connectionName = agent.Content[AgentContentParameters.ConnectionName].Value;
 
             var connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
-            var connection = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.OpenSearch, _debugMessageSenderName, connectionName: connectionName);
+            var connection = await GetConnectionAsync(_requestAccessor, _responseAccessor, connections, ConnectionType.OpenSearch, _debugMessageSenderName, connectionName: connectionName);
             var endpoint = connection.Content[ConnectionContentParameters.Endpoint].TrimEnd('/');
 
             return action switch

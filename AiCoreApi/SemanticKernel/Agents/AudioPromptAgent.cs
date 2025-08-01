@@ -48,14 +48,14 @@ public class AudioPromptAgent : BaseAgent, IAudioPromptAgent
     {
         _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
-        var prompt = GetParameterValue(AgentContentParameters.Prompt);
-        var base64Audio = GetParameterValue(AgentContentParameters.Base64Audio);
-        var mimeType = GetParameterValue(AgentContentParameters.MimeType);
-        var systemMessage = GetParameterValue(AgentContentParameters.SystemMessage);
-        var voice = GetParameterValue(AgentContentParameters.Voice);
-        var temperatureStr = GetParameterValue(AgentContentParameters.Temperature);
-        var topPStr = GetParameterValue(AgentContentParameters.TopP);
-        var modalitiesStr = GetParameterValue(AgentContentParameters.Modalities);
+        var prompt = await GetParameterValueAsync(AgentContentParameters.Prompt);
+        var base64Audio = await GetParameterValueAsync(AgentContentParameters.Base64Audio);
+        var mimeType = await GetParameterValueAsync(AgentContentParameters.MimeType);
+        var systemMessage = await GetParameterValueAsync(AgentContentParameters.SystemMessage);
+        var voice = await GetParameterValueAsync(AgentContentParameters.Voice);
+        var temperatureStr = await GetParameterValueAsync(AgentContentParameters.Temperature);
+        var topPStr = await GetParameterValueAsync(AgentContentParameters.TopP);
+        var modalitiesStr = await GetParameterValueAsync(AgentContentParameters.Modalities);
 
         if (mimeType.Contains("webm") && !string.IsNullOrEmpty(base64Audio))
         {
@@ -82,7 +82,7 @@ public class AudioPromptAgent : BaseAgent, IAudioPromptAgent
         int? connectionId)
     {
         var connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
-        var connection = GetConnection(_requestAccessor, _responseAccessor, connections,
+        var connection = await GetConnectionAsync(_requestAccessor, _responseAccessor, connections,
             new[] { ConnectionType.AzureOpenAiLlm, ConnectionType.OpenAiLlm, ConnectionType.GeminiLlm }, _debugMessageSenderName, connectionId);
 
         return connection.Type switch

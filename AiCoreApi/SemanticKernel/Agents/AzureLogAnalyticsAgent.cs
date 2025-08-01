@@ -50,12 +50,12 @@ namespace AiCoreApi.SemanticKernel.Agents
             _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
             var connectionName = agent.Content[AgentContentParameters.ConnectionName].Value;
-            var query = GetParameterValue(AgentContentParameters.KqlQuery);
+            var query = await GetParameterValueAsync(AgentContentParameters.KqlQuery);
             var timeRange = ReadQueryTimeRange(agent, parameters);
 
             _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Request", $"Time range: {timeRange}\r\n\r\nKQL query:\r\n{query}");
             var connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
-            var connection = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.AzureLogAnalytics, _debugMessageSenderName, connectionName: connectionName);
+            var connection = await GetConnectionAsync(_requestAccessor, _responseAccessor, connections, ConnectionType.AzureLogAnalytics, _debugMessageSenderName, connectionName: connectionName);
 
             var result = await QueryLogsAsync(query, timeRange, connection);
 

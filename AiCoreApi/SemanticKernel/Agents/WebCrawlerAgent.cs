@@ -46,13 +46,13 @@ namespace AiCoreApi.SemanticKernel.Agents
         {
             _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
-            var startUrl = GetParameterValue(AgentContentParameters.Url);
-            var crawlDepth = Convert.ToInt32(GetParameterValue(AgentContentParameters.CrawlDepth, "1"));
-            var crawlRegex = GetCrawlRegex(agent);
-            var maxUrls = Convert.ToInt32(GetParameterValue(AgentContentParameters.MaxUrlsCount, "1"));
-            var userAgent = GetParameterValue(AgentContentParameters.UserAgent);
-            var engine = GetParameterValue(AgentContentParameters.Engine, "html");
-            var waitTimeout = Convert.ToInt32(GetParameterValue(AgentContentParameters.WaitTimeout, "10000"));
+            var startUrl = await GetParameterValueAsync(AgentContentParameters.Url);
+            var crawlDepth = Convert.ToInt32(await GetParameterValueAsync(AgentContentParameters.CrawlDepth, "1"));
+            var crawlRegex = await GetCrawlRegex(agent);
+            var maxUrls = Convert.ToInt32(await GetParameterValueAsync(AgentContentParameters.MaxUrlsCount, "1"));
+            var userAgent = await GetParameterValueAsync(AgentContentParameters.UserAgent);
+            var engine = await GetParameterValueAsync(AgentContentParameters.Engine, "html");
+            var waitTimeout = Convert.ToInt32(await GetParameterValueAsync(AgentContentParameters.WaitTimeout, "10000"));
 
 
             var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -143,11 +143,11 @@ namespace AiCoreApi.SemanticKernel.Agents
         }
 
 
-        private Regex? GetCrawlRegex(AgentModel agent)
+        private async Task<Regex?> GetCrawlRegex(AgentModel agent)
         {
             if (agent.Content.TryGetValue(AgentContentParameters.CrawlUrlRegex, out _))
             {
-                var pattern = GetParameterValue(AgentContentParameters.CrawlUrlRegex).Trim();
+                var pattern = (await GetParameterValueAsync(AgentContentParameters.CrawlUrlRegex)).Trim();
                 if (!string.IsNullOrEmpty(pattern) && pattern != "1")
                 {
                     try
@@ -163,12 +163,12 @@ namespace AiCoreApi.SemanticKernel.Agents
             return null;
         }
 
-        private void ApplyCustomHeaders(HttpClient client, string userAgent)
+        private async Task ApplyCustomHeaders(HttpClient client, string userAgent)
         {
             if (!string.IsNullOrEmpty(userAgent))
                 client.DefaultRequestHeaders.Add("User-Agent", userAgent);
 
-            var decoded = GetParameterValue(AgentContentParameters.CustomHeaders);
+            var decoded = await GetParameterValueAsync(AgentContentParameters.CustomHeaders);
             if (string.IsNullOrWhiteSpace(decoded))
                 return;
             var parts = decoded.Split(';', StringSplitOptions.RemoveEmptyEntries);
@@ -191,7 +191,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             string userAgent)
         {
             var client = _httpClientFactory.CreateClient(HttpClients.NoRetryClient);
-            ApplyCustomHeaders(client, userAgent);
+            await ApplyCustomHeaders(client, userAgent);
 
             var links = new List<string>();
 

@@ -49,14 +49,14 @@ namespace AiCoreApi.SemanticKernel.Agents
         {
             _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
-            var base64Image = GetParameterValue(AgentContentParameters.Base64Image);
-            var mimeType = GetParameterValue(AgentContentParameters.MimeType);
-            var prompt = GetParameterValue(AgentContentParameters.Prompt);
-            var systemMessage = GetParameterValue(AgentContentParameters.SystemMessage); 
+            var base64Image = await GetParameterValueAsync(AgentContentParameters.Base64Image);
+            var mimeType = await GetParameterValueAsync(AgentContentParameters.MimeType);
+            var prompt = await GetParameterValueAsync(AgentContentParameters.Prompt);
+            var systemMessage = await GetParameterValueAsync(AgentContentParameters.SystemMessage); 
 
             if (_requestAccessor.MessageDialog.Messages!.Last().HasFiles())
             {
-                base64Image = ApplyParameters(base64Image, new Dictionary<string, string>
+                base64Image = await ApplyParametersAsync(base64Image, new Dictionary<string, string>
                 {
                     {AgentPromptPlaceholders.FileDataPlaceholder, _requestAccessor.MessageDialog.Messages!.Last().Files!.First().Base64Data},
                 });
@@ -65,7 +65,7 @@ namespace AiCoreApi.SemanticKernel.Agents
 
             var imageData = Convert.FromBase64String(base64Image.StripBase64());
             var connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
-            var llmConnection = GetConnection(_requestAccessor, _responseAccessor, connections, 
+            var llmConnection = await GetConnectionAsync(_requestAccessor, _responseAccessor, connections, 
                 new[] { ConnectionType.AzureOpenAiLlm, ConnectionType.OpenAiLlm, ConnectionType.GeminiLlm }, _debugMessageSenderName, agent.LlmType);
             var kernel = _semanticKernelProvider.GetKernel(llmConnection);
             var chat = kernel.GetRequiredService<IChatCompletionService>();

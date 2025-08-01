@@ -50,7 +50,7 @@ namespace AiCoreApi.SemanticKernel.Agents
         {
             _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
-            var jsCode = GetParameterValue(AgentContentParameters.JsCode);
+            var jsCode = await GetParameterValueAsync(AgentContentParameters.JsCode);
             _responseAccessor.AddDebugMessage(_debugMessageSenderName, "Execute Node.js Code", jsCode);
 
             jsCode = RunCmd(jsCode);     // handle # cmd:

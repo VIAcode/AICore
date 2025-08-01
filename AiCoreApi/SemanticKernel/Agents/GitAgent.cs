@@ -54,18 +54,18 @@ namespace AiCoreApi.SemanticKernel.Agents
 
             var action = agent.Content[AgentContentParameters.Action].Value;
             var connectionName = agent.Content[AgentContentParameters.ConnectionName].Value;
-            var path = GetParameterValue(AgentContentParameters.Path);
-            var branch = GetParameterValue(AgentContentParameters.Branch);
-            var payload = GetParameterValue(AgentContentParameters.Payload);
-            var payloadType = GetParameterValue(AgentContentParameters.PayloadType);
-            var commitMessage = GetParameterValue(AgentContentParameters.CommitMessage, "AI Core commit");
-            var commitEmail = GetParameterValue(AgentContentParameters.CommitEmail);
+            var path = await GetParameterValueAsync(AgentContentParameters.Path);
+            var branch = await GetParameterValueAsync(AgentContentParameters.Branch);
+            var payload = await GetParameterValueAsync(AgentContentParameters.Payload);
+            var payloadType = await GetParameterValueAsync(AgentContentParameters.PayloadType);
+            var commitMessage = await GetParameterValueAsync(AgentContentParameters.CommitMessage, "AI Core commit");
+            var commitEmail = await GetParameterValueAsync(AgentContentParameters.CommitEmail);
 
             _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Request",
                 $"Action: {action}, ConnectionName: {connectionName}, Path: {path}, Branch: {branch}, CommitMessage: {commitMessage}");
 
             var connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
-            var connection = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.Git, _debugMessageSenderName, connectionName: connectionName);
+            var connection = await GetConnectionAsync(_requestAccessor, _responseAccessor, connections, ConnectionType.Git, _debugMessageSenderName, connectionName: connectionName);
             var login = connection.Content[ConnectionContentParameters.Login];
             var password = connection.Content[ConnectionContentParameters.Password];
             var gitStorageUrl = connection.Content[ConnectionContentParameters.GitStorageUrl];

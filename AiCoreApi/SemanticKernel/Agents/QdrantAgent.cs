@@ -60,10 +60,10 @@ namespace AiCoreApi.SemanticKernel.Agents
             _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
             var action = agent.Content[AgentContentParameters.Action].Value;
-            var collectionName = GetParameterValue(AgentContentParameters.CollectionName);
+            var collectionName = await GetParameterValueAsync(AgentContentParameters.CollectionName);
             var connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
 
-            var qdrantConnection = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.Qdrant, _debugMessageSenderName, connectionName: agent.Content[AgentContentParameters.QdrantConnectionName].Value);
+            var qdrantConnection = await GetConnectionAsync(_requestAccessor, _responseAccessor, connections, ConnectionType.Qdrant, _debugMessageSenderName, connectionName: agent.Content[AgentContentParameters.QdrantConnectionName].Value);
 
             switch (action)
             {
@@ -71,19 +71,19 @@ namespace AiCoreApi.SemanticKernel.Agents
                     return await ListCollections(qdrantConnection);
                 case "COLLECTION_CREATE":
                 {
-                    var distance = GetParameterValue(AgentContentParameters.Distance, "Cosine");
-                    var size = GetParameterValue(AgentContentParameters.Size, "3072");
+                    var distance = await GetParameterValueAsync(AgentContentParameters.Distance, "Cosine");
+                    var size = await GetParameterValueAsync(AgentContentParameters.Size, "3072");
                     return await CreateCollection(collectionName, qdrantConnection, distance, Convert.ToInt32(size));
                 }
                 case "COLLECTION_DELETE":
                     return await DeleteCollection(collectionName, qdrantConnection);
                 case "UPSERT_POINTS":
                     {
-                        var embeddingConnection = GetConnection(_requestAccessor, _responseAccessor, connections,
+                        var embeddingConnection = await GetConnectionAsync(_requestAccessor, _responseAccessor, connections,
                             new[] { ConnectionType.AzureOpenAiEmbedding, ConnectionType.OpenAiEmbedding }, _debugMessageSenderName, connectionName: agent.Content[AgentContentParameters.EmbeddingConnectionName].Value);
 
-                        var payload = GetParameterValue(AgentContentParameters.SearchString);
-                        var tags = GetParameterValue(AgentContentParameters.Tags, "Tag");
+                        var payload = await GetParameterValueAsync(AgentContentParameters.SearchString);
+                        var tags = await GetParameterValueAsync(AgentContentParameters.Tags, "Tag");
 
                         var chunks = await _embeddingProcessor.GetEmbeddingAsync(embeddingConnection, payload);
                         foreach (var chunk in chunks)
@@ -94,36 +94,36 @@ namespace AiCoreApi.SemanticKernel.Agents
                     }
                 case "DELETE_POINT":
                     {
-                        var pointId = GetParameterValue(AgentContentParameters.PointId, "0");
+                        var pointId = await GetParameterValueAsync(AgentContentParameters.PointId, "0");
                         return await DeletePoint(collectionName, pointId, qdrantConnection);
                     }
                 case "TAG_POINT":
                     {
-                        var pointId = GetParameterValue(AgentContentParameters.PointId, "0");
-                        var tags = GetParameterValue(AgentContentParameters.Tags, "Tag");
+                        var pointId = await GetParameterValueAsync(AgentContentParameters.PointId, "0");
+                        var tags = await GetParameterValueAsync(AgentContentParameters.Tags, "Tag");
                         return await UpdateTags(collectionName, pointId, tags, qdrantConnection);
                     }
                 case "LIST_POINTS":
                     {
-                        var limit = GetParameterValue(AgentContentParameters.Limit, "10");
-                        var offset = GetParameterValue(AgentContentParameters.Offset, "0");
+                        var limit = await GetParameterValueAsync(AgentContentParameters.Limit, "10");
+                        var offset = await GetParameterValueAsync(AgentContentParameters.Offset, "0");
                         return await ListPoints(collectionName, qdrantConnection, limit, offset);
                     }
                 case "CUSTOM":
                 {
-                    var method = GetParameterValue(AgentContentParameters.Method, "POST");
-                    var url = GetParameterValue(AgentContentParameters.Url, "/");
-                    var payload = GetParameterValue(AgentContentParameters.Payload, "");
+                    var method = await GetParameterValueAsync(AgentContentParameters.Method, "POST");
+                    var url = await GetParameterValueAsync(AgentContentParameters.Url, "/");
+                    var payload = await GetParameterValueAsync(AgentContentParameters.Payload, "");
                     return await Custom(collectionName, qdrantConnection, method, url, payload);
                 }
                 default: // SEARCH_POINTS
                     {
-                        var embeddingConnection = GetConnection(_requestAccessor, _responseAccessor, connections,
+                        var embeddingConnection = await GetConnectionAsync(_requestAccessor, _responseAccessor, connections,
                             new[] { ConnectionType.AzureOpenAiEmbedding, ConnectionType.OpenAiEmbedding }, _debugMessageSenderName, connectionName: agent.Content[AgentContentParameters.EmbeddingConnectionName].Value);
 
-                        var filter = GetParameterValue(AgentContentParameters.Filter);
-                        var searchString = GetParameterValue(AgentContentParameters.SearchString);
-                        var topK = int.Parse(GetParameterValue(AgentContentParameters.TopK, "10"));
+                        var filter = await GetParameterValueAsync(AgentContentParameters.Filter);
+                        var searchString = await GetParameterValueAsync(AgentContentParameters.SearchString);
+                        var topK = int.Parse(await GetParameterValueAsync(AgentContentParameters.TopK, "10"));
 
                         _responseAccessor.AddDebugMessage(_debugMessageSenderName, "Search String", searchString);
 

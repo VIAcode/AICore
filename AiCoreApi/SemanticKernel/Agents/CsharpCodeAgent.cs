@@ -76,7 +76,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
             // Insert user parameters into the code template
-            var csharpCode = GetParameterValue(AgentContentParameters.CsharpCode);
+            var csharpCode = await GetParameterValueAsync(AgentContentParameters.CsharpCode);
 
             // If the code does not define "class Agent {...}", switch to quick mode
             var quickMode = !csharpCode.Replace(" ", "").Contains("classAgent");

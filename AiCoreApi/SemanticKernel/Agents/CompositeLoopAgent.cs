@@ -81,15 +81,15 @@ namespace AiCoreApi.SemanticKernel.Agents
             _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
             var connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
-            var llmConnection = GetConnection(_requestAccessor, _responseAccessor, connections,
+            var llmConnection = await GetConnectionAsync(_requestAccessor, _responseAccessor, connections,
                 new[] { ConnectionType.AzureOpenAiLlm, ConnectionType.OpenAiLlm, ConnectionType.CohereLlm, ConnectionType.GeminiLlm, ConnectionType.DeepSeekLlm }, _debugMessageSenderName, agent.LlmType);
 
-            var userInput = GetParameterValue(AgentContentParameters.UserInput);
-            var systemMessage = GetParameterValue(AgentContentParameters.SystemMessage);
-            var maxIterations = Convert.ToInt32(GetParameterValue(AgentContentParameters.MaxIterations));
-            var preprocessPromptTemplate = GetParameterValue(AgentContentParameters.PreprocessPromptTemplate);
-            var finalPolishPrompt = GetParameterValue(AgentContentParameters.FinalPolishPrompt);
-            var plannerPromptTemplate = GetParameterValue(AgentContentParameters.PlannerPromptTemplate);
+            var userInput = await GetParameterValueAsync(AgentContentParameters.UserInput);
+            var systemMessage = await GetParameterValueAsync(AgentContentParameters.SystemMessage);
+            var maxIterations = Convert.ToInt32(await GetParameterValueAsync(AgentContentParameters.MaxIterations));
+            var preprocessPromptTemplate = await GetParameterValueAsync(AgentContentParameters.PreprocessPromptTemplate);
+            var finalPolishPrompt = await GetParameterValueAsync(AgentContentParameters.FinalPolishPrompt);
+            var plannerPromptTemplate = await GetParameterValueAsync(AgentContentParameters.PlannerPromptTemplate);
             var temperature = GetTemperature(llmConnection, agent);
             var topP = GetTopP(agent);
 

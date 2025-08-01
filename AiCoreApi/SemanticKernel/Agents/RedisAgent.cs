@@ -41,14 +41,14 @@ namespace AiCoreApi.SemanticKernel.Agents
             _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
             var connectionName = agent.Content[AgentContentParameters.ConnectionName].Value;
-            var action = GetParameterValue(AgentContentParameters.Action);
-            var cacheKey = GetParameterValue(AgentContentParameters.CacheKey);
-            var value = GetParameterValue(AgentContentParameters.Value);
-            var lifeTimeSeconds = GetParameterValue(AgentContentParameters.LifeTimeSeconds);
+            var action = await GetParameterValueAsync(AgentContentParameters.Action);
+            var cacheKey = await GetParameterValueAsync(AgentContentParameters.CacheKey);
+            var value = await GetParameterValueAsync(AgentContentParameters.Value);
+            var lifeTimeSeconds = await GetParameterValueAsync(AgentContentParameters.LifeTimeSeconds);
 
             _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Request", $"Action: {action}, Cache Key: {cacheKey}, Value: {value}");
             var connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
-            var connection = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.Redis, _debugMessageSenderName, connectionName: connectionName);
+            var connection = await GetConnectionAsync(_requestAccessor, _responseAccessor, connections, ConnectionType.Redis, _debugMessageSenderName, connectionName: connectionName);
             var connectionString = connection.Content["connectionString"];
             var redis = ConnectionMultiplexer.Connect(connectionString);
             var db = redis.GetDatabase();

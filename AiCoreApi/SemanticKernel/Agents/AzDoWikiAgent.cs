@@ -58,12 +58,12 @@ namespace AiCoreApi.SemanticKernel.Agents
         {
             _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
-            var path = GetParameterValue(AgentContentParameters.Path);
+            var path = await GetParameterValueAsync(AgentContentParameters.Path);
             var action = agent.Content[AgentContentParameters.Action].Value;
             var connectionName = agent.Content[AgentContentParameters.ConnectionName].Value;
 
             var connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
-            var connection = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.AzDoWiki, _debugMessageSenderName, connectionName: connectionName);
+            var connection = await GetConnectionAsync(_requestAccessor, _responseAccessor, connections, ConnectionType.AzDoWiki, _debugMessageSenderName, connectionName: connectionName);
 
             var pat = connection.Content[ConnectionParameters.Pat];
             var org = connection.Content[ConnectionParameters.Organization];
@@ -83,7 +83,7 @@ namespace AiCoreApi.SemanticKernel.Agents
                 case Actions.List:
                     return await ListWikiPages(client, org, project, wiki);
                 case Actions.AddOrUpdate:
-                    var content = GetParameterValue(AgentContentParameters.Content);
+                    var content = await GetParameterValueAsync(AgentContentParameters.Content);
                     return await AddOrUpdateWikiPage(client, org, project, wiki, path, content);
                 case Actions.Delete:
                     return await DeleteWikiPage(client, org, project, wiki, path);

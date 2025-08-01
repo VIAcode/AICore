@@ -135,9 +135,9 @@ namespace AiCoreApi.SemanticKernel.Agents
 
         private async Task<string> SyncFeedback(AgentModel agent, Dictionary<string, string> parameters)
         {
-            var answer = GetParameterValue(AgentContentParameters.Answer);
-            var feedback = GetParameterValue(AgentContentParameters.Feedback);
-            var dataSource = GetParameterValue(AgentContentParameters.DataSource);
+            var answer = await GetParameterValueAsync(AgentContentParameters.Answer);
+            var feedback = await GetParameterValueAsync(AgentContentParameters.Feedback);
+            var dataSource = await GetParameterValueAsync(AgentContentParameters.DataSource);
             var ingestion = await GetIngestionModel(dataSource);
 
             var tags = agent.Content.ContainsKey(AgentContentParameters.Tags) ? agent.Content[AgentContentParameters.Tags].Value : "";
@@ -149,13 +149,13 @@ namespace AiCoreApi.SemanticKernel.Agents
 
             var llmConnection = await GetLlmConnection(agent);
 
-            var autoSyncOnFeedback = GetParameterValue(AgentContentParameters.AutoSyncOnFeedback).ToLower() == "true";
-            var useBingToEnrichFeedback = GetParameterValue(AgentContentParameters.UseBingToEnrichFeedback).ToLower() == "true";
-            var changePrompt = GetParameterValue(AgentContentParameters.ChangePrompt);
-            var searchPrompt = GetParameterValue(AgentContentParameters.SearchPrompt)
+            var autoSyncOnFeedback = (await GetParameterValueAsync(AgentContentParameters.AutoSyncOnFeedback)).ToLower() == "true";
+            var useBingToEnrichFeedback = (await GetParameterValueAsync(AgentContentParameters.UseBingToEnrichFeedback)).ToLower() == "true";
+            var changePrompt = await GetParameterValueAsync(AgentContentParameters.ChangePrompt);
+            var searchPrompt = (await GetParameterValueAsync(AgentContentParameters.SearchPrompt))
                 .Replace(Placeholders.Answer, answer)
                 .Replace(Placeholders.Feedback, feedback);
-            var limit = GetParameterValue(AgentContentParameters.Limit);
+            var limit = await GetParameterValueAsync(AgentContentParameters.Limit);
             var searchString = await _semanticKernelProvider.ExecutePrompt(llmConnection, searchPrompt, Constants.PromptTemperature, Constants.PrompTopP, "");
 
             var searchResults = await kernelMemory.SearchAsync(searchString, minRelevance: minRelevance,
@@ -166,7 +166,7 @@ namespace AiCoreApi.SemanticKernel.Agents
                 _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Response", "Nothing to update");
                 return "";
             }
-            var summarizePrompt = GetParameterValue(AgentContentParameters.SummarizePrompt)
+            var summarizePrompt = (await GetParameterValueAsync(AgentContentParameters.SummarizePrompt))
                 .Replace(Placeholders.Answer, answer)
                 .Replace(Placeholders.Feedback, feedback);
             feedback = await _semanticKernelProvider.ExecutePrompt(llmConnection, summarizePrompt, Constants.PromptTemperature, Constants.PrompTopP, "");
@@ -217,7 +217,7 @@ namespace AiCoreApi.SemanticKernel.Agents
 
         private async Task<string> SyncAsync()
         {
-            var dataSource = GetParameterValue(AgentContentParameters.DataSource);
+            var dataSource = await GetParameterValueAsync(AgentContentParameters.DataSource);
             var ingestion = await GetIngestionModel(dataSource);
             _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Request", $"# Syncing ingestion: {ingestion.Name}");
             var task = new TaskModel
@@ -237,8 +237,8 @@ namespace AiCoreApi.SemanticKernel.Agents
         {
             try
             {
-                var bingConnectionName = GetParameterValue(AgentContentParameters.BingConnectionName);
-                var bingResultsLimit = GetParameterValue(AgentContentParameters.BingResultsLimit);
+                var bingConnectionName = await GetParameterValueAsync(AgentContentParameters.BingConnectionName);
+                var bingResultsLimit = await GetParameterValueAsync(AgentContentParameters.BingResultsLimit);
                 var bingAgentModel = new AgentModel
                 {
                     Name = "FeedbackEnrichmentBing",
@@ -293,8 +293,8 @@ namespace AiCoreApi.SemanticKernel.Agents
             _responseAccessor.CurrentMessage.Sources = MapSources(searchResults);
 
             var resultText = string.Join($"{Environment.NewLine}{Environment.NewLine}", searchResults.SelectMany(r => r.Partitions.Select(p => p.Text).ToList()));
-            var question = GetParameterValue(AgentContentParameters.Question);
-            var prompt = GetParameterValue(AgentContentParameters.Prompt)
+            var question = await GetParameterValueAsync(AgentContentParameters.Question);
+            var prompt = (await GetParameterValueAsync(AgentContentParameters.Prompt))
                 .Replace(Placeholders.Question, question);
 
             var prompTokens = new O200KTokenizer().CountTokens(prompt); // Default Tokenizer for gpt-4o-* models
@@ -344,9 +344,9 @@ namespace AiCoreApi.SemanticKernel.Agents
 
         private async Task<List<SearchResult>> DoSearchAsync(AgentModel agent)
         {
-            var question = GetParameterValue(AgentContentParameters.Question);
-            var dataSource = GetParameterValue(AgentContentParameters.DataSource);
-            var topK = GetParameterValue(AgentContentParameters.TopK, "10");
+            var question = await GetParameterValueAsync(AgentContentParameters.Question);
+            var dataSource = await GetParameterValueAsync(AgentContentParameters.DataSource);
+            var topK = await GetParameterValueAsync(AgentContentParameters.TopK, "10");
             var ingestion = await GetIngestionModel(dataSource);
 
             var tags = agent.Content.ContainsKey(AgentContentParameters.Tags)
@@ -420,9 +420,9 @@ namespace AiCoreApi.SemanticKernel.Agents
 
             var vectorDbConnection = (string.IsNullOrEmpty(vectorDbConnectionId) || vectorDbConnectionId == "0")
                 ? null
-                : GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.AzureAiSearch, _debugMessageSenderName, connectionId: Convert.ToInt32(vectorDbConnectionId));
+                : await GetConnectionAsync(_requestAccessor, _responseAccessor, connections, ConnectionType.AzureAiSearch, _debugMessageSenderName, connectionId: Convert.ToInt32(vectorDbConnectionId));
 
-            var embeddingConnection = GetConnection(_requestAccessor, _responseAccessor, connections,
+            var embeddingConnection = await GetConnectionAsync(_requestAccessor, _responseAccessor, connections,
                 new[] { ConnectionType.AzureOpenAiEmbedding, ConnectionType.OpenAiEmbedding }, _debugMessageSenderName, connectionId: Convert.ToInt32(embeddingConnectionId));
 
             var llmConnection = await GetLlmConnection(agent, connections);
@@ -439,7 +439,7 @@ namespace AiCoreApi.SemanticKernel.Agents
         private async Task<ConnectionModel> GetLlmConnection(AgentModel agent, List<ConnectionModel>? connections = null)
         {
             connections ??= await _connectionProcessor.List(_requestAccessor.WorkspaceId);
-            var llmConnection = GetConnection(_requestAccessor, _responseAccessor, connections,
+            var llmConnection = await GetConnectionAsync(_requestAccessor, _responseAccessor, connections,
                 new[]
                 {
                     ConnectionType.AzureOpenAiLlm, 

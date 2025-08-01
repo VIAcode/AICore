@@ -27,7 +27,6 @@ namespace AiCoreApi.Controllers
         private readonly IDistributedCache _distributedCache;
         private const int SsoSessionTimeoutMinutes = 5;
         private const string PermanentAcrValue = "permanent";
-        private const string CodeChallenge = "ThisIsntRandomButItNeedsToBe43CharactersLong";
 
         public ConnectController(
             IConnectService connectService,

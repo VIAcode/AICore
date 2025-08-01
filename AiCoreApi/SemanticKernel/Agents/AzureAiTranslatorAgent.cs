@@ -46,13 +46,13 @@ namespace AiCoreApi.SemanticKernel.Agents
 
             var connectionName = agent.Content[AgentContentParameters.ConnectionName].Value;
             var connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
-            var connection = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.AzureAiTranslator, _debugMessageSenderName, connectionName: connectionName);
+            var connection = await GetConnectionAsync(_requestAccessor, _responseAccessor, connections, ConnectionType.AzureAiTranslator, _debugMessageSenderName, connectionName: connectionName);
 
             var apiKey = connection.Content["apiKey"];
             var region = connection.Content["region"];
-            var fromLanguage = GetParameterValue(AgentContentParameters.From);
-            var toLanguage = GetParameterValue(AgentContentParameters.To);
-            var text = GetParameterValue(AgentContentParameters.Text);
+            var fromLanguage = await GetParameterValueAsync(AgentContentParameters.From);
+            var toLanguage = await GetParameterValueAsync(AgentContentParameters.To);
+            var text = await GetParameterValueAsync(AgentContentParameters.Text);
 
             _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Request", $"Connection: {connectionName}\r\nFrom: {fromLanguage}.\r\nTo: {toLanguage}\r\nText: {text}");
             var httpClient = _httpClientFactory.CreateClient(HttpClients.RetryClient);

@@ -41,14 +41,14 @@ namespace AiCoreApi.SemanticKernel.Agents
         {
             _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
-            var voice = GetParameterValue(AgentContentParameters.Voice);
-            var text = GetParameterValue(AgentContentParameters.Text);
+            var voice = await GetParameterValueAsync(AgentContentParameters.Voice);
+            var text = await GetParameterValueAsync(AgentContentParameters.Text);
             var speechConnectionName = agent.Content[AgentContentParameters.SpeechConnectionName].Value;
             var quality = agent.Content[AgentContentParameters.Quality].Value;
 
             _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall", $"Connection: {speechConnectionName}\r\nVoice: {voice}\r\nText: {text}");
             var connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
-            var speechConnection = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.AzureAiSpeech, _debugMessageSenderName, connectionName: speechConnectionName);
+            var speechConnection = await GetConnectionAsync(_requestAccessor, _responseAccessor, connections, ConnectionType.AzureAiSpeech, _debugMessageSenderName, connectionName: speechConnectionName);
             var region = speechConnection.Content["region"];
             var apiKey = speechConnection.Content["apiKey"];
 

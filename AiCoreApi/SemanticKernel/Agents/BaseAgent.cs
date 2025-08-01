@@ -89,7 +89,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             }
         }
 
-        protected string? GetParameterValue(string parameterName, string? defaultValue = "")
+        protected async Task<string?> GetParameterValueAsync(string parameterName, string? defaultValue = "")
         {
             var text = _agent.Content.ContainsKey(parameterName) ? _agent.Content[parameterName].Value : string.Empty;
 
@@ -99,106 +99,97 @@ namespace AiCoreApi.SemanticKernel.Agents
             if (_parameters == null || _parameters.Count == 0)
                 return text;
 
-            return ApplyParameters(text, null);
+            return await ApplyParametersAsync(text, null);
         }
 
-        protected string ApplyParameters(string text, Dictionary<string, string>? additionalParameters = null)
+        protected async Task<string> ApplyParametersAsync(string text, Dictionary<string, string>? additionalParameters = null)
         {
-            var inputSpan = text.AsSpan();
-            var stringBuilder = new StringBuilder(text.Length);
-            var startIndex = 0;
-            while (true)
+            var sb = new StringBuilder(text.Length);
+            int startIndex = 0;
+
+            while (startIndex < text.Length)
             {
-                var openBraceIndex = inputSpan[startIndex..].IndexOf("{{");
-                if (openBraceIndex == -1)
+                int openIndex = text.IndexOf("{{", startIndex);
+                if (openIndex == -1)
                 {
-                    stringBuilder.Append(inputSpan[startIndex..]);
+                    sb.Append(text.Substring(startIndex));
                     break;
                 }
-                var closeBraceIndex = inputSpan[(startIndex + openBraceIndex + 2)..].IndexOf("}}");
-                if (closeBraceIndex == -1)
+
+                int closeIndex = text.IndexOf("}}", openIndex + 2);
+                if (closeIndex == -1)
                 {
-                    stringBuilder.Append(inputSpan[startIndex..]);
+                    sb.Append(text.Substring(startIndex));
                     break;
                 }
-                // Handle nested braces ({{...{{...}}...}})
-                while (true)
+
+                sb.Append(text.Substring(startIndex, openIndex - startIndex));
+                string key = text.Substring(openIndex + 2, closeIndex - openIndex - 2);
+
+                if (_parameters.TryGetValue(key, out var value))
                 {
-                    var nextOpenBraceIndex = inputSpan[(startIndex + openBraceIndex + 2)..].IndexOf("{{");
-                    if (nextOpenBraceIndex != -1 && (nextOpenBraceIndex + openBraceIndex) < closeBraceIndex)
+                    sb.Append(value);
+                }
+                else if (additionalParameters != null && additionalParameters.TryGetValue(key, out var extra))
+                {
+                    sb.Append(extra);
+                }
+                else if (key.StartsWith("DS:"))
+                {
+                    var parts = key.Split(':');
+                    if (parts.Length < 3 || parts.Length > 4)
                     {
-                        openBraceIndex = nextOpenBraceIndex + openBraceIndex + 2;
-                        closeBraceIndex = inputSpan[(startIndex + openBraceIndex + 2)..].IndexOf("}}");
-                        continue;
-                    }
-                    break;
-                }
-                
-                openBraceIndex += startIndex;
-                closeBraceIndex += openBraceIndex + 2;
-                stringBuilder.Append(inputSpan[startIndex..openBraceIndex]);
-                var parameterKeySpan = inputSpan[(openBraceIndex + 2)..closeBraceIndex];
-                var parameterKey = parameterKeySpan.ToString();
-                if (_parameters.TryGetValue(parameterKey, out var value))
-                {
-                    stringBuilder.Append(value);
-                }
-                else if (additionalParameters != null && additionalParameters.TryGetValue(parameterKey, out var additionalValue))
-                {
-                    stringBuilder.Append(additionalValue);
-                }
-                else if (parameterKey.StartsWith("DS:"))
-                {
-                    var dataSourceParts = parameterKey.Split(":");
-                    if (dataSourceParts.Length != 3 && dataSourceParts.Length != 4)
-                    {
-                        stringBuilder.Append("Invalid Data Source parameters count");
-                        break;
+                        sb.Append("Invalid Data Source parameters count");
                     }
                     else
                     {
-                        var dataSourceName = dataSourceParts[1];
-                        var dataSourceFilePath = dataSourceParts[2];
-                        var cacheTimeString = dataSourceParts.Length == 4 ? dataSourceParts[3] : "0";
-                        if (!int.TryParse(cacheTimeString, out var cacheTime))
-                            cacheTime = 0;
+                        var dsName = parts[1];
+                        var dsPath = parts[2];
+                        var cacheSeconds = (parts.Length == 4 && int.TryParse(parts[3], out var c)) ? c : 0;
 
-                        var cachedValue = (_cacheAccessor.GetCacheValue($"{dataSourceName}_{dataSourceFilePath}"));
-                        if(!string.IsNullOrEmpty(cachedValue))
+                        var cacheKey = $"{HttpUtility.UrlEncode(dsName)}_{HttpUtility.UrlEncode(dsPath)}";
+                        var cachedValue = _cacheAccessor.GetCacheValue(cacheKey);
+
+                        if (!string.IsNullOrEmpty(cachedValue))
                         {
-                            stringBuilder.Append(cachedValue);
+                            sb.Append(cachedValue);
                         }
                         else
                         {
-                            var ingestion = _ingestionProcessor.Get(dataSourceName, _requestAccessor.WorkspaceId).GetAwaiter().GetResult();
+                            var ingestion = await _ingestionProcessor.Get(dsName, _requestAccessor.WorkspaceId);
                             if (ingestion == null)
                             {
-                                stringBuilder.Append($"Data Source '{dataSourceName}' not found");
-                                break;
+                                sb.Append($"Data Source '{dsName}' not found");
                             }
-                            var dataIngestionWorker = _dataIngestionWorkerFactory.GetService(ingestion);
-                            var file = dataIngestionWorker.GetFileByPath(ingestion, dataSourceFilePath).GetAwaiter().GetResult();
-                            if(string.IsNullOrEmpty(file))
+                            else
                             {
-                                stringBuilder.Append($"File '{dataSourceFilePath}' not found in Data Source '{dataSourceName}'");
-                                break;
-                            }
-                            stringBuilder.Append(file);
-                            if (cacheTime > 0)
-                            {
-                                _cacheAccessor.SetCacheValue($"{dataSourceName}_{dataSourceFilePath}", file, cacheTime);
+                                var worker = _dataIngestionWorkerFactory.GetService(ingestion);
+                                var file = await worker.GetFileByPath(ingestion, dsPath);
+                                if (string.IsNullOrEmpty(file))
+                                {
+                                    sb.Append($"File '{dsPath}' not found in Data Source '{dsName}'");
+                                }
+                                else
+                                {
+                                    sb.Append(file);
+                                    if (cacheSeconds > 0)
+                                        _cacheAccessor.SetCacheValue(cacheKey, file, cacheSeconds);
+                                }
                             }
                         }
                     }
                 }
                 else
                 {
-                    stringBuilder.Append("{{").Append(parameterKeySpan).Append("}}");
+                    sb.Append("{{").Append(key).Append("}}");
                 }
-                startIndex = closeBraceIndex + 2;
+
+                startIndex = closeIndex + 2;
             }
-            return stringBuilder.ToString();
+
+            return sb.ToString();
         }
+
 
         public virtual async Task OnAddUpdate(AgentModel agentModel)
         {
@@ -268,7 +259,7 @@ namespace AiCoreApi.SemanticKernel.Agents
 
         public abstract Task<string> DoCall(AgentModel agent, Dictionary<string, string> parameters);
 
-        protected ConnectionModel GetConnection(
+        protected async Task<ConnectionModel> GetConnectionAsync(
             RequestAccessor requestAccessor,
             ResponseAccessor responseAccessor,
             List<ConnectionModel> connections,
@@ -277,10 +268,10 @@ namespace AiCoreApi.SemanticKernel.Agents
             int? connectionId = 0,
             string? connectionName = "")
         {
-            return GetConnection(requestAccessor, responseAccessor, connections, new[]{connectionType} , debugMessageSenderName, connectionId, connectionName);
+            return await GetConnectionAsync(requestAccessor, responseAccessor, connections, new[]{connectionType} , debugMessageSenderName, connectionId, connectionName);
         }
 
-        protected ConnectionModel GetConnection(
+        protected async Task<ConnectionModel> GetConnectionAsync(
             RequestAccessor requestAccessor,
             ResponseAccessor responseAccessor,
             List<ConnectionModel> connections, 
@@ -290,7 +281,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             string? connectionName = "")
         {
             if (!string.IsNullOrEmpty(connectionName) && connectionName.Contains("{{"))
-                connectionName = ApplyParameters(connectionName);
+                connectionName = await ApplyParametersAsync(connectionName);
 
             var connectionSpecified = connectionId > 0 || !string.IsNullOrEmpty(connectionName);
             // Check connection specified for Agent

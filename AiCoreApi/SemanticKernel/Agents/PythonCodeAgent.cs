@@ -59,8 +59,8 @@ namespace AiCoreApi.SemanticKernel.Agents
         {
             _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
-            var pythonCode = GetParameterValue(AgentContentParameters.PythonCode);
-            pythonCode = ApplyParameters(pythonCode, new Dictionary<string, string>
+            var pythonCode = await GetParameterValueAsync(AgentContentParameters.PythonCode);
+            pythonCode = await ApplyParametersAsync(pythonCode, new Dictionary<string, string>
             {
                 {AgentPromptPlaceholders.HasFilesPlaceholder, _requestAccessor.MessageDialog.Messages.Last().HasFiles().ToString()},
                 {AgentPromptPlaceholders.FilesDataPlaceholder, _requestAccessor.MessageDialog.Messages.Last().GetFileContents()},

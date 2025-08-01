@@ -42,20 +42,20 @@ namespace AiCoreApi.SemanticKernel.Agents
             _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
             var connectionName = agent.Content[AgentContentParameters.ConnectionName].Value;
-            var recipient = GetParameterValue(AgentContentParameters.Recipient);
-            var cc = GetParameterValue(AgentContentParameters.Cc);
-            var subject = GetParameterValue(AgentContentParameters.Subject);
-            var body = GetParameterValue(AgentContentParameters.Body);
+            var recipient = await GetParameterValueAsync(AgentContentParameters.Recipient);
+            var cc = await GetParameterValueAsync(AgentContentParameters.Cc);
+            var subject = await GetParameterValueAsync(AgentContentParameters.Subject);
+            var body = await GetParameterValueAsync(AgentContentParameters.Body);
 
             _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Request", $"To: {recipient}, Cc: {cc} Subject: {subject}");
 
             var connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
-            var connection = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.Smtp, _debugMessageSenderName, connectionName: connectionName);
+            var connection = await GetConnectionAsync(_requestAccessor, _responseAccessor, connections, ConnectionType.Smtp, _debugMessageSenderName, connectionName: connectionName);
             var smtpServer = connection.Content["smtpServer"];
             var smtpPort = int.Parse(connection.Content["smtpPort"]);
-            var smtpUser = ApplyParameters(connection.Content["smtpUser"]);
-            var smtpPass = ApplyParameters(connection.Content["smtpPassword"]);
-            var smtpFrom = ApplyParameters(connection.Content["smtpFrom"]);
+            var smtpUser = await ApplyParametersAsync(connection.Content["smtpUser"]);
+            var smtpPass = await ApplyParametersAsync(connection.Content["smtpPassword"]);
+            var smtpFrom = await ApplyParametersAsync(connection.Content["smtpFrom"]);
 
             SendEmail(smtpServer, smtpPort, smtpUser, smtpPass, smtpFrom, recipient, cc, subject, body);
 

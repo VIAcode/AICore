@@ -46,13 +46,13 @@ namespace AiCoreApi.SemanticKernel.Agents
         {
             _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
-            var base64Audio = GetParameterValue(AgentContentParameters.Base64Audio);
-            var extension = GetParameterValue(AgentContentParameters.Extension);
-            var mimeType = GetParameterValue(AgentContentParameters.MimeType);
+            var base64Audio = await GetParameterValueAsync(AgentContentParameters.Base64Audio);
+            var extension = await GetParameterValueAsync(AgentContentParameters.Extension);
+            var mimeType = await GetParameterValueAsync(AgentContentParameters.MimeType);
             var connectionName = agent.Content[AgentContentParameters.ConnectionName].Value;
             if (_requestAccessor.MessageDialog.Messages!.Last().HasFiles())
             {
-                base64Audio = ApplyParameters(base64Audio, new Dictionary<string, string> { 
+                base64Audio = await ApplyParametersAsync(base64Audio, new Dictionary<string, string> { 
                     { AgentPromptPlaceholders.FileDataPlaceholder, _requestAccessor.MessageDialog.Messages!.Last().Files!.First().Base64Data }
                 });
             }
@@ -63,7 +63,7 @@ namespace AiCoreApi.SemanticKernel.Agents
         {
             _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Request", $"Extension: {extension}\r\nConnection: {connectionName}\r\nBase64Audio: {base64Audio.Length} bytes");
             var connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
-            var connection = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.AzureWhisper, _debugMessageSenderName, connectionName: connectionName);
+            var connection = await GetConnectionAsync(_requestAccessor, _responseAccessor, connections, ConnectionType.AzureWhisper, _debugMessageSenderName, connectionName: connectionName);
 
             var whisperApiKey = connection.Content["apiKey"];
             var whisperEndpoint = connection.Content["endpoint"];

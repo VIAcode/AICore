@@ -62,12 +62,12 @@ namespace AiCoreApi.SemanticKernel.Agents
 
             var action = agent.Content[AgentContentParameters.Action].Value;
             var connectionName = agent.Content[AgentContentParameters.ConnectionName].Value;
-            var containerName = GetParameterValue(AgentContentParameters.ContainerName);
-            var fileName = GetParameterValue(AgentContentParameters.FileName);
+            var containerName = await GetParameterValueAsync(AgentContentParameters.ContainerName);
+            var fileName = await GetParameterValueAsync(AgentContentParameters.FileName);
             _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Request", $"Action: {action}\r\nConnection: {connectionName}\r\nContainerName: {containerName}\r\nFileName: {fileName}");
 
             var connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
-            var connection = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.StorageAccount, _debugMessageSenderName, connectionName: connectionName);
+            var connection = await GetConnectionAsync(_requestAccessor, _responseAccessor, connections, ConnectionType.StorageAccount, _debugMessageSenderName, connectionName: connectionName);
 
             var accountName = connection.Content["accountName"];
             var accessType = connection.Content.ContainsKey("accessType") ? connection.Content["accessType"] : "apiKey";
@@ -101,10 +101,10 @@ namespace AiCoreApi.SemanticKernel.Agents
                     }
                 case ("ADD"):
                     {
-                        var base64Content = GetParameterValue(AgentContentParameters.Base64Content);
+                        var base64Content = await GetParameterValueAsync(AgentContentParameters.Base64Content);
                         if (_requestAccessor.MessageDialog != null && _requestAccessor.MessageDialog.Messages!.Last().HasFiles())
                         {
-                            base64Content = ApplyParameters(base64Content, new Dictionary<string, string> {
+                            base64Content = await ApplyParametersAsync(base64Content, new Dictionary<string, string> {
                                 {
                                     AgentPromptPlaceholders.FileDataPlaceholder, _requestAccessor.MessageDialog.Messages!.Last().Files!.First().Base64Data
                                 }
@@ -117,7 +117,7 @@ namespace AiCoreApi.SemanticKernel.Agents
                 case "ADDTEXT":
                     {
                         var encoding = GetEncoding(agent, parameters);
-                        var textContent = GetParameterValue(AgentContentParameters.TextContent);
+                        var textContent = await GetParameterValueAsync(AgentContentParameters.TextContent);
                         var textBytes = encoding.GetBytes(textContent);
                         result = await AddBytes(blobServiceClient, containerName, fileName, textBytes);
                         break;

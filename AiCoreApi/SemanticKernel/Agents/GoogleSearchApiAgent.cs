@@ -56,10 +56,10 @@ namespace AiCoreApi.SemanticKernel.Agents
         {
             _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
-            var queryString = GetParameterValue(AgentContentParameters.QueryString);
-            var maxContentLength = GetParameterValue(AgentContentParameters.MaxContentLength, DefaultMaxContentLength.ToString());
+            var queryString = await GetParameterValueAsync(AgentContentParameters.QueryString);
+            var maxContentLength = await GetParameterValueAsync(AgentContentParameters.MaxContentLength, DefaultMaxContentLength.ToString());
 
-            queryString = ApplyParameters(queryString, new Dictionary<string, string>
+            queryString = await ApplyParametersAsync(queryString, new Dictionary<string, string>
             {
                 { AgentPromptPlaceholders.HasFilesPlaceholder, _requestAccessor.MessageDialog.Messages.Last().HasFiles().ToString() },
                 { AgentPromptPlaceholders.FilesDataPlaceholder, _requestAccessor.MessageDialog.Messages.Last().GetFileContents() },
@@ -70,10 +70,10 @@ namespace AiCoreApi.SemanticKernel.Agents
 
             var googleConnectionName = agent.Content[AgentContentParameters.GoogleConnection].Value;
             var connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
-            var googleConnection = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.GoogleSearchApi, _debugMessageSenderName, connectionName: googleConnectionName);
+            var googleConnection = await GetConnectionAsync(_requestAccessor, _responseAccessor, connections, ConnectionType.GoogleSearchApi, _debugMessageSenderName, connectionName: googleConnectionName);
 
-            var count = int.Parse(GetParameterValue(AgentContentParameters.Count));
-            var offset = int.Parse(GetParameterValue(AgentContentParameters.Offset));
+            var count = int.Parse(await GetParameterValueAsync(AgentContentParameters.Count));
+            var offset = int.Parse(await GetParameterValueAsync(AgentContentParameters.Offset));
             var outputType = agent.Content.TryGetValue(AgentContentParameters.OutputType, out var ot) ? ot.Value : "snippetTexts";
             var results = await DoSearchAsync(queryString, googleConnection.Content["apiKey"], googleConnection.Content["googleCxId"], count, offset);
 

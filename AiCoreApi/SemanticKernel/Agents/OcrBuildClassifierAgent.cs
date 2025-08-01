@@ -98,7 +98,7 @@ namespace AiCoreApi.SemanticKernel.Agents
 
         private async Task<string> ReturnModels(List<ConnectionModel> connections, AgentModel agent)
         {
-            var conn = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.DocumentIntelligence, _debugMessageSenderName, connectionName: agent.Content["documentIntelligenceConnection"].Value);
+            var conn = await GetConnectionAsync(_requestAccessor, _responseAccessor, connections, ConnectionType.DocumentIntelligence, _debugMessageSenderName, connectionName: agent.Content["documentIntelligenceConnection"].Value);
             var client = await CreateOcrClientAsync(conn,
                 (uri, cred) => new DocumentModelAdministrationClient(uri, cred),
                 (uri, cred) => new DocumentModelAdministrationClient(uri, cred));
@@ -114,7 +114,7 @@ namespace AiCoreApi.SemanticKernel.Agents
 
         private async Task<string> ReturnClassifiers(List<ConnectionModel> connections, AgentModel agent)
         {
-            var conn = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.DocumentIntelligence, _debugMessageSenderName, connectionName: agent.Content["documentIntelligenceConnection"].Value);
+            var conn = await GetConnectionAsync(_requestAccessor, _responseAccessor, connections, ConnectionType.DocumentIntelligence, _debugMessageSenderName, connectionName: agent.Content["documentIntelligenceConnection"].Value);
             var client = await CreateOcrClientAsync(conn,
                 (uri, cred) => new DocumentIntelligenceAdministrationClient(uri, cred),
                 (uri, cred) => new DocumentIntelligenceAdministrationClient(uri, cred));
@@ -130,8 +130,8 @@ namespace AiCoreApi.SemanticKernel.Agents
 
         private async Task<string> ReturnDocumentTypes(List<ConnectionModel> connections, AgentModel agent, Dictionary<string, string> parameters)
         {
-            var classifierId = GetParameterValue("classifierId");
-            var conn = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.DocumentIntelligence, _debugMessageSenderName, connectionName: agent.Content["documentIntelligenceConnection"].Value);
+            var classifierId = await GetParameterValueAsync("classifierId");
+            var conn = await GetConnectionAsync(_requestAccessor, _responseAccessor, connections, ConnectionType.DocumentIntelligence, _debugMessageSenderName, connectionName: agent.Content["documentIntelligenceConnection"].Value);
             var client = await CreateOcrClientAsync(conn,
                 (uri, cred) => new DocumentIntelligenceAdministrationClient(uri, cred),
                 (uri, cred) => new DocumentIntelligenceAdministrationClient(uri, cred));
@@ -149,22 +149,22 @@ namespace AiCoreApi.SemanticKernel.Agents
         {
             var diConnectionName = agent.Content[AgentContentParameters.DocumentIntelligenceConnection].Value;
             var saConnectionName = agent.Content[AgentContentParameters.StorageAccountConnection].Value;
-            var ocrConnection = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.DocumentIntelligence, _debugMessageSenderName, connectionName: diConnectionName);
-            var blobConnection = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.StorageAccount, _debugMessageSenderName, connectionName: saConnectionName);
-            var classifierId = GetParameterValue(AgentContentParameters.ClassifierId);
+            var ocrConnection = await GetConnectionAsync(_requestAccessor, _responseAccessor, connections, ConnectionType.DocumentIntelligence, _debugMessageSenderName, connectionName: diConnectionName);
+            var blobConnection = await GetConnectionAsync(_requestAccessor, _responseAccessor, connections, ConnectionType.StorageAccount, _debugMessageSenderName, connectionName: saConnectionName);
+            var classifierId = await GetParameterValueAsync(AgentContentParameters.ClassifierId);
             if (string.IsNullOrWhiteSpace(classifierId))
             {
                 throw new ArgumentException($"{AgentContentParameters.ClassifierId} cannot be empty");
             }
             var baseClassifierId = !agent.Content.ContainsKey(AgentContentParameters.BaseClassifierId) 
                 ? null 
-                : GetParameterValue(AgentContentParameters.BaseClassifierId);
-            var containerName = GetParameterValue(AgentContentParameters.ContainerName);
+                : await GetParameterValueAsync(AgentContentParameters.BaseClassifierId);
+            var containerName = await GetParameterValueAsync(AgentContentParameters.ContainerName);
             if (string.IsNullOrWhiteSpace(containerName))
             {
                 throw new ArgumentException($"{AgentContentParameters.ContainerName} cannot be empty");
             }
-            var documentTypesRaw = GetParameterValue(AgentContentParameters.DocumentTypes);
+            var documentTypesRaw = await GetParameterValueAsync(AgentContentParameters.DocumentTypes);
             var documentTypes = Regex.Split(documentTypesRaw, @"\r?\n")
                 .Select(x => x.Trim())
                 .Where(s=>!string.IsNullOrWhiteSpace(s))

@@ -46,7 +46,7 @@ namespace AiCoreApi.SemanticKernel.Agents
 
             var connectionName = agent.Content[AgentContentParameters.ContentSafetyConnection].Value;
             var connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
-            var contentSafetyConnection = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.ContentSafety, _debugMessageSenderName, connectionName: connectionName);
+            var contentSafetyConnection = await GetConnectionAsync(_requestAccessor, _responseAccessor, connections, ConnectionType.ContentSafety, _debugMessageSenderName, connectionName: connectionName);
             var apiKey = contentSafetyConnection.Content["apiKey"];
             var contentSafetyUrl = contentSafetyConnection.Content["contentSafetyUrl"].TrimEnd('/');
             var hate = Convert.ToInt32(agent.Content[AgentContentParameters.Hate].Value);

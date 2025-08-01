@@ -48,10 +48,10 @@ namespace AiCoreApi.SemanticKernel.Agents
             _sender = $"{agent.Name} ({agent.Type})";
 
             var connName = agent.Content[Param.ConnectionName].Value;
-            var action = GetParameterValue(Param.Action).ToUpper();
+            var action = (await GetParameterValueAsync(Param.Action)).ToUpper();
 
             var connections = await _connProc.List(_requestAccessor.WorkspaceId);
-            var connection = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.MemZero, _sender, connectionName: connName);
+            var connection = await GetConnectionAsync(_requestAccessor, _responseAccessor, connections, ConnectionType.MemZero, _sender, connectionName: connName);
             var baseUrl = connection.Content["baseUrl"].TrimEnd('/', ' ');
             var apiKey = connection.Content["apiKey"];
             var projectId = connection.Content["projectId"];
@@ -63,17 +63,17 @@ namespace AiCoreApi.SemanticKernel.Agents
 
             HttpResponseMessage resp;
             var result = "";
-            var userId = GetParameterValue(Param.UserId);
+            var userId = await GetParameterValueAsync(Param.UserId);
 
             switch (action)
             {
                 case "ADD":
                     {
-                        var message = GetParameterValue(Param.Message);
+                        var message = await GetParameterValueAsync(Param.Message);
                         var expirationDate = agent.Content.ContainsKey(Param.ExpirationDate)
-                            ? GetParameterValue(Param.ExpirationDate)
+                            ? await GetParameterValueAsync(Param.ExpirationDate)
                             : "";
-                        var asyncMode = GetParameterValue(Param.AsyncMode);
+                        var asyncMode = await GetParameterValueAsync(Param.AsyncMode);
                         var addPayload = new Dictionary<string, object>
                         {
                             { "messages", new[] { new { role = "user", content = message } } },
@@ -96,8 +96,8 @@ namespace AiCoreApi.SemanticKernel.Agents
                     }
                 case "SEARCH":
                     {
-                        var searchString = GetParameterValue(Param.SearchString);
-                        var topK = GetParameterValue(Param.TopK);
+                        var searchString = await GetParameterValueAsync(Param.SearchString);
+                        var topK = await GetParameterValueAsync(Param.TopK);
                         var searchPayload = new Dictionary<string, object>
                         {
                             { "query", searchString },

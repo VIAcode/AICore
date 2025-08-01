@@ -35,7 +35,7 @@ namespace AiCoreApi.SemanticKernel.Agents
         {
             _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
             _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Request", JsonSerializer.Serialize(parameters, new JsonSerializerOptions { WriteIndented = true }));
-            var agentToCall = GetParameterValue(AgentContentParameters.AgentToCall);
+            var agentToCall = await GetParameterValueAsync(AgentContentParameters.AgentToCall);
             var result = await ExecuteAgent(agentToCall, parameters.Values.ToList());
             _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Response", result);
             return result;
