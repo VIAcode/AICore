@@ -6,7 +6,6 @@ using Azure.Core;
 using Azure.Storage;
 using Azure;
 using Microsoft.SemanticKernel;
-using System.Web;
 using Azure.AI.DocumentIntelligence;
 using Azure.Storage.Blobs;
 using System.Text.RegularExpressions;
@@ -15,7 +14,6 @@ using Azure.AI.FormRecognizer.DocumentAnalysis;
 using BlobContentSource = Azure.AI.DocumentIntelligence.BlobContentSource;
 using ClassifierDocumentTypeDetails = Azure.AI.DocumentIntelligence.ClassifierDocumentTypeDetails;
 using DocumentClassifierDetails = Azure.AI.DocumentIntelligence.DocumentClassifierDetails;
-using AiCoreApi.Common.Monitoring;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
@@ -55,12 +53,12 @@ namespace AiCoreApi.SemanticKernel.Agents
         private readonly IConnectionProcessor _connectionProcessor;
 
         public OcrBuildClassifierAgent(
+            IBaseAgentHelper baseAgentHelper,
             IEntraTokenProvider entraTokenProvider,
             RequestAccessor requestAccessor,
             ResponseAccessor responseAccessor,
             IConnectionProcessor connectionProcessor,
-            MonitoringConfig monitoringConfig, 
-            ILogger<OcrBuildClassifierAgent> logger) : base(responseAccessor, requestAccessor, monitoringConfig, logger)
+            ILogger<OcrBuildClassifierAgent> logger) : base(baseAgentHelper, logger)
         {
             _entraTokenProvider = entraTokenProvider;
             _requestAccessor = requestAccessor;
@@ -70,7 +68,6 @@ namespace AiCoreApi.SemanticKernel.Agents
 
         public override async Task<string> DoCall(AgentModel agent, Dictionary<string, string> parameters)
         {
-            parameters.ToList().ForEach(p => parameters[p.Key] = HttpUtility.HtmlDecode(p.Value));
             _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
             var connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
@@ -133,7 +130,7 @@ namespace AiCoreApi.SemanticKernel.Agents
 
         private async Task<string> ReturnDocumentTypes(List<ConnectionModel> connections, AgentModel agent, Dictionary<string, string> parameters)
         {
-            var classifierId = ApplyParameters(agent.Content["classifierId"].Value, parameters);
+            var classifierId = GetParameterValue("classifierId");
             var conn = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.DocumentIntelligence, _debugMessageSenderName, connectionName: agent.Content["documentIntelligenceConnection"].Value);
             var client = await CreateOcrClientAsync(conn,
                 (uri, cred) => new DocumentIntelligenceAdministrationClient(uri, cred),
@@ -154,20 +151,20 @@ namespace AiCoreApi.SemanticKernel.Agents
             var saConnectionName = agent.Content[AgentContentParameters.StorageAccountConnection].Value;
             var ocrConnection = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.DocumentIntelligence, _debugMessageSenderName, connectionName: diConnectionName);
             var blobConnection = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.StorageAccount, _debugMessageSenderName, connectionName: saConnectionName);
-            var classifierId = ApplyParameters(agent.Content[AgentContentParameters.ClassifierId].Value, parameters);
+            var classifierId = GetParameterValue(AgentContentParameters.ClassifierId);
             if (string.IsNullOrWhiteSpace(classifierId))
             {
                 throw new ArgumentException($"{AgentContentParameters.ClassifierId} cannot be empty");
             }
             var baseClassifierId = !agent.Content.ContainsKey(AgentContentParameters.BaseClassifierId) 
                 ? null 
-                : ApplyParameters(agent.Content[AgentContentParameters.BaseClassifierId].Value, parameters);
-            var containerName = ApplyParameters(agent.Content[AgentContentParameters.ContainerName].Value, parameters);
+                : GetParameterValue(AgentContentParameters.BaseClassifierId);
+            var containerName = GetParameterValue(AgentContentParameters.ContainerName);
             if (string.IsNullOrWhiteSpace(containerName))
             {
                 throw new ArgumentException($"{AgentContentParameters.ContainerName} cannot be empty");
             }
-            var documentTypesRaw = ApplyParameters(agent.Content[AgentContentParameters.DocumentTypes].Value, parameters);
+            var documentTypesRaw = GetParameterValue(AgentContentParameters.DocumentTypes);
             var documentTypes = Regex.Split(documentTypesRaw, @"\r?\n")
                 .Select(x => x.Trim())
                 .Where(s=>!string.IsNullOrWhiteSpace(s))

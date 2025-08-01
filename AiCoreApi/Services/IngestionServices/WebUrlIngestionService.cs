@@ -64,6 +64,23 @@ namespace AiCoreApi.Services.IngestionServices
             throw new NotImplementedException();
         }
 
+        public async Task<string> GetFileByPath(IngestionModel ingestion, string filePath)
+        {
+            var httpClient = new HttpClient();
+            var uri = new Uri(filePath);
+            try
+            {
+                var response = await httpClient.GetAsync(uri);
+                response.EnsureSuccessStatusCode();
+                return await response.Content.ReadAsStringAsync();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Failed to get file by path: {filePath}");
+                throw;
+            }
+        }
+
         public async Task SetFile(IngestionModel ingestion, string fileId, string articleText)
         {
             throw new NotImplementedException();

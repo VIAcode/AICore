@@ -1,12 +1,10 @@
 using Microsoft.SemanticKernel;
 using AiCoreApi.Models.DbModels;
 using AiCoreApi.Common;
-using System.Web;
 using AiCoreApi.Data.Processors;
 using System.Collections.Concurrent;
 using AiCoreApi.Common.Extensions;
 using static AiCoreApi.Common.ExceptionHandlingMiddleware;
-using AiCoreApi.Common.Monitoring;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
@@ -72,8 +70,7 @@ result = ..expected_output..
         private readonly ISemanticKernelProvider _semanticKernelProvider;
 
         public CompositePythonAgent(
-            IAgentsProcessor agentsProcessor,
-            MonitoringConfig monitoringConfig,
+            IBaseAgentHelper baseAgentHelper,
             IPythonCodeAgent pythonCodeAgent,
             ILogger<CompositePythonAgent> logger,
             RequestAccessor requestAccessor,
@@ -82,7 +79,7 @@ result = ..expected_output..
             IPlannerHelpers plannerHelpers,
             ISemanticKernelProvider semanticKernelProvider
         )
-        : base(agentsProcessor, responseAccessor, requestAccessor, monitoringConfig, logger)
+        : base(baseAgentHelper, logger)
         {
             _pythonCodeAgent = pythonCodeAgent;
             _requestAccessor = requestAccessor;
@@ -94,7 +91,6 @@ result = ..expected_output..
 
         public override async Task<string> DoCall(AgentModel agent, Dictionary<string, string> parameters)
         {
-            parameters.ToList().ForEach(p => parameters[p.Key] = HttpUtility.HtmlDecode(p.Value));
             _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
             var connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
@@ -102,7 +98,7 @@ result = ..expected_output..
                 new[] { ConnectionType.AzureOpenAiLlm, ConnectionType.OpenAiLlm, ConnectionType.CohereLlm, ConnectionType.DeepSeekLlm, ConnectionType.GeminiLlm }, _debugMessageSenderName, agent.LlmType);
             var temperature = GetTemperature(llmConnection, agent);
             var topP = GetTopP(agent);
-            var prompt = ApplyParameters(agent.Content[AgentContentParameters.Prompt].Value, parameters);
+            var prompt = GetParameterValue(AgentContentParameters.Prompt);
 
             var parameterDescription = agent.Content["parameterDescription"].Value
                 .Split(',')
@@ -113,9 +109,9 @@ parameter{i + 1} = Parameters['parameter{i + 1}']")
 
             string agentsDescription = await GetAgentsDescriptions(agent);
 
-            string promptTemplate = agent.Content.ContainsKey(AgentContentParameters.CodeGenerationPrompt)
-                ? ApplyParameters(agent.Content[AgentContentParameters.CodeGenerationPrompt].Value, parameters)
-                : CodeGenerationPromptText;
+            string promptTemplate = GetParameterValue(AgentContentParameters.CodeGenerationPrompt);
+            if(string.IsNullOrEmpty(promptTemplate))
+                promptTemplate = CodeGenerationPromptText;
             promptTemplate = promptTemplate
                 .Replace(CodeGenerationPromptPlaceHolders.AgentsDescription, agentsDescription)
                 .Replace(CodeGenerationPromptPlaceHolders.ParametersDescription, parametersDescription)

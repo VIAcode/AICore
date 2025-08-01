@@ -1,11 +1,9 @@
 using Microsoft.SemanticKernel;
 using AiCoreApi.Models.DbModels;
-using System.Web;
 using AiCoreApi.Common;
 using AiCoreApi.Data.Processors;
 using StackExchange.Redis;
 using ConnectionType = AiCoreApi.Models.DbModels.ConnectionType;
-using AiCoreApi.Common.Monitoring;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
@@ -27,11 +25,11 @@ namespace AiCoreApi.SemanticKernel.Agents
         private readonly ResponseAccessor _responseAccessor;
 
         public RedisAgent(
+            IBaseAgentHelper baseAgentHelper,
             IConnectionProcessor connectionProcessor,
             RequestAccessor requestAccessor,
             ResponseAccessor responseAccessor,
-            MonitoringConfig monitoringConfig,
-            ILogger<RedisAgent> logger) : base(responseAccessor, requestAccessor, monitoringConfig, logger)
+            ILogger<RedisAgent> logger) : base(baseAgentHelper, logger)
         {
             _connectionProcessor = connectionProcessor;
             _requestAccessor = requestAccessor;
@@ -40,14 +38,13 @@ namespace AiCoreApi.SemanticKernel.Agents
 
         public override async Task<string> DoCall(AgentModel agent, Dictionary<string, string> parameters)
         {
-            parameters.ToList().ForEach(p => parameters[p.Key] = HttpUtility.HtmlDecode(p.Value));
             _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
             var connectionName = agent.Content[AgentContentParameters.ConnectionName].Value;
-            var action = ApplyParameters(agent.Content[AgentContentParameters.Action].Value, parameters);
-            var cacheKey = ApplyParameters(agent.Content[AgentContentParameters.CacheKey].Value, parameters);
-            var value = ApplyParameters(agent.Content[AgentContentParameters.Value].Value, parameters);
-            var lifeTimeSeconds = ApplyParameters(agent.Content[AgentContentParameters.LifeTimeSeconds].Value, parameters);
+            var action = GetParameterValue(AgentContentParameters.Action);
+            var cacheKey = GetParameterValue(AgentContentParameters.CacheKey);
+            var value = GetParameterValue(AgentContentParameters.Value);
+            var lifeTimeSeconds = GetParameterValue(AgentContentParameters.LifeTimeSeconds);
 
             _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Request", $"Action: {action}, Cache Key: {cacheKey}, Value: {value}");
             var connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);

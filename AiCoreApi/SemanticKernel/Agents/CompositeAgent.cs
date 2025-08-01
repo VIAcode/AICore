@@ -5,8 +5,6 @@ using AiCoreApi.Common;
 using AiCoreApi.Data.Processors;
 using Microsoft.SemanticKernel.Planning.Handlebars;
 using Microsoft.SemanticKernel.Connectors.OpenAI;
-using System.Web;
-using AiCoreApi.Common.Monitoring;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
@@ -28,15 +26,14 @@ namespace AiCoreApi.SemanticKernel.Agents
         private readonly ISemanticKernelProvider _semanticKernelProvider;
 
         public CompositeAgent(
-            IAgentsProcessor agentsProcessor,
+            IBaseAgentHelper baseAgentHelper,
             IConnectionProcessor connectionProcessor,
             ExtendedConfig extendedConfig,
-            MonitoringConfig monitoringConfig,
             ResponseAccessor responseAccessor,
             RequestAccessor requestAccessor,
             IPlannerHelpers plannerHelpers,
         ILogger<CompositeAgent> logger,
-            ISemanticKernelProvider semanticKernelProvider) : base(agentsProcessor, responseAccessor, requestAccessor, monitoringConfig, logger)
+            ISemanticKernelProvider semanticKernelProvider) : base(baseAgentHelper, logger)
         {
             _connectionProcessor = connectionProcessor;
             _extendedConfig = extendedConfig;
@@ -50,7 +47,6 @@ namespace AiCoreApi.SemanticKernel.Agents
 
         public override async Task<string> DoCall(AgentModel agent, Dictionary<string, string> parameters)
         {
-            parameters.ToList().ForEach(p => parameters[p.Key] = HttpUtility.HtmlDecode(p.Value));
             _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
             var connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
@@ -68,13 +64,13 @@ namespace AiCoreApi.SemanticKernel.Agents
             plannerPrompt = await AddPlugins(kernel, plannerPrompt, agents);
             if (string.IsNullOrWhiteSpace(plan))
             {
-                plannerPrompt = ApplyParameters(plannerPrompt, parameters);
+                plannerPrompt = ApplyParameters(plannerPrompt);
                 plan = await GetPlan(kernel, agent, plannerPrompt);
                 _responseAccessor.AddDebugMessage(_debugMessageSenderName, "Generated Plan", $"{plan}");
             }
             else
             {
-                plan = ApplyParameters(plan, parameters);
+                plan = ApplyParameters(plan);
             }
             try
             {

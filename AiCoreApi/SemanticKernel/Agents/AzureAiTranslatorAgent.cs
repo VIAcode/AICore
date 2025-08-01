@@ -1,11 +1,9 @@
 using Microsoft.SemanticKernel;
 using AiCoreApi.Models.DbModels;
-using System.Web;
 using AiCoreApi.Common;
 using System.Text;
 using System.Text.Json;
 using AiCoreApi.Data.Processors;
-using AiCoreApi.Common.Monitoring;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
@@ -29,12 +27,12 @@ namespace AiCoreApi.SemanticKernel.Agents
         private readonly RequestAccessor _requestAccessor;
 
         public AzureAiTranslatorAgent(
+            IBaseAgentHelper baseAgentHelper,
             IConnectionProcessor connectionProcessor,
             IHttpClientFactory httpClientFactory,
             ResponseAccessor responseAccessor,
             RequestAccessor requestAccessor,
-            MonitoringConfig monitoringConfig,
-            ILogger<AzureAiTranslatorAgent> logger) : base(responseAccessor, requestAccessor, monitoringConfig, logger)
+            ILogger<AzureAiTranslatorAgent> logger) : base(baseAgentHelper, logger)
         {
             _connectionProcessor = connectionProcessor;
             _httpClientFactory = httpClientFactory;
@@ -44,7 +42,6 @@ namespace AiCoreApi.SemanticKernel.Agents
 
         public override async Task<string> DoCall(AgentModel agent, Dictionary<string, string> parameters)
         {
-            parameters.ToList().ForEach(p => parameters[p.Key] = HttpUtility.HtmlDecode(p.Value));
             _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
             var connectionName = agent.Content[AgentContentParameters.ConnectionName].Value;
@@ -53,10 +50,9 @@ namespace AiCoreApi.SemanticKernel.Agents
 
             var apiKey = connection.Content["apiKey"];
             var region = connection.Content["region"];
-            var fromLanguage = agent.Content.ContainsKey(AgentContentParameters.From) 
-                ? ApplyParameters(agent.Content[AgentContentParameters.From].Value, parameters) : "";
-            var toLanguage = ApplyParameters(agent.Content[AgentContentParameters.To].Value, parameters);
-            var text = ApplyParameters(agent.Content[AgentContentParameters.Text].Value, parameters);
+            var fromLanguage = GetParameterValue(AgentContentParameters.From);
+            var toLanguage = GetParameterValue(AgentContentParameters.To);
+            var text = GetParameterValue(AgentContentParameters.Text);
 
             _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Request", $"Connection: {connectionName}\r\nFrom: {fromLanguage}.\r\nTo: {toLanguage}\r\nText: {text}");
             var httpClient = _httpClientFactory.CreateClient(HttpClients.RetryClient);

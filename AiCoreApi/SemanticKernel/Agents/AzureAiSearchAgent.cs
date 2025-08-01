@@ -1,10 +1,8 @@
 using Microsoft.SemanticKernel;
 using AiCoreApi.Models.DbModels;
-using System.Web;
 using AiCoreApi.Common;
 using AiCoreApi.Data.Processors;
 using Newtonsoft.Json;
-using AiCoreApi.Common.Monitoring;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
@@ -24,12 +22,12 @@ namespace AiCoreApi.SemanticKernel.Agents
         private readonly IConnectionProcessor _connectionProcessor;
 
         public AzureAiSearchAgent(
+            IBaseAgentHelper baseAgentHelper,
             RequestAccessor requestAccessor,
             ResponseAccessor responseAccessor,
             IHttpClientFactory httpClientFactory,
             IConnectionProcessor connectionProcessor,
-            MonitoringConfig monitoringConfig,
-            ILogger<AzureAiSearchAgent> logger) : base(responseAccessor, requestAccessor, monitoringConfig, logger)
+            ILogger<AzureAiSearchAgent> logger) : base(baseAgentHelper, logger)
         {
             _requestAccessor = requestAccessor;
             _responseAccessor = responseAccessor;
@@ -41,10 +39,9 @@ namespace AiCoreApi.SemanticKernel.Agents
             AgentModel agent, 
             Dictionary<string, string> parameters)
         {
-            parameters.ToList().ForEach(p => parameters[p.Key] = HttpUtility.HtmlDecode(p.Value));
             _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
-            var queryString = ApplyParameters(agent.Content[AgentContentParameters.QueryString].Value, parameters);
+            var queryString = GetParameterValue(AgentContentParameters.QueryString);
             var azureAiSearchConnectionName = agent.Content[AgentContentParameters.AzureAiSearchConnectionName].Value;
             var indexName = agent.Content[AgentContentParameters.IndexName].Value;
             // Check if the action is search or add-update-delete, different actions have different endpoints

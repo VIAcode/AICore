@@ -1,5 +1,4 @@
 using System.Text;
-using System.Web;
 using Microsoft.SemanticKernel;
 using AiCoreApi.Models.DbModels;
 using AiCoreApi.Common;
@@ -7,7 +6,6 @@ using AiCoreApi.Common.Extensions;
 using AiCoreApi.Data.Processors;
 using Azure.Storage.Blobs;
 using Azure.Storage;
-using AiCoreApi.Common.Monitoring;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
@@ -45,12 +43,12 @@ namespace AiCoreApi.SemanticKernel.Agents
         private readonly ResponseAccessor _responseAccessor;
 
         public StorageAccountAgent(
+            IBaseAgentHelper baseAgentHelper,
             IEntraTokenProvider entraTokenProvider,
             IConnectionProcessor connectionProcessor,
             RequestAccessor requestAccessor,
             ResponseAccessor responseAccessor,
-            MonitoringConfig monitoringConfig,
-            ILogger<StorageAccountAgent> logger) : base(responseAccessor, requestAccessor, monitoringConfig, logger)
+            ILogger<StorageAccountAgent> logger) : base(baseAgentHelper, logger)
         {
             _entraTokenProvider = entraTokenProvider;
             _connectionProcessor = connectionProcessor;
@@ -60,13 +58,12 @@ namespace AiCoreApi.SemanticKernel.Agents
 
         public override async Task<string> DoCall(AgentModel agent, Dictionary<string, string> parameters)
         {
-            parameters.ToList().ForEach(p => parameters[p.Key] = HttpUtility.HtmlDecode(p.Value));
             _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
             var action = agent.Content[AgentContentParameters.Action].Value;
             var connectionName = agent.Content[AgentContentParameters.ConnectionName].Value;
-            var containerName = ApplyParameters(agent.Content.ContainsKey(AgentContentParameters.ContainerName) ? agent.Content[AgentContentParameters.ContainerName].Value : string.Empty, parameters);
-            var fileName = ApplyParameters(agent.Content.ContainsKey(AgentContentParameters.FileName) ? agent.Content[AgentContentParameters.FileName].Value : string.Empty, parameters);
+            var containerName = GetParameterValue(AgentContentParameters.ContainerName);
+            var fileName = GetParameterValue(AgentContentParameters.FileName);
             _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Request", $"Action: {action}\r\nConnection: {connectionName}\r\nContainerName: {containerName}\r\nFileName: {fileName}");
 
             var connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
@@ -104,11 +101,14 @@ namespace AiCoreApi.SemanticKernel.Agents
                     }
                 case ("ADD"):
                     {
-                        var base64Content = ApplyParameters(agent.Content[AgentContentParameters.Base64Content].Value, parameters);
+                        var base64Content = GetParameterValue(AgentContentParameters.Base64Content);
                         if (_requestAccessor.MessageDialog != null && _requestAccessor.MessageDialog.Messages!.Last().HasFiles())
                         {
                             base64Content = ApplyParameters(base64Content, new Dictionary<string, string> {
-                            { AgentPromptPlaceholders.FileDataPlaceholder, _requestAccessor.MessageDialog.Messages!.Last().Files!.First().Base64Data } });
+                                {
+                                    AgentPromptPlaceholders.FileDataPlaceholder, _requestAccessor.MessageDialog.Messages!.Last().Files!.First().Base64Data
+                                }
+                            });
                         }
                         var bytes = Convert.FromBase64String(base64Content);
                         result = await AddBytes(blobServiceClient, containerName, fileName, bytes);
@@ -117,7 +117,7 @@ namespace AiCoreApi.SemanticKernel.Agents
                 case "ADDTEXT":
                     {
                         var encoding = GetEncoding(agent, parameters);
-                        var textContent = ApplyParameters(agent.Content[AgentContentParameters.TextContent].Value, parameters);
+                        var textContent = GetParameterValue(AgentContentParameters.TextContent);
                         var textBytes = encoding.GetBytes(textContent);
                         result = await AddBytes(blobServiceClient, containerName, fileName, textBytes);
                         break;

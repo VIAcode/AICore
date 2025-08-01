@@ -1,4 +1,5 @@
-﻿using AiCoreApi.Common;
+﻿using AiCoreApi.Authorization;
+using AiCoreApi.Common;
 using AiCoreApi.Common.Extensions;
 using AiCoreApi.Common.SsoSources;
 using AiCoreApi.Models.ViewModels;
@@ -6,6 +7,8 @@ using AiCoreApi.Services.ControllersServices;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Caching.Distributed;
+using System.IdentityModel.Tokens.Jwt;
+using System.Web;
 
 namespace AiCoreApi.Controllers
 {
@@ -19,9 +22,12 @@ namespace AiCoreApi.Controllers
         private readonly ExtendedConfig _extendedConfig;
         private readonly IMicrosoftSso _microsoftSso;
         private readonly IGoogleSso _googleSso;
+        private readonly IHttpClientFactory _httpClientFactory;
+        private readonly IEntraTokenProvider _entraTokenProvider;
         private readonly IDistributedCache _distributedCache;
         private const int SsoSessionTimeoutMinutes = 5;
         private const string PermanentAcrValue = "permanent";
+        private const string CodeChallenge = "ThisIsntRandomButItNeedsToBe43CharactersLong";
 
         public ConnectController(
             IConnectService connectService,
@@ -29,6 +35,8 @@ namespace AiCoreApi.Controllers
             ExtendedConfig extendedConfig,
             IMicrosoftSso microsoftSso,
             IGoogleSso googleSso,
+            IHttpClientFactory httpClientFactory,
+            IEntraTokenProvider entraTokenProvider,
             IDistributedCache distributedCache)
         {
             _connectService = connectService;
@@ -36,6 +44,8 @@ namespace AiCoreApi.Controllers
             _extendedConfig = extendedConfig;
             _microsoftSso = microsoftSso;
             _googleSso = googleSso;
+            _httpClientFactory = httpClientFactory;
+            _entraTokenProvider = entraTokenProvider;
             _distributedCache = distributedCache;
         }
 
@@ -262,5 +272,110 @@ namespace AiCoreApi.Controllers
                 loginProcessViewModel.RedirectUri += $"&state={loginProcessViewModel.State}";
             return Redirect(loginProcessViewModel.RedirectUri);
         }
+
+        [HttpGet("connection/create")]
+        public async Task<IActionResult> ConnectionCreate([FromQuery(Name = "params")] string? jsonParamsBase64)
+        {
+            var jsonParams = jsonParamsBase64.FromBase64();
+            var connectionCreateModel = jsonParams?.JsonGet<ConnectionCreateViewModel>();
+            if (connectionCreateModel == null)
+                return BadRequest("Invalid parameters");
+            if (string.IsNullOrEmpty(connectionCreateModel.ManagedIdentity))
+                return BadRequest("ManagedIdentity is required");
+            if (string.IsNullOrEmpty(connectionCreateModel.Scope))
+                return BadRequest("Scope is required");
+            if (string.IsNullOrEmpty(connectionCreateModel.ConnectionId))
+                return BadRequest("ConnectionId is required");
+            if (string.IsNullOrEmpty(connectionCreateModel.AccessToken))
+                return BadRequest("AccessToken is required");
+            var jsonToken = new JwtSecurityTokenHandler().ReadToken(connectionCreateModel.AccessToken) as JwtSecurityToken;
+            var jwtPayload = jsonToken!.Payload!;
+            if(jwtPayload.ValidTo < DateTime.UtcNow)
+                return Unauthorized("Access token is expired");
+
+            var credentials = await _entraTokenProvider.GetCredentialsFromKeyVaultAsync(connectionCreateModel.ManagedIdentity);
+            var pkce = new Pkce();
+            connectionCreateModel.CodeChallenge = pkce.CodeChallenge;
+            connectionCreateModel.CodeVerifier = pkce.CodeVerifier;
+
+            _distributedCache.SetString(connectionCreateModel.ConnectionId, connectionCreateModel.ToJson()!, new DistributedCacheEntryOptions
+            {
+                AbsoluteExpiration = DateTimeOffset.UtcNow.AddMinutes(SsoSessionTimeoutMinutes)
+            });
+
+            var url = $"https://login.microsoftonline.com/{credentials.TenantId}/oauth2/v2.0/authorize?";
+            var parameters = $"client_id={credentials.ClientId}"
+                 + "&client_info=1"
+                 + "&response_type=code"
+                 + $"&redirect_uri={HttpUtility.UrlEncode($"{_config.AppUrl}/connect/connection/callback")}"
+                 + "&response_mode=query"
+                 + $"&scope={HttpUtility.UrlEncode($"{connectionCreateModel.Scope}")}"
+                 + $"&claims={HttpUtility.UrlEncode("{\"access_token\":{\"xms_cc\":{\"values\":[\"CP1\"]}}}")}"
+                 + "&grant_type=refresh_token"
+                 + "&code_challenge_method=S256"
+                 + $"&code_challenge={connectionCreateModel.CodeChallenge}"
+                 + $"&state={connectionCreateModel.ConnectionId}";
+            var loginRedirectUrl = url + parameters;
+            return Redirect(loginRedirectUrl);
+        }
+
+        [HttpGet("connection/callback")]
+        public async Task<IActionResult> ConnectionCallback()
+        {
+            var code = Request.Query["code"].ToString();
+            var state = Request.Query["state"].ToString();
+            if (string.IsNullOrEmpty(code))
+                return BadRequest("Code is missing");
+            if (string.IsNullOrEmpty(state))
+                return BadRequest("State is missing");
+            var connectionCreateJson = await _distributedCache.GetStringAsync(state);
+            if (string.IsNullOrEmpty(connectionCreateJson))
+                return BadRequest("Invalid state");
+            var connectionCreateModel = connectionCreateJson.JsonGet<ConnectionCreateViewModel>();
+            if (connectionCreateModel == null)
+                return BadRequest("Invalid parameters");
+
+            var credentials = await _entraTokenProvider.GetCredentialsFromKeyVaultAsync(connectionCreateModel.ManagedIdentity);
+
+            using var httpClient = _httpClientFactory.CreateClient(HttpClients.NoRetryClient);
+            var body = $"client_id={credentials.ClientId}"
+                       + $"&scope={HttpUtility.UrlEncode($"{connectionCreateModel.Scope}")}"
+                       + $"&code={code}"
+                       + $"&redirect_uri={HttpUtility.UrlEncode($"{_config.AppUrl}/connect/connection/callback")}"
+                       + "&grant_type=authorization_code"
+                       + $"&code_verifier={connectionCreateModel.CodeVerifier}"
+                       + $"&client_secret={credentials.ClientSecret}";
+            var message = new HttpRequestMessage(HttpMethod.Post, $"https://login.microsoftonline.com/{credentials.TenantId}/oauth2/v2.0/token")
+            {
+                Content = new StringContent(body, System.Text.Encoding.UTF8, mediaType: "application/x-www-form-urlencoded")
+            };
+            using var oauthTokenResponse = await httpClient.SendAsync(message).ConfigureAwait(false);
+            var oauthTokenContent = await oauthTokenResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
+            var refreshToken = oauthTokenContent.JsonGet<string>("refresh_token");
+            var html = $@"
+<!DOCTYPE html>
+<html>
+  <head><title>Auth Complete</title></head>
+  <body>
+    <h1>Refresh Token Creation Complete. Now you can close this tab.</h1>
+    <script>
+      const token = {System.Text.Json.JsonSerializer.Serialize(refreshToken)};
+      // Option 1: Post message to opener
+      debugger;
+      if (window.opener) {{
+        window.opener.postMessage({{ type: 'refresh_token', token: token }}, '*');
+        window.close();
+      }} else {{
+        // Option 2: Store in localStorage (use a shared domain if needed)
+        localStorage.setItem('refresh_token', token);
+        document.body.innerHTML = 'Token saved. You can close this window.';
+      }}
+    </script>
+  </body>
+</html>";
+
+            return Content(html, "text/html");
+        }
+
     }
 }

@@ -1,13 +1,11 @@
 using Microsoft.SemanticKernel;
 using AiCoreApi.Models.DbModels;
-using System.Web;
 using AiCoreApi.Common;
 using AiCoreApi.Data.Processors;
 using HtmlAgilityPack;
 using System.Text.Json;
 using AiCoreApi.Common.Extensions;
 using System.Text.Encodings.Web;
-using AiCoreApi.Common.Monitoring;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
@@ -41,12 +39,12 @@ namespace AiCoreApi.SemanticKernel.Agents
         private readonly IConnectionProcessor _connectionProcessor;
 
         public GoogleSearchApiAgent(
+            IBaseAgentHelper baseAgentHelper,
             RequestAccessor requestAccessor,
             ResponseAccessor responseAccessor,
             IHttpClientFactory httpClientFactory,
             IConnectionProcessor connectionProcessor,
-            MonitoringConfig monitoringConfig,
-            ILogger<GoogleSearchApiAgent> logger) : base(responseAccessor, requestAccessor, monitoringConfig, logger)
+            ILogger<GoogleSearchApiAgent> logger) : base(baseAgentHelper, logger)
         {
             _requestAccessor = requestAccessor;
             _responseAccessor = responseAccessor;
@@ -56,13 +54,10 @@ namespace AiCoreApi.SemanticKernel.Agents
 
         public override async Task<string> DoCall(AgentModel agent, Dictionary<string, string> parameters)
         {
-            parameters.ToList().ForEach(p => parameters[p.Key] = HttpUtility.HtmlDecode(p.Value));
             _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
-            var queryString = ApplyParameters(agent.Content[AgentContentParameters.QueryString].Value, parameters);
-            var maxContentLength = agent.Content.ContainsKey(AgentContentParameters.MaxContentLength)
-                ? ApplyParameters(agent.Content[AgentContentParameters.MaxContentLength].Value, parameters)
-                : DefaultMaxContentLength.ToString();
+            var queryString = GetParameterValue(AgentContentParameters.QueryString);
+            var maxContentLength = GetParameterValue(AgentContentParameters.MaxContentLength, DefaultMaxContentLength.ToString());
 
             queryString = ApplyParameters(queryString, new Dictionary<string, string>
             {
@@ -77,8 +72,8 @@ namespace AiCoreApi.SemanticKernel.Agents
             var connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
             var googleConnection = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.GoogleSearchApi, _debugMessageSenderName, connectionName: googleConnectionName);
 
-            var count = int.Parse(ApplyParameters(agent.Content[AgentContentParameters.Count].Value, parameters));
-            var offset = int.Parse(ApplyParameters(agent.Content[AgentContentParameters.Offset].Value, parameters));
+            var count = int.Parse(GetParameterValue(AgentContentParameters.Count));
+            var offset = int.Parse(GetParameterValue(AgentContentParameters.Offset));
             var outputType = agent.Content.TryGetValue(AgentContentParameters.OutputType, out var ot) ? ot.Value : "snippetTexts";
             var results = await DoSearchAsync(queryString, googleConnection.Content["apiKey"], googleConnection.Content["googleCxId"], count, offset);
 

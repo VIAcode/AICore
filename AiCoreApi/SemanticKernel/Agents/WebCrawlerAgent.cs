@@ -4,11 +4,9 @@ using AiCoreApi.Common;
 using HtmlAgilityPack;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using System.Web;
 using AiCoreApi.Common.Extensions;
 using System.Text.Encodings.Web;
 using Microsoft.Playwright;
-using AiCoreApi.Common.Monitoring;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
@@ -33,12 +31,11 @@ namespace AiCoreApi.SemanticKernel.Agents
         private readonly ExtendedConfig _extendedConfig;
 
         public WebCrawlerAgent(
+            IBaseAgentHelper baseAgentHelper,
             ILogger<WebCrawlerAgent> logger,
             ExtendedConfig extendedConfig,
-            MonitoringConfig monitoringConfig,
             IHttpClientFactory httpClientFactory,
-            ResponseAccessor responseAccessor,
-            RequestAccessor requestAccessor) : base(responseAccessor, requestAccessor, monitoringConfig, logger)
+            ResponseAccessor responseAccessor) : base(baseAgentHelper, logger)
         {
             _httpClientFactory = httpClientFactory;
             _responseAccessor = responseAccessor;
@@ -47,22 +44,15 @@ namespace AiCoreApi.SemanticKernel.Agents
 
         public override async Task<string> DoCall(AgentModel agent, Dictionary<string, string> parameters)
         {
-            parameters.ToList().ForEach(p => parameters[p.Key] = HttpUtility.HtmlDecode(p.Value));
             _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
-            var startUrl = ApplyParameters(agent.Content[AgentContentParameters.Url].Value, parameters);
-            var crawlDepth = GetCrawlDepth(agent, parameters);
-            var crawlRegex = GetCrawlRegex(agent, parameters);
-            var maxUrls = GetMaxUrlsCount(agent, parameters);
-            var userAgent = agent.Content.ContainsKey(AgentContentParameters.UserAgent)
-                ? ApplyParameters(agent.Content[AgentContentParameters.UserAgent].Value, parameters)
-                : "";
-            var engine = agent.Content.TryGetValue(AgentContentParameters.Engine, out var engineVal)
-                ? ApplyParameters(engineVal.Value, parameters).ToLower()
-                : "html";
-            var waitTimeout = Convert.ToInt32(agent.Content.TryGetValue(AgentContentParameters.WaitTimeout, out var waitTimeoutVal)
-                ? ApplyParameters(waitTimeoutVal.Value, parameters).ToLower()
-                : "10000");
+            var startUrl = GetParameterValue(AgentContentParameters.Url);
+            var crawlDepth = Convert.ToInt32(GetParameterValue(AgentContentParameters.CrawlDepth, "1"));
+            var crawlRegex = GetCrawlRegex(agent);
+            var maxUrls = Convert.ToInt32(GetParameterValue(AgentContentParameters.MaxUrlsCount, "1"));
+            var userAgent = GetParameterValue(AgentContentParameters.UserAgent);
+            var engine = GetParameterValue(AgentContentParameters.Engine, "html");
+            var waitTimeout = Convert.ToInt32(GetParameterValue(AgentContentParameters.WaitTimeout, "10000"));
 
 
             var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -102,7 +92,7 @@ namespace AiCoreApi.SemanticKernel.Agents
 
                     var result = engine == "playwright"
                         ? await GetPageContentAndLinksWithPlaywrightAsync(url, sharedPage!, waitTimeout)
-                        : await GetTextAndLinksWithHtmlAgilityPackAsync(url, agent, userAgent, parameters);
+                        : await GetTextAndLinksWithHtmlAgilityPackAsync(url, userAgent);
 
                     if (!string.IsNullOrWhiteSpace(result.text))
                     {
@@ -152,27 +142,12 @@ namespace AiCoreApi.SemanticKernel.Agents
             return json;
         }
 
-        private int GetCrawlDepth(AgentModel agent, Dictionary<string, string> parameters)
-        {
-            if (agent.Content.TryGetValue(AgentContentParameters.CrawlDepth, out var depthVal)
-                && int.TryParse(ApplyParameters(depthVal.Value, parameters), out var depth))
-                return Math.Max(1, depth);
-            return 1;
-        }
 
-        private int GetMaxUrlsCount(AgentModel agent, Dictionary<string, string> parameters)
+        private Regex? GetCrawlRegex(AgentModel agent)
         {
-            if (agent.Content.TryGetValue(AgentContentParameters.MaxUrlsCount, out var maxUrlsVal)
-                && int.TryParse(ApplyParameters(maxUrlsVal.Value, parameters), out var max))
-                return Math.Max(0, max);
-            return 0;
-        }
-
-        private Regex? GetCrawlRegex(AgentModel agent, Dictionary<string, string> parameters)
-        {
-            if (agent.Content.TryGetValue(AgentContentParameters.CrawlUrlRegex, out var regexValue))
+            if (agent.Content.TryGetValue(AgentContentParameters.CrawlUrlRegex, out _))
             {
-                var pattern = ApplyParameters(regexValue.Value, parameters).Trim();
+                var pattern = GetParameterValue(AgentContentParameters.CrawlUrlRegex).Trim();
                 if (!string.IsNullOrEmpty(pattern) && pattern != "1")
                 {
                     try
@@ -188,15 +163,14 @@ namespace AiCoreApi.SemanticKernel.Agents
             return null;
         }
 
-        private void ApplyCustomHeaders(HttpClient client, AgentModel agent, string userAgent, Dictionary<string, string> parameters)
+        private void ApplyCustomHeaders(HttpClient client, string userAgent)
         {
             if (!string.IsNullOrEmpty(userAgent))
                 client.DefaultRequestHeaders.Add("User-Agent", userAgent);
 
-            if (!agent.Content.TryGetValue(AgentContentParameters.CustomHeaders, out var headerValue))
+            var decoded = GetParameterValue(AgentContentParameters.CustomHeaders);
+            if (string.IsNullOrWhiteSpace(decoded))
                 return;
-
-            var decoded = ApplyParameters(headerValue.Value, parameters);
             var parts = decoded.Split(';', StringSplitOptions.RemoveEmptyEntries);
 
             foreach (var part in parts)
@@ -214,12 +188,10 @@ namespace AiCoreApi.SemanticKernel.Agents
 
         private async Task<(string text, List<string> links)> GetTextAndLinksWithHtmlAgilityPackAsync(
             string url,
-            AgentModel agent,
-            string userAgent,
-            Dictionary<string, string> parameters)
+            string userAgent)
         {
             var client = _httpClientFactory.CreateClient(HttpClients.NoRetryClient);
-            ApplyCustomHeaders(client, agent, userAgent, parameters);
+            ApplyCustomHeaders(client, userAgent);
 
             var links = new List<string>();
 

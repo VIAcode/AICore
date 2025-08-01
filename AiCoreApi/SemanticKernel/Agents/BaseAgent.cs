@@ -4,6 +4,9 @@ using AiCoreApi.Models.DbModels;
 using AiCoreApi.Common;
 using System.Text;
 using AiCoreApi.Common.Monitoring;
+using System.Web;
+using AiCoreApi.Services.IngestionServices;
+using AiCoreApi.Data.Processors;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
@@ -12,18 +15,24 @@ namespace AiCoreApi.SemanticKernel.Agents
         private readonly ResponseAccessor _responseAccessor;
         private readonly RequestAccessor _requestAccessor;
         private readonly MonitoringConfig _monitoringConfig;
-        private readonly ILogger<BaseAgent> _logger;
+        private readonly IDataIngestionWorkerFactory _dataIngestionWorkerFactory;
+        private readonly IIngestionProcessor _ingestionProcessor;
+        private readonly ICacheAccessor _cacheAccessor;
 
-        protected BaseAgent(
-            ResponseAccessor responseAccessor,
-            RequestAccessor requestAccessor,
-            MonitoringConfig monitoringConfig,
+        private readonly ILogger<BaseAgent> _logger;
+        private Dictionary<string, string>? _parameters;
+        private AgentModel _agent = new();
+
+        protected BaseAgent(IBaseAgentHelper baseAgentHelper,
             ILogger<BaseAgent> logger)
         {
-            _responseAccessor = responseAccessor;
-            _requestAccessor = requestAccessor;
+            _responseAccessor = baseAgentHelper.ResponseAccessor;
+            _requestAccessor = baseAgentHelper.RequestAccessor;
+            _monitoringConfig = baseAgentHelper.MonitoringConfig;
+            _dataIngestionWorkerFactory = baseAgentHelper.DataIngestionWorkerFactory;
+            _cacheAccessor = baseAgentHelper.CacheAccessor;
+            _ingestionProcessor = baseAgentHelper.IngestionProcessor;
             _logger = logger;
-            _monitoringConfig = monitoringConfig;
         }
 
         private static class AgentContentParameters
@@ -80,12 +89,21 @@ namespace AiCoreApi.SemanticKernel.Agents
             }
         }
 
-
-        protected string ApplyParameters(string text, Dictionary<string, string>? parameters)
+        protected string? GetParameterValue(string parameterName, string? defaultValue = "")
         {
-            if (string.IsNullOrEmpty(text) || parameters == null || parameters.Count == 0)
+            var text = _agent.Content.ContainsKey(parameterName) ? _agent.Content[parameterName].Value : string.Empty;
+
+            if (string.IsNullOrEmpty(text))
+                return defaultValue;
+
+            if (_parameters == null || _parameters.Count == 0)
                 return text;
 
+            return ApplyParameters(text, null);
+        }
+
+        protected string ApplyParameters(string text, Dictionary<string, string>? additionalParameters = null)
+        {
             var inputSpan = text.AsSpan();
             var stringBuilder = new StringBuilder(text.Length);
             var startIndex = 0;
@@ -121,9 +139,57 @@ namespace AiCoreApi.SemanticKernel.Agents
                 stringBuilder.Append(inputSpan[startIndex..openBraceIndex]);
                 var parameterKeySpan = inputSpan[(openBraceIndex + 2)..closeBraceIndex];
                 var parameterKey = parameterKeySpan.ToString();
-                if (parameters.TryGetValue(parameterKey, out var value))
+                if (_parameters.TryGetValue(parameterKey, out var value))
                 {
                     stringBuilder.Append(value);
+                }
+                else if (additionalParameters != null && additionalParameters.TryGetValue(parameterKey, out var additionalValue))
+                {
+                    stringBuilder.Append(additionalValue);
+                }
+                else if (parameterKey.StartsWith("DS:"))
+                {
+                    var dataSourceParts = parameterKey.Split(":");
+                    if (dataSourceParts.Length != 3 && dataSourceParts.Length != 4)
+                    {
+                        stringBuilder.Append("Invalid Data Source parameters count");
+                        break;
+                    }
+                    else
+                    {
+                        var dataSourceName = dataSourceParts[1];
+                        var dataSourceFilePath = dataSourceParts[2];
+                        var cacheTimeString = dataSourceParts.Length == 4 ? dataSourceParts[3] : "0";
+                        if (!int.TryParse(cacheTimeString, out var cacheTime))
+                            cacheTime = 0;
+
+                        var cachedValue = (_cacheAccessor.GetCacheValue($"{dataSourceName}_{dataSourceFilePath}"));
+                        if(!string.IsNullOrEmpty(cachedValue))
+                        {
+                            stringBuilder.Append(cachedValue);
+                        }
+                        else
+                        {
+                            var ingestion = _ingestionProcessor.Get(dataSourceName, _requestAccessor.WorkspaceId).GetAwaiter().GetResult();
+                            if (ingestion == null)
+                            {
+                                stringBuilder.Append($"Data Source '{dataSourceName}' not found");
+                                break;
+                            }
+                            var dataIngestionWorker = _dataIngestionWorkerFactory.GetService(ingestion);
+                            var file = dataIngestionWorker.GetFileByPath(ingestion, dataSourceFilePath).GetAwaiter().GetResult();
+                            if(string.IsNullOrEmpty(file))
+                            {
+                                stringBuilder.Append($"File '{dataSourceFilePath}' not found in Data Source '{dataSourceName}'");
+                                break;
+                            }
+                            stringBuilder.Append(file);
+                            if (cacheTime > 0)
+                            {
+                                _cacheAccessor.SetCacheValue($"{dataSourceName}_{dataSourceFilePath}", file, cacheTime);
+                            }
+                        }
+                    }
                 }
                 else
                 {
@@ -183,7 +249,9 @@ namespace AiCoreApi.SemanticKernel.Agents
                     _logger.LogCritical("[{DateTime}][Run] {Login}, Action:{Action}, Agent: {Agent}, Parameters: {url}",
                         DateTime.UtcNow.ToString("g"), _requestAccessor.Login, "ApiCall", agent.Name, parametersString);
                 }
-
+                parameters.ToList().ForEach(p => parameters[p.Key] = HttpUtility.HtmlDecode(p.Value));
+                _parameters = parameters;
+                _agent = agent;
                 var result = await DoCall(agent, parameters);
 
                 if (_monitoringConfig.LogAgentResult)
@@ -221,6 +289,9 @@ namespace AiCoreApi.SemanticKernel.Agents
             int? connectionId = 0,
             string? connectionName = "")
         {
+            if (!string.IsNullOrEmpty(connectionName) && connectionName.Contains("{{"))
+                connectionName = ApplyParameters(connectionName);
+
             var connectionSpecified = connectionId > 0 || !string.IsNullOrEmpty(connectionName);
             // Check connection specified for Agent
             var connection = connections.FirstOrDefault(conn =>

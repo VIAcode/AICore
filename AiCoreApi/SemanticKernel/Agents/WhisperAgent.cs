@@ -1,11 +1,9 @@
 using System.Net.Http.Headers;
-using System.Web;
 using Microsoft.SemanticKernel;
 using AiCoreApi.Models.DbModels;
 using AiCoreApi.Common;
 using AiCoreApi.Common.Extensions;
 using AiCoreApi.Data.Processors;
-using AiCoreApi.Common.Monitoring;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
@@ -31,12 +29,12 @@ namespace AiCoreApi.SemanticKernel.Agents
         private readonly IHttpClientFactory _httpClientFactory;
 
         public WhisperAgent(
+            IBaseAgentHelper baseAgentHelper,
             IConnectionProcessor connectionProcessor,
             RequestAccessor requestAccessor,
             ResponseAccessor responseAccessor,
             IHttpClientFactory httpClientFactory,
-            MonitoringConfig monitoringConfig,
-            ILogger<WhisperAgent> logger) : base(responseAccessor, requestAccessor, monitoringConfig, logger)
+            ILogger<WhisperAgent> logger) : base(baseAgentHelper, logger)
         {
             _connectionProcessor = connectionProcessor;
             _requestAccessor = requestAccessor;
@@ -46,17 +44,17 @@ namespace AiCoreApi.SemanticKernel.Agents
 
         public override async Task<string> DoCall(AgentModel agent, Dictionary<string, string> parameters)
         {
-            parameters.ToList().ForEach(p => parameters[p.Key] = HttpUtility.HtmlDecode(p.Value));
             _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
-            var base64Audio = ApplyParameters(agent.Content[AgentContentParameters.Base64Audio].Value, parameters);
-            var extension = ApplyParameters(agent.Content[AgentContentParameters.Extension].Value, parameters);
-            var mimeType = ApplyParameters(agent.Content[AgentContentParameters.MimeType].Value, parameters);
+            var base64Audio = GetParameterValue(AgentContentParameters.Base64Audio);
+            var extension = GetParameterValue(AgentContentParameters.Extension);
+            var mimeType = GetParameterValue(AgentContentParameters.MimeType);
             var connectionName = agent.Content[AgentContentParameters.ConnectionName].Value;
             if (_requestAccessor.MessageDialog.Messages!.Last().HasFiles())
             {
                 base64Audio = ApplyParameters(base64Audio, new Dictionary<string, string> { 
-                    { AgentPromptPlaceholders.FileDataPlaceholder, _requestAccessor.MessageDialog.Messages!.Last().Files!.First().Base64Data } });
+                    { AgentPromptPlaceholders.FileDataPlaceholder, _requestAccessor.MessageDialog.Messages!.Last().Files!.First().Base64Data }
+                });
             }
             return await Transcribe(base64Audio.StripBase64(), extension.Trim(' ', '.'), mimeType, connectionName);
         }

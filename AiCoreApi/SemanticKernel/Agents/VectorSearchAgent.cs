@@ -5,10 +5,8 @@ using AiCoreApi.Common.KernelMemory;
 using AiCoreApi.Models.ViewModels;
 using Microsoft.KernelMemory;
 using AiCoreApi.Data.Processors;
-using System.Web;
 using ConnectionType = AiCoreApi.Models.DbModels.ConnectionType;
 using AiCoreApi.Common.Extensions;
-using AiCoreApi.Common.Monitoring;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
@@ -34,6 +32,7 @@ namespace AiCoreApi.SemanticKernel.Agents
         private readonly IFeatureFlags _featureFlags;
 
         public VectorSearchAgent(
+            IBaseAgentHelper baseAgentHelper,
             RequestAccessor requestAccessor,
             ResponseAccessor responseAccessor,
             IKernelMemoryProvider kernelMemoryProvider,
@@ -41,8 +40,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             IConnectionProcessor connectionProcessor,
             ILoginProcessor loginProcessor,
             IFeatureFlags featureFlags,
-            MonitoringConfig monitoringConfig,
-            ILogger<VectorSearchAgent> logger) : base(responseAccessor, requestAccessor, monitoringConfig, logger)
+            ILogger<VectorSearchAgent> logger) : base(baseAgentHelper, logger)
         {
             _requestAccessor = requestAccessor;
             _responseAccessor = responseAccessor;
@@ -55,10 +53,9 @@ namespace AiCoreApi.SemanticKernel.Agents
 
         public override async Task<string> DoCall(AgentModel agent, Dictionary<string, string> parameters)
         {
-            parameters.ToList().ForEach(p => parameters[p.Key] = HttpUtility.HtmlDecode(p.Value));
             _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
-            var queryString = ApplyParameters(agent.Content[AgentContentParameters.QueryString].Value, parameters);
+            var queryString = GetParameterValue(AgentContentParameters.QueryString);
             var embeddingConnectionName = agent.Content[AgentContentParameters.EmbeddingConnectionName].Value;
             var vectorDbConnectionName = agent.Content.ContainsKey(AgentContentParameters.VectorDBConnectionName)
                 ? agent.Content[AgentContentParameters.VectorDBConnectionName].Value

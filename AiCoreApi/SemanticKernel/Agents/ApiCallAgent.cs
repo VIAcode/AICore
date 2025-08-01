@@ -3,9 +3,7 @@ using AiCoreApi.Models.DbModels;
 using System.Net.Http.Headers;
 using System.Text;
 using AiCoreApi.Common;
-using System.Web;
 using AiCoreApi.Common.Extensions;
-using AiCoreApi.Common.Monitoring;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
@@ -28,11 +26,10 @@ namespace AiCoreApi.SemanticKernel.Agents
         private readonly ResponseAccessor _responseAccessor;
 
         public ApiCallAgent(
+            IBaseAgentHelper baseAgentHelper,
             ILogger<ApiCallAgent> logger,
-            MonitoringConfig monitoringConfig,
             IHttpClientFactory httpClientFactory, 
-            ResponseAccessor responseAccessor,
-            RequestAccessor requestAccessor) : base(responseAccessor, requestAccessor, monitoringConfig, logger)
+            ResponseAccessor responseAccessor) : base(baseAgentHelper, logger)
         {
             _httpClientFactory = httpClientFactory;
             _responseAccessor = responseAccessor;
@@ -40,17 +37,16 @@ namespace AiCoreApi.SemanticKernel.Agents
 
         public override async Task<string> DoCall(AgentModel agent, Dictionary<string, string> parameters)
         {
-            parameters.ToList().ForEach(p => parameters[p.Key] = HttpUtility.HtmlDecode(p.Value));
             _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
-            var url = ApplyParameters(agent.Content[AgentContentParameters.Url].Value, parameters);
+            var url = GetParameterValue(AgentContentParameters.Url);
             var uri = new Uri(url);
             using var httpRequestMessage = new HttpRequestMessage(GetHttpMethod(agent), uri);
             var body = string.Empty;
             if (agent.Content.ContainsKey(AgentContentParameters.Body) 
                 && !string.IsNullOrWhiteSpace(agent.Content[AgentContentParameters.Body].Value))
             {
-                body = ApplyParameters(agent.Content[AgentContentParameters.Body].Value, parameters);
+                body = GetParameterValue(AgentContentParameters.Body);
                 if (agent.Content.ContainsKey(AgentContentParameters.ContentType) 
                     && !string.IsNullOrWhiteSpace(agent.Content[AgentContentParameters.ContentType].Value))
                 {
@@ -82,8 +78,8 @@ namespace AiCoreApi.SemanticKernel.Agents
             }
             if (agent.Content.ContainsKey(AgentContentParameters.CustomHeaderName) && agent.Content.ContainsKey(AgentContentParameters.CustomHeaderValue))
             {
-                var customHeaderName = ApplyParameters(agent.Content[AgentContentParameters.CustomHeaderName].Value, parameters);
-                var customHeaderValue = ApplyParameters(agent.Content[AgentContentParameters.CustomHeaderValue].Value, parameters);
+                var customHeaderName = GetParameterValue(AgentContentParameters.CustomHeaderName);
+                var customHeaderValue = GetParameterValue(AgentContentParameters.CustomHeaderValue);
                 if (!string.IsNullOrWhiteSpace(customHeaderName) && !string.IsNullOrWhiteSpace(customHeaderValue))
                    httpClient.DefaultRequestHeaders.Add(customHeaderName, customHeaderValue);
             }

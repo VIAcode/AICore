@@ -3,13 +3,10 @@ using AiCoreApi.Common.Extensions;
 using AiCoreApi.Data.Processors;
 using AiCoreApi.Models.DbModels;
 using Microsoft.SemanticKernel;
-using System.Web;
 using Azure;
 using Azure.AI.DocumentIntelligence;
 using Azure.Core.Pipeline;
 using Azure.Core;
-using static Python.Runtime.TypeSpec;
-using AiCoreApi.Common.Monitoring;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
@@ -38,13 +35,13 @@ namespace AiCoreApi.SemanticKernel.Agents
         private readonly IConnectionProcessor _connectionProcessor;
 
         public OcrClassifyDocumentAgent(
+            IBaseAgentHelper baseAgentHelper,
             IEntraTokenProvider entraTokenProvider,
             RequestAccessor requestAccessor,
             ResponseAccessor responseAccessor,
             IHttpClientFactory httpClientFactory,
             IConnectionProcessor connectionProcessor,
-            MonitoringConfig monitoringConfig,
-            ILogger<OcrClassifyDocumentAgent> logger) : base(responseAccessor, requestAccessor, monitoringConfig, logger)
+            ILogger<OcrClassifyDocumentAgent> logger) : base(baseAgentHelper, logger)
         {
             _entraTokenProvider = entraTokenProvider;
             _requestAccessor = requestAccessor;
@@ -55,10 +52,9 @@ namespace AiCoreApi.SemanticKernel.Agents
 
         public override async Task<string> DoCall(AgentModel agent, Dictionary<string, string> parameters)
         {
-            parameters.ToList().ForEach(p => parameters[p.Key] = HttpUtility.HtmlDecode(p.Value));
             _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
-            var base64Image = ApplyParameters(agent.Content[AgentContentParameters.Base64Image].Value, parameters);
+            var base64Image = GetParameterValue(AgentContentParameters.Base64Image);
             if (_requestAccessor.MessageDialog != null && _requestAccessor.MessageDialog.Messages!.Last().HasFiles() && base64Image.Contains(AgentPromptPlaceholders.FileDataPlaceholder))
             {
                 base64Image = ApplyParameters(base64Image, new Dictionary<string, string>
@@ -72,9 +68,9 @@ namespace AiCoreApi.SemanticKernel.Agents
             var connection = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.DocumentIntelligence, _debugMessageSenderName, connectionName: documentIntelligenceConnection);
 
             var splitMode = GetParameterValueOrNull(agent, AgentContentParameters.SplitMode);
-            var pages = ApplyParameters(GetParameterValueOrNull(agent, AgentContentParameters.Pages), parameters);
+            var pages = GetParameterValue(AgentContentParameters.Pages, null);
 
-            var classifierId = ApplyParameters(agent.Content[AgentContentParameters.ClassifierId].Value, parameters);
+            var classifierId = GetParameterValue(AgentContentParameters.ClassifierId);
 
             if (string.IsNullOrWhiteSpace(classifierId))
             {

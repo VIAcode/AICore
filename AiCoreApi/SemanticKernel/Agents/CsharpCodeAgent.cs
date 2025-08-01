@@ -1,6 +1,5 @@
 ﻿using Microsoft.SemanticKernel;
 using AiCoreApi.Models.DbModels;
-using System.Web;
 using AiCoreApi.Common;
 using Microsoft.CodeAnalysis.CSharp.Scripting;
 using Microsoft.CodeAnalysis.Scripting;
@@ -47,6 +46,7 @@ namespace AiCoreApi.SemanticKernel.Agents
         private readonly IMetricsAccessor _metricsAccessor;
 
         public CsharpCodeAgent(
+            IBaseAgentHelper baseAgentHelper,
             IPlannerHelpers plannerHelpers,
             RequestAccessor requestAccessor,
             ResponseAccessor responseAccessor,
@@ -54,7 +54,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             ICacheAccessor cacheAccessor,
             ILogger<CsharpCodeAgent> logger,
             IMetricsAccessor metricsAccessor,
-            MonitoringConfig monitoringConfig) : base(responseAccessor, requestAccessor, monitoringConfig, logger)
+            MonitoringConfig monitoringConfig) : base(baseAgentHelper, logger)
         {
             _plannerHelpers = plannerHelpers;
             _requestAccessor = requestAccessor;
@@ -73,11 +73,10 @@ namespace AiCoreApi.SemanticKernel.Agents
 
         public override async Task<string> DoCall(AgentModel agent, Dictionary<string, string> parameters)
         {
-            parameters.ToList().ForEach(p => parameters[p.Key] = HttpUtility.HtmlDecode(p.Value));
             _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
             // Insert user parameters into the code template
-            var csharpCode = ApplyParameters(agent.Content[AgentContentParameters.CsharpCode].Value, parameters);
+            var csharpCode = GetParameterValue(AgentContentParameters.CsharpCode);
 
             // If the code does not define "class Agent {...}", switch to quick mode
             var quickMode = !csharpCode.Replace(" ", "").Contains("classAgent");

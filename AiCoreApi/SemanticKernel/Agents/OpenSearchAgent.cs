@@ -4,8 +4,6 @@ using Microsoft.SemanticKernel;
 using AiCoreApi.Models.DbModels;
 using AiCoreApi.Common;
 using AiCoreApi.Data.Processors;
-using System.Web;
-using AiCoreApi.Common.Monitoring;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
@@ -37,13 +35,13 @@ namespace AiCoreApi.SemanticKernel.Agents
         }
 
         public OpenSearchAgent(
+            IBaseAgentHelper baseAgentHelper,
             IConnectionProcessor connectionProcessor,
             IHttpClientFactory httpClientFactory,
             RequestAccessor requestAccessor,
             ResponseAccessor responseAccessor,
-            MonitoringConfig monitoringConfig,
             ILogger<OpenSearchAgent> logger)
-            : base(responseAccessor, requestAccessor, monitoringConfig, logger)
+            : base(baseAgentHelper, logger)
         {
             _connectionProcessor = connectionProcessor;
             _httpClientFactory = httpClientFactory;
@@ -53,14 +51,13 @@ namespace AiCoreApi.SemanticKernel.Agents
 
         public override async Task<string> DoCall(AgentModel agent, Dictionary<string, string> parameters)
         {
-            parameters.ToList().ForEach(p => parameters[p.Key] = HttpUtility.HtmlDecode(p.Value));
             _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
             var action = agent.Content[AgentContentParameters.Action].Value;
-            var indexName = ApplyParameters(agent.Content.GetValueOrDefault(AgentContentParameters.IndexName)?.Value ?? "", parameters);
-            var query = ApplyParameters(agent.Content.GetValueOrDefault(AgentContentParameters.Query)?.Value ?? "", parameters);
-            var documentId = ApplyParameters(agent.Content.GetValueOrDefault(AgentContentParameters.DocumentId)?.Value ?? "", parameters);
-            var payload = ApplyParameters(agent.Content.GetValueOrDefault(AgentContentParameters.Payload)?.Value ?? "", parameters);
+            var indexName = GetParameterValue(AgentContentParameters.IndexName);
+            var query = GetParameterValue(AgentContentParameters.Query);
+            var documentId = GetParameterValue(AgentContentParameters.DocumentId);
+            var payload = GetParameterValue(AgentContentParameters.Payload);
             var connectionName = agent.Content[AgentContentParameters.ConnectionName].Value;
 
             var connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);

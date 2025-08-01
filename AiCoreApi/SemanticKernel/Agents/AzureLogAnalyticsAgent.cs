@@ -1,12 +1,10 @@
 using System.Text.Json;
 using Microsoft.SemanticKernel;
 using AiCoreApi.Models.DbModels;
-using System.Web;
 using AiCoreApi.Common;
 using AiCoreApi.Data.Processors;
 using Azure.Monitor.Query;
 using System.Text.RegularExpressions;
-using AiCoreApi.Common.Monitoring;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
@@ -32,12 +30,12 @@ namespace AiCoreApi.SemanticKernel.Agents
         private readonly ResponseAccessor _responseAccessor;
 
         public AzureLogAnalyticsAgent(
+            IBaseAgentHelper baseAgentHelper,
             IConnectionProcessor connectionProcessor,
             IEntraTokenProvider entraTokenProvider,
             RequestAccessor requestAccessor,
             ResponseAccessor responseAccessor,
-            MonitoringConfig monitoringConfig,
-            ILogger<SqlServerAgent> logger) : base(responseAccessor, requestAccessor, monitoringConfig, logger)
+            ILogger<SqlServerAgent> logger) : base(baseAgentHelper, logger)
         {
             _connectionProcessor = connectionProcessor;
             _entraTokenProvider = entraTokenProvider;
@@ -49,11 +47,10 @@ namespace AiCoreApi.SemanticKernel.Agents
             AgentModel agent,
             Dictionary<string, string> parameters)
         {
-            parameters.ToList().ForEach(p => parameters[p.Key] = HttpUtility.HtmlDecode(p.Value));
             _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
             var connectionName = agent.Content[AgentContentParameters.ConnectionName].Value;
-            var query = ApplyParameters(agent.Content[AgentContentParameters.KqlQuery].Value, parameters);
+            var query = GetParameterValue(AgentContentParameters.KqlQuery);
             var timeRange = ReadQueryTimeRange(agent, parameters);
 
             _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Request", $"Time range: {timeRange}\r\n\r\nKQL query:\r\n{query}");

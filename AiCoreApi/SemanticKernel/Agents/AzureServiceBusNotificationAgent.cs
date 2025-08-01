@@ -3,9 +3,7 @@ using Azure.Messaging.ServiceBus;
 using Microsoft.SemanticKernel;
 using AiCoreApi.Models.DbModels;
 using AiCoreApi.Common;
-using System.Web;
 using AiCoreApi.Data.Processors;
-using AiCoreApi.Common.Monitoring;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
@@ -26,12 +24,12 @@ namespace AiCoreApi.SemanticKernel.Agents
         private readonly ResponseAccessor _responseAccessor;
 
         public AzureServiceBusNotificationAgent(
+            IBaseAgentHelper baseAgentHelper,
             IConnectionProcessor connectionProcessor,
             IEntraTokenProvider entraTokenProvider,
             RequestAccessor requestAccessor,
             ResponseAccessor responseAccessor,
-            MonitoringConfig monitoringConfig,
-            ILogger<AzureServiceBusNotificationAgent> logger) : base(responseAccessor, requestAccessor, monitoringConfig, logger)
+            ILogger<AzureServiceBusNotificationAgent> logger) : base(baseAgentHelper, logger)
         {
             _connectionProcessor = connectionProcessor;
             _entraTokenProvider = entraTokenProvider;
@@ -43,12 +41,11 @@ namespace AiCoreApi.SemanticKernel.Agents
             AgentModel agent,
             Dictionary<string, string> parameters)
         {
-            parameters.ToList().ForEach(p => parameters[p.Key] = HttpUtility.HtmlDecode(p.Value));
             _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
             var connectionName = agent.Content[AgentContentParameters.ConnectionName].Value;
-            var queueOrTopicName = ApplyParameters(agent.Content[AgentContentParameters.QueueOrTopicName].Value, parameters);
-            var notificationPayload = ApplyParameters(agent.Content[AgentContentParameters.NotificationPayload].Value, parameters);
+            var queueOrTopicName = GetParameterValue(AgentContentParameters.QueueOrTopicName);
+            var notificationPayload = GetParameterValue(AgentContentParameters.NotificationPayload);
 
             _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Request", notificationPayload);
             var connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);

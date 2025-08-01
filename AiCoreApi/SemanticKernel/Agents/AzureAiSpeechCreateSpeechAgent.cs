@@ -1,11 +1,9 @@
 using Microsoft.SemanticKernel;
 using AiCoreApi.Models.DbModels;
-using System.Web;
 using AiCoreApi.Common;
 using AiCoreApi.Data.Processors;
 using System.Text.RegularExpressions;
 using System.Net.Http.Headers;
-using AiCoreApi.Common.Monitoring;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
@@ -26,12 +24,12 @@ namespace AiCoreApi.SemanticKernel.Agents
         private readonly IConnectionProcessor _connectionProcessor;
 
         public AzureAiSpeechCreateSpeechAgent(
+            IBaseAgentHelper baseAgentHelper,
             RequestAccessor requestAccessor,
             ResponseAccessor responseAccessor,
             IHttpClientFactory httpClientFactory,
             IConnectionProcessor connectionProcessor,
-            MonitoringConfig monitoringConfig,
-            ILogger<AzureAiSpeechCreateSpeechAgent> logger) : base(responseAccessor, requestAccessor, monitoringConfig, logger)
+            ILogger<AzureAiSpeechCreateSpeechAgent> logger) : base(baseAgentHelper, logger)
         {
             _requestAccessor = requestAccessor;
             _responseAccessor = responseAccessor;
@@ -41,11 +39,10 @@ namespace AiCoreApi.SemanticKernel.Agents
 
         public override async Task<string> DoCall(AgentModel agent, Dictionary<string, string> parameters)
         {
-            parameters.ToList().ForEach(p => parameters[p.Key] = HttpUtility.HtmlDecode(p.Value));
             _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
-            var voice = ApplyParameters(agent.Content[AgentContentParameters.Voice].Value, parameters);
-            var text = ApplyParameters(agent.Content[AgentContentParameters.Text].Value, parameters);
+            var voice = GetParameterValue(AgentContentParameters.Voice);
+            var text = GetParameterValue(AgentContentParameters.Text);
             var speechConnectionName = agent.Content[AgentContentParameters.SpeechConnectionName].Value;
             var quality = agent.Content[AgentContentParameters.Quality].Value;
 

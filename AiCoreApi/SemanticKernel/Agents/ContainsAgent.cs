@@ -2,8 +2,6 @@ using System.Text.RegularExpressions;
 using Microsoft.SemanticKernel;
 using AiCoreApi.Models.DbModels;
 using AiCoreApi.Common;
-using System.Web;
-using AiCoreApi.Common.Monitoring;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
@@ -13,10 +11,9 @@ namespace AiCoreApi.SemanticKernel.Agents
 
         private readonly ResponseAccessor _responseAccessor;
         public ContainsAgent(
-            RequestAccessor requestAccessor,
+            IBaseAgentHelper baseAgentHelper,
             ResponseAccessor responseAccessor,
-            MonitoringConfig monitoringConfig,
-            ILogger<ContainsAgent> logger) : base(responseAccessor, requestAccessor, monitoringConfig, logger)
+            ILogger<ContainsAgent> logger) : base(baseAgentHelper, logger)
         {
             _responseAccessor = responseAccessor;
         }
@@ -28,7 +25,6 @@ namespace AiCoreApi.SemanticKernel.Agents
 
         public override async Task<string> DoCall(AgentModel agent, Dictionary<string, string> parameters)
         {
-            parameters.ToList().ForEach(p => parameters[p.Key] = HttpUtility.HtmlDecode(p.Value));
             _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
             try
             {

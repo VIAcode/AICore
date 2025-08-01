@@ -1,11 +1,9 @@
 using System.Diagnostics;
 using Microsoft.SemanticKernel;
 using AiCoreApi.Models.DbModels;
-using System.Web;
 using AiCoreApi.Common;
 using System.Text.RegularExpressions;
 using System.Text.Json;
-using AiCoreApi.Common.Monitoring;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
@@ -29,13 +27,13 @@ namespace AiCoreApi.SemanticKernel.Agents
         private static class AgentContentParameters { public const string JsCode = "nodeJsCode"; }
 
         public NodeJsCodeAgent(
+            IBaseAgentHelper baseAgentHelper,
             IPlannerHelpers plannerHelpers,
             RequestAccessor requestAccessor,
             ResponseAccessor responseAccessor,
             ICacheAccessor cacheAccessor,
-            MonitoringConfig monitoringConfig,
             ILogger<NodeJsCodeAgent> logger)
-            : base(responseAccessor, requestAccessor, monitoringConfig, logger)
+            : base(baseAgentHelper, logger)
         {
             _plannerHelpers = plannerHelpers;
             _requestAccessor = requestAccessor;
@@ -50,10 +48,9 @@ namespace AiCoreApi.SemanticKernel.Agents
 
         public override async Task<string> DoCall(AgentModel agent, Dictionary<string, string> parameters)
         {
-            parameters.ToList().ForEach(p => parameters[p.Key] = HttpUtility.HtmlDecode(p.Value));
             _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
-            var jsCode = ApplyParameters(agent.Content[AgentContentParameters.JsCode].Value, parameters);
+            var jsCode = GetParameterValue(AgentContentParameters.JsCode);
             _responseAccessor.AddDebugMessage(_debugMessageSenderName, "Execute Node.js Code", jsCode);
 
             jsCode = RunCmd(jsCode);     // handle # cmd:

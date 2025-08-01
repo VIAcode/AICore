@@ -1,11 +1,9 @@
 using System.Diagnostics;
 using Microsoft.SemanticKernel;
 using AiCoreApi.Models.DbModels;
-using System.Web;
 using AiCoreApi.Common;
 using Python.Runtime;
 using System.Text.RegularExpressions;
-using AiCoreApi.Common.Monitoring;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
@@ -36,18 +34,16 @@ namespace AiCoreApi.SemanticKernel.Agents
         private readonly IPlannerHelpers _plannerHelpers;
         private readonly RequestAccessor _requestAccessor;
         private readonly ResponseAccessor _responseAccessor;
-        private readonly IMetricsAccessor _metricsAccessor;
         private readonly ICacheAccessor _cacheAccessor;
         private readonly ILogger<PythonCodeAgent> _logger;
 
         public PythonCodeAgent(
+            IBaseAgentHelper baseAgentHelper,
             IPlannerHelpers plannerHelpers,
             RequestAccessor requestAccessor,
             ResponseAccessor responseAccessor,
             ICacheAccessor cacheAccessor,
-            MonitoringConfig monitoringConfig,
-            ILogger<PythonCodeAgent> logger,
-            IMetricsAccessor metricsAccessor) : base(responseAccessor, requestAccessor, monitoringConfig, logger)
+            ILogger<PythonCodeAgent> logger) : base(baseAgentHelper, logger)
         {
             _plannerHelpers = plannerHelpers;
             _requestAccessor = requestAccessor;
@@ -55,17 +51,15 @@ namespace AiCoreApi.SemanticKernel.Agents
             _cacheAccessor = cacheAccessor;
             _cacheAccessor.KeyPrefix = "AgentExecution-";
             _logger = logger;
-            _metricsAccessor = metricsAccessor;
         }
 
         public async Task<string> DoCallWrapper(AgentModel agent, Dictionary<string, string> parameters) => await base.DoCallWrapper(agent, parameters);
 
         public override async Task<string> DoCall(AgentModel agent, Dictionary<string, string> parameters)
         {
-            parameters.ToList().ForEach(p => parameters[p.Key] = HttpUtility.HtmlDecode(p.Value));
             _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
-            var pythonCode = ApplyParameters(agent.Content[AgentContentParameters.PythonCode].Value, parameters);
+            var pythonCode = GetParameterValue(AgentContentParameters.PythonCode);
             pythonCode = ApplyParameters(pythonCode, new Dictionary<string, string>
             {
                 {AgentPromptPlaceholders.HasFilesPlaceholder, _requestAccessor.MessageDialog.Messages.Last().HasFiles().ToString()},

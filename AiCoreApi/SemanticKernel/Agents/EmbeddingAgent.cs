@@ -3,8 +3,6 @@ using AiCoreApi.Models.DbModels;
 using AiCoreApi.Common;
 using AiCoreApi.Data.Processors;
 using System.Text.Json;
-using System.Web;
-using AiCoreApi.Common.Monitoring;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
@@ -22,13 +20,13 @@ namespace AiCoreApi.SemanticKernel.Agents
         private readonly ResponseAccessor _responseAccessor;
 
         public EmbeddingAgent(
+            IBaseAgentHelper baseAgentHelper,
             IConnectionProcessor connectionProcessor,
             IEmbeddingProcessor embeddingProcessor,
             RequestAccessor requestAccessor,
             ResponseAccessor responseAccessor,
-            MonitoringConfig monitoringConfig,
             ILogger<EmbeddingAgent> logger
-        ) : base(responseAccessor, requestAccessor, monitoringConfig, logger)
+        ) : base(baseAgentHelper, logger)
         {
             _connectionProcessor = connectionProcessor;
             _embeddingProcessor = embeddingProcessor;
@@ -38,10 +36,8 @@ namespace AiCoreApi.SemanticKernel.Agents
 
         public override async Task<string> DoCall(AgentModel agent, Dictionary<string, string> parameters)
         {
-            parameters.ToList().ForEach(p => parameters[p.Key] = HttpUtility.HtmlDecode(p.Value));
-
             var connectionName = agent.Content[AgentContentParameters.EmbeddingConnectionName].Value;
-            var inputText = ApplyParameters(agent.Content[AgentContentParameters.Text].Value, parameters);
+            var inputText = GetParameterValue(AgentContentParameters.Text);
 
             var connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
             var connection = GetConnection(_requestAccessor, _responseAccessor, connections,
