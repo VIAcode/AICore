@@ -101,7 +101,7 @@ namespace AiCoreApi.Services.IngestionServices
                 itemId = decoded[1];
             }
             else
-                throw new InvalidOperationException($"Invalid path format: {path}, expected format is 'DriveId,ItemId'.");
+                throw new InvalidOperationException($"Invalid path format: {path}, expected format is 'DriveId|ItemId'.");
 
 
             // Download content as stream

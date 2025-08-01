@@ -124,7 +124,7 @@ class Agent
             string agentsDescription = await GetAgentsDescriptions(agent);
 
             string promptTemplate = await GetParameterValueAsync(AgentContentParameters.CodeGenerationPrompt);
-            if(string.IsNullOrEmpty(promptTemplate))
+            if (string.IsNullOrEmpty(promptTemplate))
                 promptTemplate = CodeGenerationPromptText;
             
             promptTemplate = promptTemplate

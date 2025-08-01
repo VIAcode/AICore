@@ -110,7 +110,7 @@ parameter{i + 1} = Parameters['parameter{i + 1}']")
             string agentsDescription = await GetAgentsDescriptions(agent);
 
             string promptTemplate = await GetParameterValueAsync(AgentContentParameters.CodeGenerationPrompt);
-            if(string.IsNullOrEmpty(promptTemplate))
+            if (string.IsNullOrEmpty(promptTemplate))
                 promptTemplate = CodeGenerationPromptText;
             promptTemplate = promptTemplate
                 .Replace(CodeGenerationPromptPlaceHolders.AgentsDescription, agentsDescription)

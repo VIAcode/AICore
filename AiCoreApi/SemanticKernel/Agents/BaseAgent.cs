@@ -124,7 +124,6 @@ namespace AiCoreApi.SemanticKernel.Agents
                     continue;
                 }
 
-                // Start of a placeholder
                 if (i + 1 < text.Length && text[i] == '{' && text[i + 1] == '{')
                 {
                     int start = i + 2;
@@ -156,7 +155,7 @@ namespace AiCoreApi.SemanticKernel.Agents
                         break;
                     }
 
-                    string key = text.Substring(start, j - start - 2).Trim(); // FIX: subtract 2 to not include final braces
+                    string key = text.Substring(start, j - start - 2).Trim(); 
                     if (string.IsNullOrWhiteSpace(key))
                     {
                         sb.Append("{{}}");
@@ -185,7 +184,7 @@ namespace AiCoreApi.SemanticKernel.Agents
 
                     sb.Append(value ?? $"{{{{{key}}}}}");
 
-                    i = j; // FIX: correctly move past entire token
+                    i = j;
                 }
                 else
                 {
