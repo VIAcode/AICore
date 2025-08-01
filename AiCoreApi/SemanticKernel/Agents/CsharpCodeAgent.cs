@@ -53,8 +53,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             ExtendedConfig extendedConfig,
             ICacheAccessor cacheAccessor,
             ILogger<CsharpCodeAgent> logger,
-            IMetricsAccessor metricsAccessor,
-            MonitoringConfig monitoringConfig) : base(baseAgentHelper, logger)
+            IMetricsAccessor metricsAccessor) : base(baseAgentHelper, logger)
         {
             _plannerHelpers = plannerHelpers;
             _requestAccessor = requestAccessor;
@@ -64,7 +63,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             _cacheAccessor.KeyPrefix = "AgentExecution-";
             _logger = logger;
             _metricsAccessor = metricsAccessor;
-            _monitoringConfig = monitoringConfig;
+            _monitoringConfig = baseAgentHelper.MonitoringConfig;
         }
 
         public string BuildError { get; set; } = string.Empty;

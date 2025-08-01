@@ -105,91 +105,128 @@ namespace AiCoreApi.SemanticKernel.Agents
         protected async Task<string> ApplyParametersAsync(string text, Dictionary<string, string>? additionalParameters = null)
         {
             var sb = new StringBuilder(text.Length);
-            int startIndex = 0;
+            int i = 0;
+            var resolvedDsCache = new Dictionary<string, string>();
 
-            while (startIndex < text.Length)
+            while (i < text.Length)
             {
-                int openIndex = text.IndexOf("{{", startIndex);
-                if (openIndex == -1)
+                // Handle escaped braces: \{{ or \}}
+                if (i + 2 < text.Length && text[i] == '\\' && text[i + 1] == '{' && text[i + 2] == '{')
                 {
-                    sb.Append(text.Substring(startIndex));
-                    break;
+                    sb.Append("{{");
+                    i += 3;
+                    continue;
+                }
+                if (i + 2 < text.Length && text[i] == '\\' && text[i + 1] == '}' && text[i + 2] == '}')
+                {
+                    sb.Append("}}");
+                    i += 3;
+                    continue;
                 }
 
-                int closeIndex = text.IndexOf("}}", openIndex + 2);
-                if (closeIndex == -1)
+                // Start of a placeholder
+                if (i + 1 < text.Length && text[i] == '{' && text[i + 1] == '{')
                 {
-                    sb.Append(text.Substring(startIndex));
-                    break;
-                }
+                    int start = i + 2;
+                    int braceDepth = 1;
+                    int j = start;
 
-                sb.Append(text.Substring(startIndex, openIndex - startIndex));
-                string key = text.Substring(openIndex + 2, closeIndex - openIndex - 2);
-
-                if (_parameters.TryGetValue(key, out var value))
-                {
-                    sb.Append(value);
-                }
-                else if (additionalParameters != null && additionalParameters.TryGetValue(key, out var extra))
-                {
-                    sb.Append(extra);
-                }
-                else if (key.StartsWith("DS:"))
-                {
-                    var parts = key.Split(':');
-                    if (parts.Length < 3 || parts.Length > 4)
+                    while (j < text.Length - 1)
                     {
-                        sb.Append("Invalid Data Source parameters count");
-                    }
-                    else
-                    {
-                        var dsName = parts[1];
-                        var dsPath = parts[2];
-                        var cacheSeconds = (parts.Length == 4 && int.TryParse(parts[3], out var c)) ? c : 0;
-
-                        var cacheKey = $"DS_{HttpUtility.UrlEncode(_requestAccessor.WorkspaceId.ToString())}_{HttpUtility.UrlEncode(dsName)}_{HttpUtility.UrlEncode(dsPath)}";
-                        var cachedValue = _cacheAccessor.GetCacheValue(cacheKey);
-
-                        if (!string.IsNullOrEmpty(cachedValue))
+                        if (text[j] == '{' && text[j + 1] == '{')
                         {
-                            sb.Append(cachedValue);
+                            braceDepth++;
+                            j += 2;
+                        }
+                        else if (text[j] == '}' && text[j + 1] == '}')
+                        {
+                            braceDepth--;
+                            j += 2;
+                            if (braceDepth == 0) break;
                         }
                         else
                         {
-                            var ingestion = await _ingestionProcessor.Get(dsName, _requestAccessor.WorkspaceId);
-                            if (ingestion == null)
-                            {
-                                sb.Append($"Data Source '{dsName}' not found");
-                            }
-                            else
-                            {
-                                var worker = _dataIngestionWorkerFactory.GetService(ingestion);
-                                var file = await worker.GetFileByPath(ingestion, dsPath);
-                                if (string.IsNullOrEmpty(file))
-                                {
-                                    sb.Append($"File '{dsPath}' not found in Data Source '{dsName}'");
-                                }
-                                else
-                                {
-                                    sb.Append(file);
-                                    if (cacheSeconds > 0)
-                                        _cacheAccessor.SetCacheValue(cacheKey, file, cacheSeconds);
-                                }
-                            }
+                            j++;
                         }
                     }
+
+                    if (braceDepth != 0 || j > text.Length)
+                    {
+                        sb.Append(text.Substring(i));
+                        break;
+                    }
+
+                    string key = text.Substring(start, j - start - 2).Trim(); // FIX: subtract 2 to not include final braces
+                    if (string.IsNullOrWhiteSpace(key))
+                    {
+                        sb.Append("{{}}");
+                        i = j;
+                        continue;
+                    }
+
+                    string? value = null;
+
+                    if (_parameters.TryGetValue(key, out var paramValue))
+                    {
+                        value = paramValue;
+                    }
+                    else if (additionalParameters != null && additionalParameters.TryGetValue(key, out var extra))
+                    {
+                        value = extra;
+                    }
+                    else if (key.StartsWith("DS:"))
+                    {
+                        if (!resolvedDsCache.TryGetValue(key, out value!))
+                        {
+                            value = await ResolveDataSourceValueAsync(key);
+                            resolvedDsCache[key] = value;
+                        }
+                    }
+
+                    sb.Append(value ?? $"{{{{{key}}}}}");
+
+                    i = j; // FIX: correctly move past entire token
                 }
                 else
                 {
-                    sb.Append("{{").Append(key).Append("}}");
+                    sb.Append(text[i]);
+                    i++;
                 }
-
-                startIndex = closeIndex + 2;
             }
 
             return sb.ToString();
         }
 
+
+        private async Task<string?> ResolveDataSourceValueAsync(string key)
+        {
+            var parts = key.Split(':');
+            if (parts.Length < 3 || parts.Length > 4)
+                return "Invalid Data Source parameters count";
+
+            var dsName = parts[1];
+            var dsPath = parts[2];
+            var cacheSeconds = (parts.Length == 4 && int.TryParse(parts[3], out var c)) ? c : 0;
+            var cacheKey = $"{HttpUtility.UrlEncode(dsName)}_{HttpUtility.UrlEncode(dsPath)}";
+
+            var cachedValue = _cacheAccessor.GetCacheValue(cacheKey);
+            if (!string.IsNullOrEmpty(cachedValue))
+                return cachedValue;
+
+            var ingestion = await _ingestionProcessor.Get(dsName, _requestAccessor.WorkspaceId);
+            if (ingestion == null)
+                return $"Data Source '{dsName}' not found";
+
+            var worker = _dataIngestionWorkerFactory.GetService(ingestion);
+            var file = await worker.GetFileByPath(ingestion, dsPath);
+            if (string.IsNullOrEmpty(file))
+                return $"File '{dsPath}' not found in Data Source '{dsName}'";
+
+            if (cacheSeconds > 0)
+                _cacheAccessor.SetCacheValue(cacheKey, file, cacheSeconds);
+
+            return file;
+        }
 
         public virtual async Task OnAddUpdate(AgentModel agentModel)
         {

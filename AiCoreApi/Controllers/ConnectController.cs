@@ -288,7 +288,9 @@ namespace AiCoreApi.Controllers
             if (string.IsNullOrEmpty(connectionCreateModel.AccessToken))
                 return BadRequest("AccessToken is required");
             var jsonToken = new JwtSecurityTokenHandler().ReadToken(connectionCreateModel.AccessToken) as JwtSecurityToken;
-            var jwtPayload = jsonToken!.Payload!;
+            if (jsonToken == null || jsonToken.Payload == null)
+                return BadRequest("Invalid access token");
+            var jwtPayload = jsonToken.Payload;
             if (jwtPayload.ValidTo < DateTime.UtcNow)
                 return Unauthorized("Access token is expired");
 
