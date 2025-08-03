@@ -148,25 +148,27 @@ namespace AiCoreApi.Services.IngestionServices
             return connection;
         }
 
+        public async Task<string> GetFileByPath(IngestionModel ingestion, string path)
+        {
+            var connection = await GetConnection(ingestion, Convert.ToInt32(ingestion.Content["ConnectionName"]));
+
+            var baseUrl = connection.Content["baseUrl"];
+            var username = connection.Content["username"];
+            var apiToken = connection.Content["apiToken"];
+
+            var client = _httpClientFactory.CreateClient(HttpClients.NoRetryClient);
+            var authToken = Convert.ToBase64String(Encoding.ASCII.GetBytes($"{username}:{apiToken}"));
+            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", authToken);
+            var pageId = GetPageIdByUrl(path);
+            return await GetPageContent(client, baseUrl, pageId);
+        }
+
         public async Task<string> GetFile(IngestionModel ingestion, string fileId)
         {
             try
             {
-                var connection = await GetConnection(ingestion, Convert.ToInt32(ingestion.Content["ConnectionName"]));
-
-                var baseUrl = connection.Content["baseUrl"];
-                var username = connection.Content["username"];
-                var apiToken = connection.Content["apiToken"];
-
-                var client = _httpClientFactory.CreateClient(HttpClients.NoRetryClient);
-                var authToken = Convert.ToBase64String(Encoding.ASCII.GetBytes($"{username}:{apiToken}"));
-                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", authToken);
-
-                var metadata = _documentMetadataProcessor.Get(fileId)
-                    ?? throw new InvalidOperationException($"File with id '{fileId}' not found in metadata.");
-
-                var pageId = GetPageIdByUrl(metadata.Url);
-                return await GetPageContent(client, baseUrl, pageId);
+                var metadata = _documentMetadataProcessor.Get(fileId) ?? throw new InvalidOperationException($"File with id '{fileId}' not found in metadata.");
+                return await GetFileByPath(ingestion, metadata.Url);
             }
             catch (Exception ex)
             {

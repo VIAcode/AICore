@@ -59,6 +59,7 @@ namespace AiCoreApi.Services.IngestionServices
     {
         Task Process(IngestionModel ingestion, int taskId);
         Task<string> GetFile(IngestionModel ingestion, string fileId);
+        Task<string> GetFileByPath(IngestionModel ingestion, string filePath);
         Task SetFile(IngestionModel ingestion, string fileId, string articleText); 
         Task<List<string>> GetAutoComplete(string parameterName, IngestionModel ingestionModel) => Task.FromResult(new List<string>());
     }

@@ -5,8 +5,6 @@ using Microsoft.SemanticKernel;
 using AiCoreApi.Common;
 using AiCoreApi.Data.Processors;
 using AiCoreApi.Models.DbModels;
-using System.Web;
-using AiCoreApi.Common.Monitoring;
 
 namespace AiCoreApi.SemanticKernel.Agents;
 
@@ -32,13 +30,13 @@ public class AudioPromptAgent : BaseAgent, IAudioPromptAgent
     private readonly IHttpClientFactory _httpClientFactory;
 
     public AudioPromptAgent(
+        IBaseAgentHelper baseAgentHelper,
         IConnectionProcessor connectionProcessor,
         RequestAccessor requestAccessor,
         ResponseAccessor responseAccessor,
         IHttpClientFactory httpClientFactory,
-        MonitoringConfig monitoringConfig,
         ILogger<AudioPromptAgent> logger)
-        : base(responseAccessor, requestAccessor, monitoringConfig, logger)
+        : base(baseAgentHelper, logger)
     {
         _connectionProcessor = connectionProcessor;
         _requestAccessor = requestAccessor;
@@ -48,17 +46,16 @@ public class AudioPromptAgent : BaseAgent, IAudioPromptAgent
 
     public override async Task<string> DoCall(AgentModel agent, Dictionary<string, string> parameters)
     {
-        parameters.ToList().ForEach(p => parameters[p.Key] = HttpUtility.HtmlDecode(p.Value));
         _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
-        var prompt = ApplyParameters(agent.Content[AgentContentParameters.Prompt].Value, parameters);
-        var base64Audio = ApplyParameters(agent.Content[AgentContentParameters.Base64Audio].Value, parameters);
-        var mimeType = ApplyParameters(agent.Content[AgentContentParameters.MimeType].Value, parameters);
-        var systemMessage = ApplyParameters(agent.Content[AgentContentParameters.SystemMessage].Value, parameters);
-        var voice = ApplyParameters(agent.Content[AgentContentParameters.Voice].Value, parameters);
-        var temperatureStr = ApplyParameters(agent.Content[AgentContentParameters.Temperature].Value, parameters);
-        var topPStr = ApplyParameters(agent.Content[AgentContentParameters.TopP].Value, parameters);
-        var modalitiesStr = ApplyParameters(agent.Content[AgentContentParameters.Modalities].Value, parameters);
+        var prompt = await GetParameterValueAsync(AgentContentParameters.Prompt);
+        var base64Audio = await GetParameterValueAsync(AgentContentParameters.Base64Audio);
+        var mimeType = await GetParameterValueAsync(AgentContentParameters.MimeType);
+        var systemMessage = await GetParameterValueAsync(AgentContentParameters.SystemMessage);
+        var voice = await GetParameterValueAsync(AgentContentParameters.Voice);
+        var temperatureStr = await GetParameterValueAsync(AgentContentParameters.Temperature);
+        var topPStr = await GetParameterValueAsync(AgentContentParameters.TopP);
+        var modalitiesStr = await GetParameterValueAsync(AgentContentParameters.Modalities);
 
         if (mimeType.Contains("webm") && !string.IsNullOrEmpty(base64Audio))
         {
@@ -85,7 +82,7 @@ public class AudioPromptAgent : BaseAgent, IAudioPromptAgent
         int? connectionId)
     {
         var connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
-        var connection = GetConnection(_requestAccessor, _responseAccessor, connections,
+        var connection = await GetConnectionAsync(_requestAccessor, _responseAccessor, connections,
             new[] { ConnectionType.AzureOpenAiLlm, ConnectionType.OpenAiLlm, ConnectionType.GeminiLlm }, _debugMessageSenderName, connectionId);
 
         return connection.Type switch

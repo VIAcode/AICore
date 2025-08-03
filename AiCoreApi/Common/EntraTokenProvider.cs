@@ -3,6 +3,7 @@ using Azure.Identity;
 using System.Collections.Concurrent;
 using Azure.Security.KeyVault.Secrets;
 using System.Text.Json;
+using static AiCoreApi.Common.EntraTokenProvider;
 
 namespace AiCoreApi.Common
 {
@@ -100,7 +101,7 @@ namespace AiCoreApi.Common
         private async Task<SemaphoreSlim> GetLockAsync(string cacheKey) =>
             Locks.GetOrAdd(cacheKey, _ => new SemaphoreSlim(1, 1));
 
-        private async Task<ClientCredentials> GetCredentialsFromKeyVaultAsync(string storageName)
+        public async Task<ClientCredentials> GetCredentialsFromKeyVaultAsync(string storageName)
         {
             var client = GetSecretClient();
             var secretBundle = await client.GetSecretAsync(storageName);
@@ -180,7 +181,7 @@ namespace AiCoreApi.Common
         }
 
 
-        private class ClientCredentials
+        public class ClientCredentials
         {
             public string TenantId { get; set; } = string.Empty;
             public string ClientId { get; set; } = string.Empty;
@@ -211,5 +212,6 @@ namespace AiCoreApi.Common
         Task SetCredentialsToKeyVaultAsync(string storageName, string tenantId, string clientId, string clientSecret);
         Task RemoveCredentialsToKeyVaultAsync(string storageName);
         Task<AccessToken> GetAccessTokenByRefreshTokenAsync(string storageName, string refreshToken, string resource);
+        Task<ClientCredentials> GetCredentialsFromKeyVaultAsync(string storageName);
     }
 }

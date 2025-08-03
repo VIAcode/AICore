@@ -1,8 +1,6 @@
 using System.Text.Json;
 using AiCoreApi.Models.DbModels;
 using AiCoreApi.Common;
-using System.Web;
-using AiCoreApi.Common.Monitoring;
 using AiCoreApi.Data.Processors;
 using AiCoreApi.Common.Extensions;
 
@@ -21,14 +19,12 @@ namespace AiCoreApi.SemanticKernel.Agents
         }
 
         public FlowAgent(
+            IBaseAgentHelper baseAgentHelper,
             IAgentsProcessor agentsProcessor,
             IPlannerHelpers plannerHelpers,
-            RequestAccessor requestAccessor,
             ResponseAccessor responseAccessor,
-
-            MonitoringConfig monitoringConfig,
             ILogger<FlowAgent> logger)
-            : base(agentsProcessor, responseAccessor, requestAccessor, monitoringConfig, logger)
+            : base(baseAgentHelper, logger)
         {
             _responseAccessor = responseAccessor;
             _plannerHelpers = plannerHelpers;
@@ -37,12 +33,9 @@ namespace AiCoreApi.SemanticKernel.Agents
 
         public override async Task<string> DoCall(AgentModel agent, Dictionary<string, string> parameters)
         {
-            foreach (var p in parameters)
-                parameters[p.Key] = HttpUtility.HtmlDecode(p.Value);
-
             _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
             _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Request", JsonSerializer.Serialize(parameters, new JsonSerializerOptions { WriteIndented = true }));
-            var agentToCall = ApplyParameters(agent.Content[AgentContentParameters.AgentToCall].Value, parameters);
+            var agentToCall = await GetParameterValueAsync(AgentContentParameters.AgentToCall);
             var result = await ExecuteAgent(agentToCall, parameters.Values.ToList());
             _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Response", result);
             return result;

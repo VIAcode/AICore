@@ -1,11 +1,9 @@
 using Microsoft.SemanticKernel;
 using AiCoreApi.Models.DbModels;
-using System.Web;
 using AiCoreApi.Common;
 using AiCoreApi.Data.Processors;
 using System.Text.RegularExpressions;
 using System.Net.Http.Headers;
-using AiCoreApi.Common.Monitoring;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
@@ -26,12 +24,12 @@ namespace AiCoreApi.SemanticKernel.Agents
         private readonly IConnectionProcessor _connectionProcessor;
 
         public AzureAiSpeechCreateSpeechAgent(
+            IBaseAgentHelper baseAgentHelper,
             RequestAccessor requestAccessor,
             ResponseAccessor responseAccessor,
             IHttpClientFactory httpClientFactory,
             IConnectionProcessor connectionProcessor,
-            MonitoringConfig monitoringConfig,
-            ILogger<AzureAiSpeechCreateSpeechAgent> logger) : base(responseAccessor, requestAccessor, monitoringConfig, logger)
+            ILogger<AzureAiSpeechCreateSpeechAgent> logger) : base(baseAgentHelper, logger)
         {
             _requestAccessor = requestAccessor;
             _responseAccessor = responseAccessor;
@@ -41,17 +39,16 @@ namespace AiCoreApi.SemanticKernel.Agents
 
         public override async Task<string> DoCall(AgentModel agent, Dictionary<string, string> parameters)
         {
-            parameters.ToList().ForEach(p => parameters[p.Key] = HttpUtility.HtmlDecode(p.Value));
             _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
-            var voice = ApplyParameters(agent.Content[AgentContentParameters.Voice].Value, parameters);
-            var text = ApplyParameters(agent.Content[AgentContentParameters.Text].Value, parameters);
+            var voice = await GetParameterValueAsync(AgentContentParameters.Voice);
+            var text = await GetParameterValueAsync(AgentContentParameters.Text);
             var speechConnectionName = agent.Content[AgentContentParameters.SpeechConnectionName].Value;
             var quality = agent.Content[AgentContentParameters.Quality].Value;
 
             _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall", $"Connection: {speechConnectionName}\r\nVoice: {voice}\r\nText: {text}");
             var connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
-            var speechConnection = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.AzureAiSpeech, _debugMessageSenderName, connectionName: speechConnectionName);
+            var speechConnection = await GetConnectionAsync(_requestAccessor, _responseAccessor, connections, ConnectionType.AzureAiSpeech, _debugMessageSenderName, connectionName: speechConnectionName);
             var region = speechConnection.Content["region"];
             var apiKey = speechConnection.Content["apiKey"];
 

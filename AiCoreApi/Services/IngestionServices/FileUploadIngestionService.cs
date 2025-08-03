@@ -84,6 +84,11 @@ namespace AiCoreApi.Services.IngestionServices
             throw new NotImplementedException();
         }
 
+        public async Task<string> GetFileByPath(IngestionModel ingestion, string filePath)
+        {
+            throw new NotImplementedException();
+        }
+
         public async Task SetFile(IngestionModel ingestion, string fileId, string articleText)
         {
             throw new NotImplementedException();

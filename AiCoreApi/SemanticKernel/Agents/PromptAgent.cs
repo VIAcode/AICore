@@ -1,13 +1,11 @@
 using Microsoft.SemanticKernel;
 using AiCoreApi.Models.DbModels;
-using System.Web;
 using AiCoreApi.Common;
 using AiCoreApi.Data.Processors;
 using Microsoft.SemanticKernel.ChatCompletion;
 using Microsoft.SemanticKernel.Connectors.OpenAI;
 using OpenAI.Chat;
 using Microsoft.KernelMemory.AI;
-using AiCoreApi.Common.Monitoring;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
@@ -38,12 +36,12 @@ namespace AiCoreApi.SemanticKernel.Agents
         private readonly ResponseAccessor _responseAccessor;
 
         public PromptAgent(
+            IBaseAgentHelper baseAgentHelper,
             ISemanticKernelProvider semanticKernelProvider,
             IConnectionProcessor connectionProcessor,
             RequestAccessor requestAccessor,
             ResponseAccessor responseAccessor,
-            MonitoringConfig monitoringConfig,
-            ILogger<PromptAgent> logger) : base(responseAccessor, requestAccessor, monitoringConfig, logger)
+            ILogger<PromptAgent> logger) : base(baseAgentHelper, logger)
         {
             _semanticKernelProvider = semanticKernelProvider;
             _connectionProcessor = connectionProcessor;
@@ -55,11 +53,10 @@ namespace AiCoreApi.SemanticKernel.Agents
             AgentModel agent,
             Dictionary<string, string> parameters)
         {
-            parameters.ToList().ForEach(p => parameters[p.Key] = HttpUtility.HtmlDecode(p.Value));
             _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
-            var templateText = ApplyParameters(agent.Content[AgentContentParameters.Prompt].Value, parameters);
-            templateText = ApplyParameters(templateText, new Dictionary<string, string>
+            var templateText = await GetParameterValueAsync(AgentContentParameters.Prompt);
+            templateText = await ApplyParametersAsync(templateText, new Dictionary<string, string>
             {
                 {AgentPromptPlaceholders.HasFilesPlaceholder, _requestAccessor.MessageDialog.Messages.Last().HasFiles().ToString()},
                 {AgentPromptPlaceholders.FilesDataPlaceholder, _requestAccessor.MessageDialog.Messages.Last().GetFileContents()},
@@ -67,13 +64,13 @@ namespace AiCoreApi.SemanticKernel.Agents
             });
             _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Request", templateText);
 
-            var outputType = agent.Content.ContainsKey(AgentContentParameters.OutputType) ? agent.Content[AgentContentParameters.OutputType].Value : string.Empty;
-            var jsonSchema = agent.Content.ContainsKey(AgentContentParameters.JsonSchema) ? ApplyParameters(agent.Content[AgentContentParameters.JsonSchema].Value, parameters) : string.Empty;
-            var systemMessage = agent.Content.ContainsKey(AgentContentParameters.SystemMessage) ? agent.Content[AgentContentParameters.SystemMessage].Value : string.Empty;
+            var outputType = await GetParameterValueAsync(AgentContentParameters.OutputType);
+            var jsonSchema = await GetParameterValueAsync(AgentContentParameters.JsonSchema);
+            var systemMessage = await GetParameterValueAsync(AgentContentParameters.SystemMessage);
             var strictMode = !agent.Content.ContainsKey(AgentContentParameters.StrictMode) || agent.Content[AgentContentParameters.StrictMode].Value == "true";
 
             var connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
-            var llmConnection = GetConnection(_requestAccessor, _responseAccessor, connections,
+            var llmConnection = await GetConnectionAsync(_requestAccessor, _responseAccessor, connections,
                 new[]
                 {
                     ConnectionType.AzureOpenAiLlm, 
@@ -149,7 +146,7 @@ namespace AiCoreApi.SemanticKernel.Agents
         public async Task<string> Prompt(string prompt, double temperature = 0, string connectionName = "")
         {
             var connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
-            var llmConnection = GetConnection(_requestAccessor, _responseAccessor, connections,
+            var llmConnection = await GetConnectionAsync(_requestAccessor, _responseAccessor, connections,
                 new[]
                 {
                     ConnectionType.AzureOpenAiLlm, 

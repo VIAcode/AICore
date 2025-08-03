@@ -3,9 +3,7 @@ using RabbitMQ.Client;
 using Microsoft.SemanticKernel;
 using AiCoreApi.Models.DbModels;
 using AiCoreApi.Common;
-using System.Web;
 using AiCoreApi.Data.Processors;
-using AiCoreApi.Common.Monitoring;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
@@ -25,11 +23,11 @@ namespace AiCoreApi.SemanticKernel.Agents
         private readonly ResponseAccessor _responseAccessor;
 
         public RabbitMqNotificationAgent(
+            IBaseAgentHelper baseAgentHelper,
             IConnectionProcessor connectionProcessor,
             RequestAccessor requestAccessor,
             ResponseAccessor responseAccessor,
-            MonitoringConfig monitoringConfig,
-            ILogger<RabbitMqNotificationAgent> logger) : base(responseAccessor, requestAccessor, monitoringConfig, logger)
+            ILogger<RabbitMqNotificationAgent> logger) : base(baseAgentHelper, logger)
         {
             _requestAccessor = requestAccessor;
             _responseAccessor = responseAccessor;
@@ -38,16 +36,15 @@ namespace AiCoreApi.SemanticKernel.Agents
 
         public override async Task<string> DoCall(AgentModel agent, Dictionary<string, string> parameters)
         {
-            parameters.ToList().ForEach(p => parameters[p.Key] = HttpUtility.HtmlDecode(p.Value));
             _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
             var connectionName = agent.Content[AgentContentParameters.ConnectionName].Value;
-            var queueOrTopicName = ApplyParameters(agent.Content[AgentContentParameters.QueueOrTopicName].Value, parameters);
-            var notificationPayload = ApplyParameters(agent.Content[AgentContentParameters.NotificationPayload].Value, parameters);
+            var queueOrTopicName = await GetParameterValueAsync(AgentContentParameters.QueueOrTopicName);
+            var notificationPayload = await GetParameterValueAsync(AgentContentParameters.NotificationPayload);
 
             _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Request", notificationPayload);
             var connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
-            var connection = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.RabbitMq, _debugMessageSenderName, connectionName: connectionName);
+            var connection = await GetConnectionAsync(_requestAccessor, _responseAccessor, connections, ConnectionType.RabbitMq, _debugMessageSenderName, connectionName: connectionName);
             var rabbitMqConnectionString = connection.Content["rabbitMqConnectionString"];
 
             SendNotification(rabbitMqConnectionString, queueOrTopicName, notificationPayload);

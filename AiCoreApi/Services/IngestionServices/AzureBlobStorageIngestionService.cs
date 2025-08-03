@@ -67,37 +67,45 @@ namespace AiCoreApi.Services.IngestionServices
             await _taskProcessor.SetMessage(taskId, "Completed");
         }
 
+        public async Task<string> GetFileByPath(IngestionModel ingestion, string path)
+        {
+            var connection = await _dataIngestionHelperService.GetDataSourceConnection(ingestion, ConnectionType.StorageAccount, "ConnectionId");
+            var accountName = connection.Content["accountName"];
+            var accessType = connection.Content.ContainsKey("accessType") ? connection.Content["accessType"] : "apiKey";
+
+            var parts = path.Split(',');
+            if (parts.Length != 2)
+                throw new ArgumentException("Invalid path format. Expected format: 'ContainerName,BlobName'.");
+            var containerName = parts[0].Trim();
+            var blobName = parts[1].Trim();
+
+            var blobServiceClient = await ConnectStorageAccount(connection, accountName, accessType);
+            var containerClient = blobServiceClient.GetBlobContainerClient(containerName);
+            var blobClient = containerClient.GetBlobClient(blobName);
+
+            if (!await blobClient.ExistsAsync())
+                throw new InvalidOperationException($"Blob '{blobName}' not found in container '{containerName}'.");
+
+            var downloadInfo = await blobClient.DownloadContentAsync();
+            // Try to return as text; fallback to Base64 if not UTF-8
+            try
+            {
+                return downloadInfo.Value.Content.ToString();
+            }
+            catch
+            {
+                return Convert.ToBase64String(downloadInfo.Value.Content.ToArray());
+            }
+        }
+
         public async Task<string> GetFile(IngestionModel ingestion, string fileId)
         {
             try
             {
-                var connection = await _dataIngestionHelperService.GetDataSourceConnection(ingestion, ConnectionType.StorageAccount, "ConnectionId");
-                var accountName = connection.Content["accountName"];
-                var accessType = connection.Content.ContainsKey("accessType") ? connection.Content["accessType"] : "apiKey";
-
-                var metadata = _documentMetadataProcessor.Get(fileId)
-                    ?? throw new InvalidOperationException($"File with id '{fileId}' not found in metadata.");
-
+                var metadata = _documentMetadataProcessor.Get(fileId) ?? throw new InvalidOperationException($"File with id '{fileId}' not found in metadata.");
                 var containerName = ingestion.Content["ContainerName"];
                 var blobName = metadata.Name;
-
-                var blobServiceClient = await ConnectStorageAccount(connection, accountName, accessType);
-                var containerClient = blobServiceClient.GetBlobContainerClient(containerName);
-                var blobClient = containerClient.GetBlobClient(blobName);
-
-                if (!await blobClient.ExistsAsync())
-                    throw new InvalidOperationException($"Blob '{blobName}' not found in container '{containerName}'.");
-
-                var downloadInfo = await blobClient.DownloadContentAsync();
-                // Try to return as text; fallback to Base64 if not UTF-8
-                try
-                {
-                    return downloadInfo.Value.Content.ToString();
-                }
-                catch
-                {
-                    return Convert.ToBase64String(downloadInfo.Value.Content.ToArray());
-                }
+                return await GetFileByPath(ingestion, $"{containerName},{blobName}");
             }
             catch (Exception ex)
             {

@@ -3,8 +3,6 @@ using AiCoreApi.Models.DbModels;
 using AiCoreApi.Common;
 using AiCoreApi.Common.Extensions;
 using AiCoreApi.Data.Processors;
-using System.Web;
-using AiCoreApi.Common.Monitoring;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
@@ -23,12 +21,12 @@ namespace AiCoreApi.SemanticKernel.Agents
         private readonly RequestAccessor _requestAccessor;
 
         public BackgroundWorkerAgent(
+            IBaseAgentHelper baseAgentHelper,
             ISchedulerAgentTaskProcessor schedulerAgentTaskProcessor,
             UserContextAccessor userContextAccessor,
             ResponseAccessor responseAccessor,
             RequestAccessor requestAccessor,
-            MonitoringConfig monitoringConfig,
-            ILogger<BackgroundWorkerAgent> logger) : base(responseAccessor, requestAccessor, monitoringConfig, logger)
+            ILogger<BackgroundWorkerAgent> logger) : base(baseAgentHelper, logger)
         {
             _schedulerAgentTaskProcessor = schedulerAgentTaskProcessor;
             _userContextAccessor = userContextAccessor;
@@ -38,7 +36,6 @@ namespace AiCoreApi.SemanticKernel.Agents
 
         public override async Task<string> DoCall(AgentModel agent, Dictionary<string, string> parameters)
         {
-            parameters.ToList().ForEach(p => parameters[p.Key] = HttpUtility.HtmlDecode(p.Value));
             _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
             // Handle Return value
