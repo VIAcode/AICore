@@ -126,11 +126,14 @@ namespace AiCoreApi.SemanticKernel.Agents
                     }
                 case ("APPEND"):
                     {
-                        var base64Content = ApplyParameters(agent.Content[AgentContentParameters.Base64Content].Value, parameters);
+                        var base64Content = await GetParameterValueAsync(AgentContentParameters.Base64Content);
                         if (_requestAccessor.MessageDialog != null && _requestAccessor.MessageDialog.Messages!.Last().HasFiles())
                         {
-                            base64Content = ApplyParameters(base64Content, new Dictionary<string, string> {
-                            { AgentPromptPlaceholders.FileDataPlaceholder, _requestAccessor.MessageDialog.Messages!.Last().Files!.First().Base64Data } });
+                            base64Content = await ApplyParametersAsync(base64Content, new Dictionary<string, string> {
+                                {
+                                    AgentPromptPlaceholders.FileDataPlaceholder, _requestAccessor.MessageDialog.Messages!.Last().Files!.First().Base64Data
+                                }
+                            });
                         }
                         var bytes = Convert.FromBase64String(base64Content);
                         result = await AppendBytes(blobServiceClient, containerName, fileName, bytes);
@@ -139,7 +142,7 @@ namespace AiCoreApi.SemanticKernel.Agents
                 case "APPENDTEXT":
                     {
                         var encoding = GetEncoding(agent, parameters);
-                        var textContent = ApplyParameters(agent.Content[AgentContentParameters.TextContent].Value, parameters);
+                        var textContent = await GetParameterValueAsync(AgentContentParameters.TextContent);
                         var textBytes = encoding.GetBytes(textContent);
                         result = await AppendBytes(blobServiceClient, containerName, fileName, textBytes);
                         break;
