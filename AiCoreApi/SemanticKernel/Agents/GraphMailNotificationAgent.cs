@@ -5,15 +5,12 @@ using AiCoreApi.Models.DbModels;
 using Microsoft.Graph;
 using Microsoft.SemanticKernel;
 using Microsoft.Graph.Models;
-using System.IdentityModel.Tokens.Jwt;
 using AiCoreApi.Common.Monitoring;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
     public class GraphMailNotificationAgent : BaseAgent, IGraphMailNotificationAgent
     {
-        private string _debugMessageSenderName = "GraphMailNotificationAgent";
-
         private static class AgentContentParameters
         {
             public const string ConnectionName = "connectionName";
@@ -30,14 +27,15 @@ namespace AiCoreApi.SemanticKernel.Agents
         private readonly IHttpClientFactory _httpClientFactory;
 
         public GraphMailNotificationAgent(
+            IBaseAgentHelper baseAgentHelper,
             IConnectionProcessor connectionProcessor,
             IEntraTokenProvider entraTokenProvider,
             RequestAccessor requestAccessor,
             ResponseAccessor responseAccessor,
             IHttpClientFactory httpClientFactory,
             MonitoringConfig monitoringConfig,
-            ILogger<GraphTeamsNotificationAgent> logger)
-            : base(responseAccessor, requestAccessor, monitoringConfig, logger)
+            ILogger<GraphMailNotificationAgent> logger)
+            : base(baseAgentHelper, logger)
         {
             _connectionProcessor = connectionProcessor;
             _entraTokenProvider = entraTokenProvider;
@@ -49,18 +47,18 @@ namespace AiCoreApi.SemanticKernel.Agents
         public override async Task<string> DoCall(AgentModel agent, Dictionary<string, string> parameters)
         {
             parameters.ToList().ForEach(p => parameters[p.Key] = HttpUtility.HtmlDecode(p.Value));
-            _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
+            var debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
             var connectionName = agent.Content[AgentContentParameters.ConnectionName].Value;
-            var recipient = ApplyParameters(agent.Content[AgentContentParameters.Recipient].Value, parameters);
-            var cc = agent.Content.ContainsKey(AgentContentParameters.Cc) ? ApplyParameters(agent.Content[AgentContentParameters.Cc].Value, parameters) : "";
-            var subject = ApplyParameters(agent.Content[AgentContentParameters.Subject].Value, parameters);
-            var body = ApplyParameters(agent.Content[AgentContentParameters.Body].Value, parameters);
+            var recipient = await GetParameterValueAsync(AgentContentParameters.Recipient);
+            var cc = await GetParameterValueAsync(AgentContentParameters.Cc);
+            var subject = await GetParameterValueAsync(AgentContentParameters.Subject);
+            var body = await GetParameterValueAsync(AgentContentParameters.Body);
 
-            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Request", $"To: {recipient}, Cc: {cc} Subject: {subject}");
+            _responseAccessor.AddDebugMessage(debugMessageSenderName, "DoCall Request", $"To: {recipient}, Cc: {cc} Subject: {subject}");
 
             var connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
-            var connection = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.GraphApi, _debugMessageSenderName, connectionName: connectionName);
+            var connection = await GetConnectionAsync(_requestAccessor, _responseAccessor, connections, ConnectionType.GraphApi, debugMessageSenderName, connectionName: connectionName);
 
             var resourceName = connection.Content["resourceName"];
             var accessType = connection.Content.GetValueOrDefault("accessType") ?? EntraTokenProvider.DefaultStorageName;
@@ -70,15 +68,12 @@ namespace AiCoreApi.SemanticKernel.Agents
                 ? await _entraTokenProvider.GetAccessTokenByRefreshTokenAsync(accessType, refreshToken, resourceName)
                 : await _entraTokenProvider.GetAccessTokenObjectAsync(accessType, resourceName);
 
-            var jsonToken = new JwtSecurityTokenHandler().ReadToken(accessToken.Token) as JwtSecurityToken;
-            var myId = jsonToken.Payload["oid"].ToString();
-
             var tokenCredential = new StaticTokenCredential(accessToken.Token, accessToken.ExpiresOn);
             var httpClient = _httpClientFactory.CreateClient(HttpClients.NoRetryClient);
             var graphClient = new GraphServiceClient(httpClient, tokenCredential);
 
             await SendEmailAsync(graphClient, recipient, cc, subject, body);
-            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Response", $"Email message sent.");
+            _responseAccessor.AddDebugMessage(debugMessageSenderName, "DoCall Response", $"Email message sent.");
             return "Email message sent.";
         }
 
