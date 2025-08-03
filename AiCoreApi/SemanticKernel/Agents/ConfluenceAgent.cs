@@ -4,7 +4,6 @@ using AiCoreApi.Common;
 using System.Web;
 using System.Net.Http.Headers;
 using AiCoreApi.Data.Processors;
-using AiCoreApi.Common.Monitoring;
 using System.Text.Json;
 using System.Text.Encodings.Web;
 
@@ -48,13 +47,13 @@ namespace AiCoreApi.SemanticKernel.Agents
         }
 
         public ConfluenceAgent(
+            IBaseAgentHelper baseAgentHelper,
             IHttpClientFactory httpClientFactory,
             IConnectionProcessor connectionProcessor,
             RequestAccessor requestAccessor,
             ResponseAccessor responseAccessor,
-            MonitoringConfig monitoringConfig,
             ILogger<ConfluenceAgent> logger)
-            : base(responseAccessor, requestAccessor, monitoringConfig, logger)
+            : base(baseAgentHelper, logger)
         {
             _connectionProcessor = connectionProcessor;
             _httpClientFactory = httpClientFactory;
@@ -64,14 +63,13 @@ namespace AiCoreApi.SemanticKernel.Agents
 
         public override async Task<string> DoCall(AgentModel agent, Dictionary<string, string> parameters)
         {
-            parameters.ToList().ForEach(p => parameters[p.Key] = HttpUtility.HtmlDecode(p.Value));
             _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
             var action = agent.Content[AgentContentParameters.Action].Value;
             var connectionName = agent.Content[AgentContentParameters.ConnectionName].Value;
 
             var connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
-            var connection = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.Confluence, _debugMessageSenderName, connectionName: connectionName);
+            var connection = await GetConnectionAsync(_requestAccessor, _responseAccessor, connections, ConnectionType.Confluence, _debugMessageSenderName, connectionName: connectionName);
 
             var baseUrl = connection.Content[ConnectionParameters.BaseUrl];
             var username = connection.Content[ConnectionParameters.Username];
@@ -85,33 +83,29 @@ namespace AiCoreApi.SemanticKernel.Agents
             switch (action)
             {
                 case Actions.List:
-                    var listExpand = ApplyParameters(agent.Content[AgentContentParameters.Expand].Value, parameters);
+                    var listExpand = await GetParameterValueAsync(AgentContentParameters.Expand);
                     return await ListPages(client, baseUrl, rootPageId, listExpand);
 
                 case Actions.Get:
-                    var getExpand = ApplyParameters(agent.Content[AgentContentParameters.Expand].Value, parameters);
-                    var pageId = ApplyParameters(agent.Content[AgentContentParameters.PageId].Value, parameters);
+                    var getExpand = await GetParameterValueAsync(AgentContentParameters.Expand);
+                    var pageId = await GetParameterValueAsync(AgentContentParameters.PageId);
                     return await GetPage(client, baseUrl, pageId, getExpand);
 
                 case Actions.Add:
-                    var addSpaceKey = ApplyParameters(agent.Content[AgentContentParameters.SpaceKey].Value, parameters);
-                    var addTitle = ApplyParameters(agent.Content[AgentContentParameters.Title].Value, parameters);
-                    var addContent = ApplyParameters(agent.Content[AgentContentParameters.Content].Value, parameters);
-                    var parentPageId = agent.Content.ContainsKey(AgentContentParameters.ParentPageId)
-                        ? ApplyParameters(agent.Content[AgentContentParameters.ParentPageId].Value, parameters)
-                        : rootPageId;
+                    var addSpaceKey = await GetParameterValueAsync(AgentContentParameters.SpaceKey);
+                    var addTitle = await GetParameterValueAsync(AgentContentParameters.Title);
+                    var addContent = await GetParameterValueAsync(AgentContentParameters.Content);
+                    var parentPageId = await GetParameterValueAsync(AgentContentParameters.ParentPageId, rootPageId);
                     return await AddPage(client, baseUrl, addSpaceKey, addTitle, addContent, parentPageId);
 
                 case Actions.Update:
-                    var updateTitle = ApplyParameters(agent.Content[AgentContentParameters.Title].Value, parameters);
-                    var updateContent = ApplyParameters(agent.Content[AgentContentParameters.Content].Value, parameters);
-                    var updatePageId = agent.Content.ContainsKey(AgentContentParameters.PageId)
-                        ? ApplyParameters(agent.Content[AgentContentParameters.PageId].Value, parameters)
-                        : string.Empty;
+                    var updateTitle = await GetParameterValueAsync(AgentContentParameters.Title);
+                    var updateContent = await GetParameterValueAsync(AgentContentParameters.Content);
+                    var updatePageId = await GetParameterValueAsync(AgentContentParameters.PageId);
                     return await UpdatePage(client, baseUrl, updateTitle, updateContent, updatePageId);
 
                 case Actions.Delete:
-                    var deletePageId = ApplyParameters(agent.Content[AgentContentParameters.PageId].Value, parameters);
+                    var deletePageId = await GetParameterValueAsync(AgentContentParameters.PageId);
                     return await DeletePage(client, baseUrl, deletePageId);
 
                 default:

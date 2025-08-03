@@ -5,9 +5,7 @@ using AiCoreApi.Common.KernelMemory;
 using AiCoreApi.Models.ViewModels;
 using Microsoft.KernelMemory;
 using AiCoreApi.Data.Processors;
-using System.Web;
 using ConnectionType = AiCoreApi.Models.DbModels.ConnectionType;
-using AiCoreApi.Common.Monitoring;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
@@ -34,6 +32,7 @@ namespace AiCoreApi.SemanticKernel.Agents
         private readonly ExtendedConfig _extendedConfig;
 
         public RagPromptAgent(
+            IBaseAgentHelper baseAgentHelper,
             RequestAccessor requestAccessor,
             ResponseAccessor responseAccessor,
             IKernelMemoryProvider kernelMemoryProvider,
@@ -42,8 +41,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             ILoginProcessor loginProcessor,
             IFeatureFlags featureFlags,
             ExtendedConfig extendedConfig,
-            MonitoringConfig monitoringConfig,
-            ILogger<RagPromptAgent> logger) : base(responseAccessor, requestAccessor, monitoringConfig, logger)
+            ILogger<RagPromptAgent> logger) : base(baseAgentHelper, logger)
         {
             _requestAccessor = requestAccessor;
             _responseAccessor = responseAccessor;
@@ -57,10 +55,9 @@ namespace AiCoreApi.SemanticKernel.Agents
 
         public override async Task<string> DoCall(AgentModel agent, Dictionary<string, string> parameters)
         {
-            parameters.ToList().ForEach(p => parameters[p.Key] = HttpUtility.HtmlDecode(p.Value));
             _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
-            var question = ApplyParameters(agent.Content[AgentContentParameters.Question].Value, parameters);
+            var question = await GetParameterValueAsync(AgentContentParameters.Question);
             var embeddingConnectionName = agent.Content[AgentContentParameters.EmbeddingConnectionName].Value;
             var vectorDbConnectionName = agent.Content.ContainsKey(AgentContentParameters.VectorDBConnectionName)
                 ? agent.Content[AgentContentParameters.VectorDBConnectionName].Value
@@ -91,10 +88,10 @@ namespace AiCoreApi.SemanticKernel.Agents
 
             var vectorDbConnection = (string.IsNullOrEmpty(vectorDbConnectionName) || vectorDbConnectionName == "Internal Qdrant")
                 ? null
-                : GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.AzureAiSearch, _debugMessageSenderName, connectionName: vectorDbConnectionName);
-            var embeddingConnection = GetConnection(_requestAccessor, _responseAccessor, connections, 
+                : await GetConnectionAsync(_requestAccessor, _responseAccessor, connections, ConnectionType.AzureAiSearch, _debugMessageSenderName, connectionName: vectorDbConnectionName);
+            var embeddingConnection = await GetConnectionAsync(_requestAccessor, _responseAccessor, connections, 
                 new[] { ConnectionType.AzureOpenAiEmbedding, ConnectionType.OpenAiEmbedding }, _debugMessageSenderName, connectionName: embeddingConnectionName);
-            var llmConnection = GetConnection(_requestAccessor, _responseAccessor, connections, 
+            var llmConnection = await GetConnectionAsync(_requestAccessor, _responseAccessor, connections, 
                 new[] { ConnectionType.AzureOpenAiLlm, ConnectionType.OpenAiLlm, ConnectionType.CohereLlm }, _debugMessageSenderName, agent.LlmType);
             var vectorIndexName = embeddingConnection.Content.ContainsKey("indexName")
                 ? embeddingConnection.Content["indexName"]

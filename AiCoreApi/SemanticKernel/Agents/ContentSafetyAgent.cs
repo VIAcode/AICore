@@ -4,8 +4,6 @@ using System.Text;
 using AiCoreApi.Common;
 using AiCoreApi.Common.Extensions;
 using AiCoreApi.Data.Processors;
-using System.Web;
-using AiCoreApi.Common.Monitoring;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
@@ -29,12 +27,12 @@ namespace AiCoreApi.SemanticKernel.Agents
         private readonly IConnectionProcessor _connectionProcessor;
 
         public ContentSafetyAgent(
+            IBaseAgentHelper baseAgentHelper,
             IConnectionProcessor connectionProcessor,
             IHttpClientFactory httpClientFactory, 
             ResponseAccessor responseAccessor,
             RequestAccessor requestAccessor,
-            MonitoringConfig monitoringConfig,
-            ILogger<ContentSafetyAgent> logger) : base(responseAccessor, requestAccessor, monitoringConfig, logger)
+            ILogger<ContentSafetyAgent> logger) : base(baseAgentHelper, logger)
         {
             _connectionProcessor = connectionProcessor;
             _httpClientFactory = httpClientFactory;
@@ -44,12 +42,11 @@ namespace AiCoreApi.SemanticKernel.Agents
 
         public override async Task<string> DoCall(AgentModel agent, Dictionary<string, string> parameters)
         {
-            parameters.ToList().ForEach(p => parameters[p.Key] = HttpUtility.HtmlDecode(p.Value));
             _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
             var connectionName = agent.Content[AgentContentParameters.ContentSafetyConnection].Value;
             var connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
-            var contentSafetyConnection = GetConnection(_requestAccessor, _responseAccessor, connections, ConnectionType.ContentSafety, _debugMessageSenderName, connectionName: connectionName);
+            var contentSafetyConnection = await GetConnectionAsync(_requestAccessor, _responseAccessor, connections, ConnectionType.ContentSafety, _debugMessageSenderName, connectionName: connectionName);
             var apiKey = contentSafetyConnection.Content["apiKey"];
             var contentSafetyUrl = contentSafetyConnection.Content["contentSafetyUrl"].TrimEnd('/');
             var hate = Convert.ToInt32(agent.Content[AgentContentParameters.Hate].Value);

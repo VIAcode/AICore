@@ -1,12 +1,10 @@
 using Microsoft.SemanticKernel;
 using AiCoreApi.Models.DbModels;
 using AiCoreApi.Common;
-using System.Web;
 using AiCoreApi.Data.Processors;
 using System.Collections.Concurrent;
 using AiCoreApi.Common.Extensions;
 using static AiCoreApi.Common.ExceptionHandlingMiddleware;
-using AiCoreApi.Common.Monitoring;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
@@ -85,8 +83,7 @@ class Agent
         private readonly ISemanticKernelProvider _semanticKernelProvider;
 
         public CompositeCSharpAgent(
-            IAgentsProcessor agentsProcessor,
-            MonitoringConfig monitoringConfig,
+            IBaseAgentHelper baseAgentHelper,
             ICsharpCodeAgent csharpCodeAgent,
             ILogger<CompositeCSharpAgent> logger,
             RequestAccessor requestAccessor,
@@ -95,7 +92,7 @@ class Agent
             IPlannerHelpers plannerHelpers,
             ISemanticKernelProvider semanticKernelProvider
             )
-            : base(agentsProcessor, responseAccessor, requestAccessor, monitoringConfig, logger)
+            : base(baseAgentHelper, logger)
         {
             _csharpCodeAgent = csharpCodeAgent;
             _requestAccessor = requestAccessor;
@@ -107,15 +104,14 @@ class Agent
 
         public override async Task<string> DoCall(AgentModel agent, Dictionary<string, string> parameters)
         {
-            parameters.ToList().ForEach(p => parameters[p.Key] = HttpUtility.HtmlDecode(p.Value));
             _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
             var connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
-            var llmConnection = GetConnection(_requestAccessor, _responseAccessor, connections,
+            var llmConnection = await GetConnectionAsync(_requestAccessor, _responseAccessor, connections,
                 new[] { ConnectionType.AzureOpenAiLlm, ConnectionType.OpenAiLlm, ConnectionType.CohereLlm, ConnectionType.DeepSeekLlm, ConnectionType.GeminiLlm }, _debugMessageSenderName, agent.LlmType);
             var temperature = GetTemperature(llmConnection, agent);
             var topP = GetTopP(agent);
-            var prompt = ApplyParameters(agent.Content[AgentContentParameters.Prompt].Value, parameters);
+            var prompt = await GetParameterValueAsync(AgentContentParameters.Prompt);
 
             // Prompt to GPT for generating the class
             var parameterDescription = agent.Content["parameterDescription"].Value
@@ -127,9 +123,10 @@ class Agent
 
             string agentsDescription = await GetAgentsDescriptions(agent);
 
-            string promptTemplate = agent.Content.ContainsKey(AgentContentParameters.CodeGenerationPrompt)
-                ? ApplyParameters(agent.Content[AgentContentParameters.CodeGenerationPrompt].Value, parameters)
-                : CodeGenerationPromptText;
+            string promptTemplate = await GetParameterValueAsync(AgentContentParameters.CodeGenerationPrompt);
+            if (string.IsNullOrEmpty(promptTemplate))
+                promptTemplate = CodeGenerationPromptText;
+            
             promptTemplate = promptTemplate
                 .Replace(CodeGenerationPromptPlaceHolders.AgentsDescription, agentsDescription)
                 .Replace(CodeGenerationPromptPlaceHolders.ParametersDescription, parametersDescription)

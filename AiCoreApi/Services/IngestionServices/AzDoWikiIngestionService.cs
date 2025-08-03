@@ -129,19 +129,32 @@ namespace AiCoreApi.Services.IngestionServices
             await _taskProcessor.SetMessage(taskId, "Completed");
         }
 
+        public async Task<string> GetFileByPath(IngestionModel ingestion, string path)
+        {
+            var pat = ingestion.Content["PAT"];
+            var org = ingestion.Content["Organization"];
+            var project = ingestion.Content["Project"];
+            var wiki = ingestion.Content["WikiIdentifier"];
+
+            var client = _httpClientFactory.CreateClient(HttpClients.NoRetryClient);
+            var patToken = Convert.ToBase64String(Encoding.ASCII.GetBytes($":{pat}"));
+            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", patToken);
+
+            // Get the latest content directly from Azure DevOps Wiki
+            var url = $"https://dev.azure.com/{org}/{project}/_apis/wiki/wikis/{wiki}/pages?path={HttpUtility.UrlEncode(path)}&includeContent=True&api-version=7.0";
+            var response = await client.GetAsync(url);
+            response.EnsureSuccessStatusCode();
+
+            var json = await response.Content.ReadAsStringAsync();
+            var data = JsonConvert.DeserializeObject<AzDoWikiPage>(json);
+
+            return data?.Content ?? string.Empty;
+        }
+
         public async Task<string> GetFile(IngestionModel ingestion, string fileId)
         {
             try
             {
-                var pat = ingestion.Content["PAT"];
-                var org = ingestion.Content["Organization"];
-                var project = ingestion.Content["Project"];
-                var wiki = ingestion.Content["WikiIdentifier"];
-
-                var client = _httpClientFactory.CreateClient(HttpClients.NoRetryClient);
-                var patToken = Convert.ToBase64String(Encoding.ASCII.GetBytes($":{pat}"));
-                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", patToken);
-
                 // fileId == docId == "{wiki}/{pagePath}". UniqueId() was used before,
                 // so we need to reconstruct the path from the docId if necessary.
                 // Assuming docId was based on "wiki/path" -> UniqueId(), we should search metadata first.
@@ -151,16 +164,7 @@ namespace AiCoreApi.Services.IngestionServices
 
                 // Extract the original wiki path from the file name (stored as .md)
                 var path = metadata.Name.Replace(".md", string.Empty);
-
-                // Get the latest content directly from Azure DevOps Wiki
-                var url = $"https://dev.azure.com/{org}/{project}/_apis/wiki/wikis/{wiki}/pages?path={HttpUtility.UrlEncode(path)}&includeContent=True&api-version=7.0";
-                var response = await client.GetAsync(url);
-                response.EnsureSuccessStatusCode();
-
-                var json = await response.Content.ReadAsStringAsync();
-                var data = JsonConvert.DeserializeObject<AzDoWikiPage>(json);
-
-                return data?.Content ?? string.Empty;
+                return await GetFileByPath(ingestion, path);
             }
             catch (Exception ex)
             {
