@@ -6,6 +6,8 @@ using AiCoreApi.Common.Extensions;
 using AiCoreApi.Data.Processors;
 using Azure.Storage.Blobs;
 using Azure.Storage;
+using AiCoreApi.Common.Monitoring;
+using Azure.Storage.Blobs.Specialized;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
@@ -122,6 +124,29 @@ namespace AiCoreApi.SemanticKernel.Agents
                         result = await AddBytes(blobServiceClient, containerName, fileName, textBytes);
                         break;
                     }
+                case ("APPEND"):
+                    {
+                        var base64Content = await GetParameterValueAsync(AgentContentParameters.Base64Content);
+                        if (_requestAccessor.MessageDialog != null && _requestAccessor.MessageDialog.Messages!.Last().HasFiles())
+                        {
+                            base64Content = await ApplyParametersAsync(base64Content, new Dictionary<string, string> {
+                                {
+                                    AgentPromptPlaceholders.FileDataPlaceholder, _requestAccessor.MessageDialog.Messages!.Last().Files!.First().Base64Data
+                                }
+                            });
+                        }
+                        var bytes = Convert.FromBase64String(base64Content);
+                        result = await AppendBytes(blobServiceClient, containerName, fileName, bytes);
+                        break;
+                    }
+                case "APPENDTEXT":
+                    {
+                        var encoding = GetEncoding(agent, parameters);
+                        var textContent = await GetParameterValueAsync(AgentContentParameters.TextContent);
+                        var textBytes = encoding.GetBytes(textContent);
+                        result = await AppendBytes(blobServiceClient, containerName, fileName, textBytes);
+                        break;
+                    }
                 case ("DELETE"):
                     {
                         result = await Delete(blobServiceClient, containerName, fileName);
@@ -149,7 +174,7 @@ namespace AiCoreApi.SemanticKernel.Agents
         private Encoding GetEncoding(AgentModel agent, Dictionary<string, string> parameters)
         {
             var encodingName = "utf8";
-            if(agent.Content.TryGetValue(AgentContentParameters.TextEncoding, out var configObj) 
+            if(agent.Content.TryGetValue(AgentContentParameters.TextEncoding, out var configObj)
                && !string.IsNullOrWhiteSpace(configObj.Value))
             {
                 encodingName = configObj.Value.ToLower();
@@ -192,6 +217,26 @@ namespace AiCoreApi.SemanticKernel.Agents
             var blobClient = containerClient.GetBlobClient(fileName);
             using var stream = new MemoryStream(bytes);
             await blobClient.UploadAsync(stream, overwrite: true);
+            return string.Empty;
+        }
+
+        private async Task<string> AppendBytes(BlobServiceClient blobServiceClient, string containerName, string fileName, byte[] bytes)
+        {
+            var containerClient = blobServiceClient.GetBlobContainerClient(containerName);
+            var blobClient = containerClient.GetAppendBlobClient(fileName);
+            await blobClient.CreateIfNotExistsAsync();
+
+            int maxBlockSize = blobClient.AppendBlobMaxAppendBlockBytes;
+            int bytesRead = 0;
+            while (bytesRead < bytes.Length)
+            {
+                int blockSize = Math.Min(bytes.Length - bytesRead, maxBlockSize);
+                await using (var memoryStream = new MemoryStream(bytes, bytesRead, blockSize))
+                {
+                    await blobClient.AppendBlockAsync(memoryStream);
+                }
+                bytesRead += blockSize;
+            }
             return string.Empty;
         }
 
