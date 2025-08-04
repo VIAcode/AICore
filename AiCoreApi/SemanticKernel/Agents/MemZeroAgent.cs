@@ -4,8 +4,8 @@ using System.Web;
 using AiCoreApi.Common;
 using AiCoreApi.Data.Processors;
 using ConnectionType = AiCoreApi.Models.DbModels.ConnectionType;
-using System.Text.Json;
 using System.Net.Http.Headers;
+using Newtonsoft.Json.Linq;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
@@ -22,6 +22,8 @@ namespace AiCoreApi.SemanticKernel.Agents
             public const string Message = "message";
             public const string ExpirationDate = "expirationDate";
             public const string AsyncMode = "asyncMode";
+            public const string Metadata = "metadata";
+            public const string Filter = "filter";
         }
 
         private readonly IConnectionProcessor _connProc;
@@ -74,6 +76,7 @@ namespace AiCoreApi.SemanticKernel.Agents
                             ? await GetParameterValueAsync(Param.ExpirationDate)
                             : "";
                         var asyncMode = await GetParameterValueAsync(Param.AsyncMode);
+                        var metadata = await GetParameterValueAsync(Param.Metadata);
                         var addPayload = new Dictionary<string, object>
                         {
                             { "messages", new[] { new { role = "user", content = message } } },
@@ -89,7 +92,20 @@ namespace AiCoreApi.SemanticKernel.Agents
                         {
                             addPayload["expiration_date"] = expirationDate;
                         }
-                        var payloadString = JsonSerializer.Serialize(addPayload);
+                        if (!string.IsNullOrEmpty(metadata))
+                        {
+                            try
+                            {
+                                var jToken = JToken.Parse(metadata);
+                                var materialized = jToken.ToObject<object>();
+                                addPayload["metadata"] = materialized!;
+                            }
+                            catch
+                            {
+                                addPayload["metadata"] = metadata;
+                            }
+                        }
+                        var payloadString = Newtonsoft.Json.JsonConvert.SerializeObject(addPayload);
                         _responseAccessor.AddDebugMessage(_sender, "Add Request", $"{payloadString}");
                         resp = await client.PostAsync("/v1/memories/", new StringContent(payloadString, System.Text.Encoding.UTF8, "application/json"));
                         break;
@@ -97,6 +113,7 @@ namespace AiCoreApi.SemanticKernel.Agents
                 case "SEARCH":
                     {
                         var searchString = await GetParameterValueAsync(Param.SearchString);
+                        var filter = await GetParameterValueAsync(Param.Filter);
                         var topK = await GetParameterValueAsync(Param.TopK);
                         var searchPayload = new Dictionary<string, object>
                         {
@@ -106,7 +123,20 @@ namespace AiCoreApi.SemanticKernel.Agents
                             { "org_id", organizationId },
                             { "project_id", projectId },
                         };
-                        var payloadString = JsonSerializer.Serialize(searchPayload);
+                        if (!string.IsNullOrEmpty(filter))
+                        {
+                            try
+                            {
+                                var jToken = JToken.Parse(filter);
+                                var materialized = jToken.ToObject<object>(); 
+                                searchPayload["filters"] = materialized!;
+                            }
+                            catch
+                            {
+                                searchPayload["filters"] = filter;
+                            }
+                        }
+                        var payloadString = Newtonsoft.Json.JsonConvert.SerializeObject(searchPayload);
                         _responseAccessor.AddDebugMessage(_sender, "Search Request", $"{payloadString}");
                         resp = await client.PostAsync("/v2/memories/search/", new StringContent(payloadString, System.Text.Encoding.UTF8, "application/json"));
                         break;
