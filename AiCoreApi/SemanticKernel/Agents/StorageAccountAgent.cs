@@ -232,10 +232,8 @@ namespace AiCoreApi.SemanticKernel.Agents
             {
                 int blockSize = Math.Min(bytes.Length - bytesRead, maxBlockSize);
 
-                await using (var memoryStream = new MemoryStream(bytes, bytesRead, blockSize))
-                {
-                    await blobClient.AppendBlockAsync(memoryStream);
-                }
+                var blockSlice = new ReadOnlyMemory<byte>(bytes, bytesRead, blockSize);
+                await blobClient.AppendBlockAsync(blockSlice);
                 bytesRead += blockSize;
             }
 
