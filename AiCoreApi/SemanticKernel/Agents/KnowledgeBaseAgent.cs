@@ -204,8 +204,8 @@ namespace AiCoreApi.SemanticKernel.Agents
                     { "workspaceId", agent.WorkspaceId ?? 0},
                     { "loginId", loginId ?? 1},
                     { "autoSyncOnFeedback", autoSyncOnFeedback},
-                    { "changePrompt", changePrompt },
-                    { "evaluationId", evaluation.EvaluationId },
+                    { "changePrompt", changePrompt ?? ""},
+                    { "evaluationId", evaluation?.EvaluationId ?? 0},
                 },
                 IsRetriable = true,
             };

@@ -141,7 +141,8 @@ namespace AiCoreApi.Services.IngestionServices
             client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", patToken);
 
             // Get the latest content directly from Azure DevOps Wiki
-            var url = $"https://dev.azure.com/{org}/{project}/_apis/wiki/wikis/{wiki}/pages?path={HttpUtility.UrlEncode(path)}&includeContent=True&api-version=7.0";
+            var encodedPath = Uri.EscapeDataString(path).Replace("%20", "+");
+            var url = $"https://dev.azure.com/{org}/{project}/_apis/wiki/wikis/{wiki}/pages?path={encodedPath}&includeContent=True&api-version=7.0";
             var response = await client.GetAsync(url);
             response.EnsureSuccessStatusCode();
 
