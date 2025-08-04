@@ -87,5 +87,6 @@ namespace AiCoreApi.Models.DbModels
         MemZero = 52,
         KnowledgeBase = 53,
         Confluence = 54,
+        GraphMailNotification = 55,
     }
 }

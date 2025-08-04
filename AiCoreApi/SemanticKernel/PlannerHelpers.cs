@@ -60,6 +60,7 @@ namespace AiCoreApi.SemanticKernel
         private readonly IGoogleSearchApiAgent _googleSearchApiAgent;
         private readonly ISmtpNotificationAgent _smtpNotificationAgent;
         private readonly IGraphTeamsNotificationAgent _teamsNotificationAgent;
+        private readonly IGraphMailNotificationAgent _graphMailNotificationAgent;
         private readonly IAzDoWikiAgent _azDoWikiAgent;
         private readonly IConfluenceAgent _confluenceAgent;
         private readonly IQdrantAgent _qdrantAgent;
@@ -105,6 +106,7 @@ namespace AiCoreApi.SemanticKernel
             IGoogleSearchApiAgent googleSearchApiAgent,
             ISmtpNotificationAgent smtpNotificationAgent,
             IGraphTeamsNotificationAgent teamsNotificationAgent,
+            IGraphMailNotificationAgent graphMailNotificationAgent,
             IAzDoWikiAgent azDoWikiAgent,
             IConfluenceAgent confluenceAgent,
             IQdrantAgent qdrantAgent,
@@ -149,6 +151,7 @@ namespace AiCoreApi.SemanticKernel
             _googleSearchApiAgent = googleSearchApiAgent;
             _smtpNotificationAgent = smtpNotificationAgent;
             _teamsNotificationAgent = teamsNotificationAgent;
+            _graphMailNotificationAgent = graphMailNotificationAgent;
             _azDoWikiAgent = azDoWikiAgent;
             _confluenceAgent = confluenceAgent;
             _qdrantAgent = qdrantAgent;
@@ -380,6 +383,7 @@ namespace AiCoreApi.SemanticKernel
                 { AgentType.GoogleSearchApi, _googleSearchApiAgent },
                 { AgentType.Smtp, _smtpNotificationAgent },
                 { AgentType.GraphTeamsNotification, _teamsNotificationAgent },
+                { AgentType.GraphMailNotification, _graphMailNotificationAgent },
                 { AgentType.AzDoWiki, _azDoWikiAgent },
                 { AgentType.Confluence, _confluenceAgent },
                 { AgentType.Embedding, _embeddingAgent },
