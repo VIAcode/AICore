@@ -21,6 +21,12 @@ namespace AiCoreApi.SemanticKernel.Agents
             public const string ChannelId = "channelId";
             public const string TeamId = "teamId";
             public const string Body = "body";
+
+            public const string AttachmentId = "attachmentId";
+            public const string AttachmentName = "attachmentName";
+            public const string AttachmentContentType = "attachmentContentType";
+            public const string AttachmentContentUrl = "attachmentContentUrl";
+            public const string AttachmentContent = "attachmentContent";
         }
 
         private readonly IConnectionProcessor _connectionProcessor;
@@ -58,6 +64,12 @@ namespace AiCoreApi.SemanticKernel.Agents
             var teamId = await GetParameterValueAsync(AgentContentParameters.TeamId);
             var body = await GetParameterValueAsync(AgentContentParameters.Body);
 
+            var attachmentId = await GetParameterValueAsync(AgentContentParameters.AttachmentId);
+            var attachmentName = await GetParameterValueAsync(AgentContentParameters.AttachmentName);
+            var attachmentContentType = await GetParameterValueAsync(AgentContentParameters.AttachmentContentType);
+            var attachmentContent = await GetParameterValueAsync(AgentContentParameters.AttachmentContent);
+            var attachmentContentUrl = await GetParameterValueAsync(AgentContentParameters.AttachmentContentUrl);
+
             _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Request", $"TargetType: {targetType}, TargetId: {userEmail}{meetingTitle}{teamId}{channelId}");
 
             var connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
@@ -78,12 +90,26 @@ namespace AiCoreApi.SemanticKernel.Agents
             var httpClient = _httpClientFactory.CreateClient(HttpClients.NoRetryClient);
             var graphClient = new GraphServiceClient(httpClient, tokenCredential);
 
-            await SendTeamsMessageAsync(graphClient, targetType, userEmail, meetingTitle, channelId, teamId, body, myId);
+            var message = ComposeChatMessage(
+                messageText: body,
+                attachmentId: attachmentId,  
+                attachmentContentType: attachmentContentType,
+                attachmentContentUrl: attachmentContentUrl,
+                attachmentContent: attachmentContent,
+                attachmentName: attachmentName);
+
+            await SendTeamsMessageAsync(graphClient, targetType, userEmail, meetingTitle, channelId, teamId, message, myId);
             _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Response", $"Teams message sent.");
             return "Teams message sent.";
         }
 
-        private async Task SendTeamsMessageAsync(GraphServiceClient graphClient, string targetType, string? userEmail, string? meetingTitle, string? channelId, string? teamId, string messageText, string myId)
+        private ChatMessage ComposeChatMessage(
+            string messageText, 
+            string? attachmentId,
+            string? attachmentName,
+            string? attachmentContentType, 
+            string? attachmentContentUrl, 
+            string? attachmentContent)
         {
             var message = new ChatMessage
             {
@@ -93,6 +119,26 @@ namespace AiCoreApi.SemanticKernel.Agents
                     Content = messageText
                 }
             };
+
+            if (!string.IsNullOrWhiteSpace(attachmentId))
+                message.Attachments = new List<ChatMessageAttachment>
+                {
+                    new ChatMessageAttachment
+                    {
+                        Id = attachmentId,
+                        ContentType = attachmentContentType,
+                        ContentUrl = attachmentContentUrl,
+                        Content = attachmentContent,
+                        Name = attachmentName,                        
+                    }
+                };
+
+            return message;
+        }
+
+        private async Task SendTeamsMessageAsync(GraphServiceClient graphClient, string targetType, string? userEmail, string? meetingTitle, string? channelId, 
+            string? teamId, ChatMessage message, string myId)
+        {
             if (targetType == "channel")
             {
                 await graphClient.Teams[teamId].Channels[channelId].Messages.PostAsync(message);
