@@ -77,10 +77,11 @@ namespace AiCoreApi.SemanticKernel.Agents
 
             var resourceName = connection.Content["resourceName"];
             var accessType = connection.Content.GetValueOrDefault("accessType") ?? EntraTokenProvider.DefaultStorageName;
+            var tenantId = connection.Content.GetValueOrDefault("tenantId");
 
             var hasRefreshToken = connection.Content.TryGetValue("refreshToken", out var refreshToken);
             var accessToken = hasRefreshToken
-                ? await _entraTokenProvider.GetAccessTokenByRefreshTokenAsync(accessType, refreshToken, resourceName)
+                ? await _entraTokenProvider.GetAccessTokenByRefreshTokenAsync(accessType, refreshToken, resourceName, tenantId)
                 : await _entraTokenProvider.GetAccessTokenObjectAsync(accessType, resourceName);
 
             var jsonToken = new JwtSecurityTokenHandler().ReadToken(accessToken.Token) as JwtSecurityToken;

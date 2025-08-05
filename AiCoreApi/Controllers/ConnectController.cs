@@ -7,7 +7,6 @@ using AiCoreApi.Services.ControllersServices;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Caching.Distributed;
-using System.IdentityModel.Tokens.Jwt;
 using System.Web;
 
 namespace AiCoreApi.Controllers
@@ -285,14 +284,6 @@ namespace AiCoreApi.Controllers
                 return BadRequest("Scope is required");
             if (string.IsNullOrEmpty(connectionCreateModel.ConnectionId))
                 return BadRequest("ConnectionId is required");
-            if (string.IsNullOrEmpty(connectionCreateModel.AccessToken))
-                return BadRequest("AccessToken is required");
-            var jsonToken = new JwtSecurityTokenHandler().ReadToken(connectionCreateModel.AccessToken) as JwtSecurityToken;
-            if (jsonToken == null || jsonToken.Payload == null)
-                return BadRequest("Invalid access token");
-            var jwtPayload = jsonToken.Payload;
-            if (jwtPayload.ValidTo < DateTime.UtcNow)
-                return Unauthorized("Access token is expired");
 
             var credentials = await _entraTokenProvider.GetCredentialsFromKeyVaultAsync(connectionCreateModel.ManagedIdentity);
             var pkce = new Pkce();
@@ -362,7 +353,7 @@ namespace AiCoreApi.Controllers
     <script>
       const token = {System.Text.Json.JsonSerializer.Serialize(refreshToken)};
       if (window.opener) {{
-        window.opener.postMessage({{ type: 'refresh_token', token: token }}, '*');
+        window.opener.postMessage({{ type: 'refresh_token', token: token{(string.IsNullOrEmpty(connectionCreateModel.Prefix) ? "" : $", prefix: '{connectionCreateModel.Prefix}'")} }}, '*');
         window.close();
       }}
     </script>
