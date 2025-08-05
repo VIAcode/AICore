@@ -66,13 +66,14 @@ namespace AiCoreApi.Services.ProcessingServices.AgentsHandlers
                 }
 
                 var resourceName = conn.Content["resourceName"];
+                var tenantId = conn.Content.GetValueOrDefault("tenantId");
                 var accessType = conn.Content.GetValueOrDefault("accessType") ?? EntraTokenProvider.DefaultStorageName;
                 
                 try
                 {
                     var hasRefreshToken = conn.Content.TryGetValue("refreshToken", out var refreshToken);
                     var accessToken = hasRefreshToken
-                        ? await _entraTokenProvider.GetAccessTokenByRefreshTokenAsync(accessType, refreshToken, resourceName)
+                        ? await _entraTokenProvider.GetAccessTokenByRefreshTokenAsync(accessType, refreshToken, resourceName, tenantId)
                         : await _entraTokenProvider.GetAccessTokenObjectAsync(accessType, resourceName);
 
                     var messages = await GetNewMessages(emailAddress, folderName, accessToken, lastRun);

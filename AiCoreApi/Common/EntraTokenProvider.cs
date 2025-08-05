@@ -122,7 +122,7 @@ namespace AiCoreApi.Common
             !string.IsNullOrEmpty(cachedToken.Token) &&
             DateTimeOffset.UtcNow < cachedToken.ExpiresOn.Subtract(TokenRefreshBuffer);
 
-        public async Task<AccessToken> GetAccessTokenByRefreshTokenAsync(string storageName, string refreshToken, string resource)
+        public async Task<AccessToken> GetAccessTokenByRefreshTokenAsync(string storageName, string refreshToken, string resource, string? tenantId = null)
         {
             var cacheKey = $"refresh|{refreshToken}|{storageName}|{resource}";
 
@@ -145,7 +145,7 @@ namespace AiCoreApi.Common
 
                 var credentials = await GetCredentialsFromKeyVaultAsync(storageName);
 
-                var request = new HttpRequestMessage(HttpMethod.Post, $"https://login.microsoftonline.com/{credentials.TenantId}/oauth2/v2.0/token")
+                var request = new HttpRequestMessage(HttpMethod.Post, $"https://login.microsoftonline.com/{(string.IsNullOrEmpty(tenantId) ? credentials.TenantId : tenantId)}/oauth2/v2.0/token")
                 {
                     Content = new FormUrlEncodedContent(new Dictionary<string, string>
                     {
@@ -211,7 +211,7 @@ namespace AiCoreApi.Common
         Task<AccessToken> GetAccessTokenObjectAsync(string storageName, string resource);
         Task SetCredentialsToKeyVaultAsync(string storageName, string tenantId, string clientId, string clientSecret);
         Task RemoveCredentialsToKeyVaultAsync(string storageName);
-        Task<AccessToken> GetAccessTokenByRefreshTokenAsync(string storageName, string refreshToken, string resource);
+        Task<AccessToken> GetAccessTokenByRefreshTokenAsync(string storageName, string refreshToken, string resource, string? tenantId = null);
         Task<ClientCredentials> GetCredentialsFromKeyVaultAsync(string storageName);
     }
 }

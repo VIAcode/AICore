@@ -10,12 +10,15 @@ namespace AiCoreApi.Common
     {
         private readonly IHttpContextAccessor? _httpContextAccessor;
         public readonly UserContextAccessor UserContext;
+        public readonly IAgentsHelper AgentsHelper;
 
         public RequestAccessor(
             IHttpContextAccessor httpContextAccessor,
-            UserContextAccessor userContextAccessor
+            UserContextAccessor userContextAccessor,
+            IAgentsHelper agentsHelper
             )
         {
+            AgentsHelper = agentsHelper; 
             if (httpContextAccessor == null)
                 return;
             UserContext = userContextAccessor;
