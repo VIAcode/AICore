@@ -127,11 +127,24 @@ namespace AiCoreApi.SemanticKernel.Agents
                 }
             }
 
-            foreach (var (fileName, content) in attachments)
+            var streams = new List<MemoryStream>();
+            try
             {
-                var stream = new MemoryStream(content);
-                var attachment = new Attachment(stream, fileName);
-                message.Attachments.Add(attachment);
+                foreach (var (fileName, content) in attachments)
+                {
+                    var stream = new MemoryStream(content);
+                    streams.Add(stream);
+                    var attachment = new Attachment(stream, fileName);
+                    message.Attachments.Add(attachment);
+                }
+                client.Send(message);
+            }
+            finally
+            {
+                foreach (var stream in streams)
+                {
+                    stream.Dispose();
+                }
             }
 
             client.Send(message);
