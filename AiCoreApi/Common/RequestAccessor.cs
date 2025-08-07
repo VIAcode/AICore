@@ -48,6 +48,11 @@ namespace AiCoreApi.Common
                     {
                         Login = claims[ClaimTypes.NameIdentifier];
                     }
+                    // FullName
+                    if (claims.ContainsKey(IdTokenClaims.FullName))
+                    {
+                        FullName = claims[IdTokenClaims.FullName];
+                    }
                 }
                 // MessageDialog
                 var request = _httpContextAccessor.HttpContext.Request;
@@ -88,6 +93,7 @@ namespace AiCoreApi.Common
         public string Query { get; set; }
         public string? LoginTypeString { get; set; }
         public string? Login { get; set; }
+        public string? FullName { get; set; }
         public int? WorkspaceId { get; set; }
         public int? AgentId { get; set; }
         public MessageDialogViewModel? MessageDialog { get; set; }

@@ -43,17 +43,17 @@ namespace AiCoreApi.Common
             .HandleTransientHttpError()
             .OrResult(msg =>
             {
-                var nonSuccessRequest =
-                    msg.StatusCode != HttpStatusCode.OK &&
-                    msg.StatusCode != HttpStatusCode.Accepted &&
-                    msg.StatusCode != (HttpStatusCode)424 &&
-                    msg.StatusCode != HttpStatusCode.NoContent;
-                if (nonSuccessRequest)
+                try
+                {
+                    msg.EnsureSuccessStatusCode();
+                    return false;
+                }
+                catch (HttpRequestException)
                 {
                     logger.LogWarning("Startup: {0}, url: {1}, request headers: {2}, code: {3}, body: {4}, response headers: {5}", "GetRetryPolicy",
                         msg.RequestMessage.RequestUri, msg.RequestMessage.Headers, msg.StatusCode, msg.Content.ReadAsStringAsync().Result, msg.Headers);
+                    return true;
                 }
-                return nonSuccessRequest;
             })
             .WaitAndRetryAsync(7, retryAttempt => TimeSpan.FromSeconds(Math.Pow(2, retryAttempt)));
     }
