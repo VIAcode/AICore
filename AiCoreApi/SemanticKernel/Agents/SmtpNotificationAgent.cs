@@ -18,6 +18,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             public const string Cc = "cc";
             public const string Subject = "subject";
             public const string Body = "body";
+            public const string Attachments = "attachments";
         }
 
         private readonly IConnectionProcessor _connectionProcessor;
@@ -46,8 +47,9 @@ namespace AiCoreApi.SemanticKernel.Agents
             var cc = await GetParameterValueAsync(AgentContentParameters.Cc);
             var subject = await GetParameterValueAsync(AgentContentParameters.Subject);
             var body = await GetParameterValueAsync(AgentContentParameters.Body);
+            var attachmentsRaw = await GetParameterValueAsync(AgentContentParameters.Attachments);
 
-            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Request", $"To: {recipient}, Cc: {cc} Subject: {subject}");
+            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Request", $"To: {recipient}, Cc: {cc}, Subject: {subject}");
 
             var connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
             var connection = await GetConnectionAsync(_requestAccessor, _responseAccessor, connections, ConnectionType.Smtp, _debugMessageSenderName, connectionName: connectionName);
@@ -57,14 +59,48 @@ namespace AiCoreApi.SemanticKernel.Agents
             var smtpPass = await ApplyParametersAsync(connection.Content["smtpPassword"]);
             var smtpFrom = await ApplyParametersAsync(connection.Content["smtpFrom"]);
 
-            SendEmail(smtpServer, smtpPort, smtpUser, smtpPass, smtpFrom, recipient, cc, subject, body);
+            // Parse attachments (format: "file1.txt:base64data,file2.pdf:base64data")
+            var attachments = new List<(string FileName, byte[] Content)>();
+            if (!string.IsNullOrWhiteSpace(attachmentsRaw))
+            {
+                var pairs = attachmentsRaw.Split(',');
+                foreach (var pair in pairs)
+                {
+                    var parts = pair.Split(':', 2);
+                    if (parts.Length == 2)
+                    {
+                        try
+                        {
+                            var fileName = parts[0].Trim();
+                            var fileContent = Convert.FromBase64String(parts[1]);
+                            attachments.Add((fileName, fileContent));
+                        }
+                        catch (FormatException ex)
+                        {
+                            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "Attachment Parse Error", $"Invalid base64 for {parts[0]}: {ex.Message}");
+                        }
+                    }
+                }
+            }
+
+            SendEmail(smtpServer, smtpPort, smtpUser, smtpPass, smtpFrom, recipient, cc, subject, body, attachments);
 
             var response = $"Email sent to {recipient}.";
             _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Response", response);
             return response;
         }
 
-        private void SendEmail(string host, int port, string username, string password, string from, string to, string cc, string subject, string body)
+        private void SendEmail(
+            string host,
+            int port,
+            string username,
+            string password,
+            string from,
+            string to,
+            string cc,
+            string subject,
+            string body,
+            List<(string FileName, byte[] Content)> attachments)
         {
             using var client = new SmtpClient(host, port)
             {
@@ -89,6 +125,13 @@ namespace AiCoreApi.SemanticKernel.Agents
                 {
                     message.CC.Add(ccAddress.Trim());
                 }
+            }
+
+            foreach (var (fileName, content) in attachments)
+            {
+                var stream = new MemoryStream(content);
+                var attachment = new Attachment(stream, fileName);
+                message.Attachments.Add(attachment);
             }
 
             client.Send(message);
