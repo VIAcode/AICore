@@ -146,8 +146,6 @@ namespace AiCoreApi.SemanticKernel.Agents
                     stream.Dispose();
                 }
             }
-
-            client.Send(message);
         }
     }
 
