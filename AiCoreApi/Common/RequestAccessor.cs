@@ -106,8 +106,10 @@ namespace AiCoreApi.Common
                 if (_tags == null)
                 {
                     _tags = (TagsString ?? "")
-                        .Split(',')
-                        .Select(item => Convert.ToInt32(item))
+                        .Split(',', StringSplitOptions.RemoveEmptyEntries)
+                        .Select(item => int.TryParse(item.Trim(), out var value) ? (int?)value : null)
+                        .Where(val => val.HasValue)
+                        .Select(val => val.Value)
                         .ToList();
                 }
                 return _tags;
@@ -115,7 +117,7 @@ namespace AiCoreApi.Common
             set
             {
                 _tags = value;
-                TagsString = string.Join(",", _tags);
+                TagsString = _tags == null ? "" : string.Join(",", _tags);
             }
         }
 
