@@ -182,6 +182,7 @@ namespace AiCoreApi.Services.IngestionServices
                 var org = ingestion.Content["Organization"];
                 var project = ingestion.Content["Project"];
                 var wiki = ingestion.Content["WikiIdentifier"];
+                var branch = ingestion.Content.ContainsKey("Branch") ? ingestion.Content["Branch"] : "";
 
                 var client = _httpClientFactory.CreateClient(HttpClients.NoRetryClient);
                 var patToken = Convert.ToBase64String(Encoding.ASCII.GetBytes($":{pat}"));
@@ -207,7 +208,7 @@ namespace AiCoreApi.Services.IngestionServices
                     throw new InvalidOperationException($"Page '{path}' not found in Azure DevOps Wiki.");
 
 
-                var updateUrl = $"https://dev.azure.com/{org}/{project}/_apis/wiki/wikis/{wiki}/pages?path={encodedPath}&api-version=7.1";
+                var updateUrl = $"https://dev.azure.com/{org}/{project}/_apis/wiki/wikis/{wiki}/pages?path={encodedPath}&{(string.IsNullOrEmpty(branch) ? "" : $@"versionDescriptor.versionType=branch&versionDescriptor.version={branch}&")}api-version=7.1";
                 var payload = new { content = articleText };
                 var requestContent = new StringContent(JsonConvert.SerializeObject(payload), Encoding.UTF8, "application/json");
                 client.DefaultRequestHeaders.IfMatch.ParseAdd(etag);
