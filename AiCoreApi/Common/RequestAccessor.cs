@@ -98,10 +98,26 @@ namespace AiCoreApi.Common
         public int? AgentId { get; set; }
         public MessageDialogViewModel? MessageDialog { get; set; }
 
-        public List<int> Tags => (TagsString ?? "")
-            .Split(',')
-            .Select(item => Convert.ToInt32(item))
-            .ToList();
+        private List<int>? _tags;
+        public List<int> Tags
+        {
+            get
+            {
+                if (_tags == null)
+                {
+                    _tags = (TagsString ?? "")
+                        .Split(',')
+                        .Select(item => Convert.ToInt32(item))
+                        .ToList();
+                }
+                return _tags;
+            }
+            set
+            {
+                _tags = value;
+                TagsString = string.Join(",", _tags);
+            }
+        }
 
         public LoginTypeEnum LoginType => Enum.TryParse<LoginTypeEnum>(LoginTypeString, out var loginType) ? loginType : LoginTypeEnum.Password;
 
