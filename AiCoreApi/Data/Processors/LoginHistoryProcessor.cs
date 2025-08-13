@@ -6,67 +6,70 @@ namespace AiCoreApi.Data.Processors
 {
     public class LoginHistoryProcessor : ILoginHistoryProcessor
     {
-        private readonly IDbQuery _dbQuery;
-        private readonly Db _db;
+        private readonly IDbContextFactory<Db> _dbFactory;
 
-        public LoginHistoryProcessor(Db db, IDbQuery dbQuery)
+        public LoginHistoryProcessor(IDbContextFactory<Db> dbFactory)
         {
-            _dbQuery = dbQuery;
-            _db = db;
+            _dbFactory = dbFactory;
         }
 
-        public LoginHistoryModel Add(LoginHistoryModel loginHistory)
+        public async Task<LoginHistoryModel> Add(LoginHistoryModel loginHistory)
         {
-            _db.LoginHistory.Add(loginHistory);
-            _db.SaveChanges();
+            await using var db = await _dbFactory.CreateDbContextAsync();
+            await db.LoginHistory.AddAsync(loginHistory);
+            await db.SaveChangesAsync();
             return loginHistory;
         }
 
-        public LoginHistoryModel? GetByRefreshToken(string refreshToken)
+        public async Task<LoginHistoryModel?> GetByRefreshToken(string refreshToken)
         {
+            await using var db = await _dbFactory.CreateDbContextAsync();
             if (string.IsNullOrEmpty(refreshToken))
                 return null;
-            var result = _db.LoginHistory.AsNoTracking().FirstOrDefault(item => item.RefreshToken == refreshToken);
+            var result = await db.LoginHistory.AsNoTracking().FirstOrDefaultAsync(item => item.RefreshToken == refreshToken);
             if (result == null || result.ValidUntilTime < DateTime.UtcNow)
                 return null;
             return result;
         }
 
-        public LoginHistoryModel? GetByCode(string code)
+        public async Task<LoginHistoryModel?> GetByCode(string code)
         {
+            await using var db = await _dbFactory.CreateDbContextAsync();
             if (string.IsNullOrEmpty(code))
                 return null;
-            var result = _db.LoginHistory.AsNoTracking().FirstOrDefault(item => item.Code == code);
+            var result = await db.LoginHistory.AsNoTracking().FirstOrDefaultAsync(item => item.Code == code);
             if (result == null || result.ValidUntilTime < DateTime.UtcNow)
                 return null;
             return result;
         }
 
-        public LoginHistoryModel? GetBySessionId(int sessionId)
+        public async Task<LoginHistoryModel?> GetBySessionId(int sessionId)
         {
-            var result = _db.LoginHistory.AsNoTracking().FirstOrDefault(item => item.LoginHistoryId == sessionId);
+            await using var db = await _dbFactory.CreateDbContextAsync();
+            var result = await db.LoginHistory.AsNoTracking().FirstOrDefaultAsync(item => item.LoginHistoryId == sessionId);
             if (result == null || result.ValidUntilTime < DateTime.UtcNow)
                 return null;
             return result;
         }
 
-        public void Update(LoginHistoryModel loginHistory)
+        public async Task Update(LoginHistoryModel loginHistory)
         {
-            var existingLoginHistory = _db.LoginHistory.FirstOrDefault(item => item.LoginHistoryId == loginHistory.LoginHistoryId);
+            await using var db = await _dbFactory.CreateDbContextAsync();
+            var existingLoginHistory = await db.LoginHistory.FirstOrDefaultAsync(item => item.LoginHistoryId == loginHistory.LoginHistoryId);
             if (existingLoginHistory == null)
                 return;
-            _db.Entry(existingLoginHistory).CurrentValues.SetValues(loginHistory);
-            _db.LoginHistory.Update(existingLoginHistory);
-            _db.SaveChanges();
+            db.Entry(existingLoginHistory).CurrentValues.SetValues(loginHistory);
+            db.LoginHistory.Update(existingLoginHistory);
+            await db.SaveChangesAsync();
         }
     }
 
     public interface ILoginHistoryProcessor
     {
-        LoginHistoryModel Add(LoginHistoryModel loginHistory);
-        LoginHistoryModel? GetByRefreshToken(string refreshToken);
-        LoginHistoryModel? GetByCode(string code);
-        LoginHistoryModel? GetBySessionId(int sessionId);
-        void Update(LoginHistoryModel login);
+        Task<LoginHistoryModel> Add(LoginHistoryModel loginHistory);
+        Task<LoginHistoryModel?> GetByRefreshToken(string refreshToken);
+        Task<LoginHistoryModel?> GetByCode(string code);
+        Task<LoginHistoryModel?> GetBySessionId(int sessionId);
+        Task Update(LoginHistoryModel login);
     }
 }

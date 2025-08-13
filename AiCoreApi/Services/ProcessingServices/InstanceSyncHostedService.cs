@@ -2,45 +2,62 @@ using AiCoreApi.Common;
 
 namespace AiCoreApi.Services.ProcessingServices
 {
-    internal class InstanceSyncHostedService : IHostedService, IDisposable
+    public sealed class InstanceSyncHostedService : BackgroundService
     {
         private readonly IInstanceSync _instanceSync;
-        
-        private Timer? _timer;
-        private bool _isMainInstance;
+        private readonly IHostApplicationLifetime _lifetime;
+        private readonly ILogger<InstanceSyncHostedService> _logger;
 
         public InstanceSyncHostedService(
-            IInstanceSync instanceSync)
+            IInstanceSync instanceSync,
+            IHostApplicationLifetime lifetime,
+            ILogger<InstanceSyncHostedService> logger)
         {
             _instanceSync = instanceSync;
-            _isMainInstance = _instanceSync.IsMainInstance;
+            _lifetime = lifetime;
+            _logger = logger;
         }
 
-        public Task StartAsync(CancellationToken cancellationToken)
+        protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
-            var period = TimeSpan.FromSeconds(InstanceSync.TtlInSeconds - 5);
-            _timer = new Timer(Process, null, period, period);
-            return Task.CompletedTask;
-        }
+            var periodSeconds = Math.Max(5, InstanceSync.TtlInSeconds - 5);
+            var timer = new PeriodicTimer(TimeSpan.FromSeconds(periodSeconds));
 
-        public async void Process(object? state)
-        {
-            _instanceSync.SendHeartbeat();
-            if(_instanceSync.IsRestartNeeded())
+            try
             {
-                Environment.Exit(0);
+                SafeHeartbeat();
+
+                while (await timer.WaitForNextTickAsync(stoppingToken))
+                {
+                    SafeHeartbeat();
+
+                    if (_instanceSync.IsRestartNeeded())
+                    {
+                        _logger.LogWarning("InstanceSync requested application restart.");
+                        _lifetime.StopApplication();
+                        break;
+                    }
+                }
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "InstanceSyncHostedService failed.");
             }
         }
 
-        public Task StopAsync(CancellationToken cancellationToken)
+        private void SafeHeartbeat()
         {
-            _timer?.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
-            return Task.CompletedTask;
-        }
-
-        public void Dispose()
-        {
-            _timer?.Dispose();
+            try
+            {
+                _instanceSync.SendHeartbeat();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SendHeartbeat failed.");
+            }
         }
     }
 }

@@ -6,24 +6,26 @@ namespace AiCoreApi.Data.Processors;
 
 public class AgentsProcessor : IAgentsProcessor
 {
-    private readonly Db _db;
+    private readonly IDbContextFactory<Db> _dbFactory;
 
     public AgentsProcessor(
-        Db db)
+        IDbContextFactory<Db> dbFactory)
     {
-        _db = db;
+        _dbFactory = dbFactory;
     }
 
     public async Task<List<AgentModel>> ListAll()
     {
-        var qry = _db.Agents.Include(e => e.Tags).AsNoTracking();
+        await using var db = await _dbFactory.CreateDbContextAsync();
+        var qry = db.Agents.Include(e => e.Tags).AsNoTracking();
         var data = await qry.ToListAsync();
         return data;
     }
 
     public async Task<List<AgentModel>> List(int? workspaceId)
     {
-        var qry = _db.Agents.Include(e => e.Tags).AsNoTracking();
+        await using var db = await _dbFactory.CreateDbContextAsync();
+        var qry = db.Agents.Include(e => e.Tags).AsNoTracking();
         if (workspaceId == 0)
         {
             qry = qry.Where(e => e.WorkspaceId == null || e.WorkspaceId == 0);
@@ -38,12 +40,14 @@ public class AgentsProcessor : IAgentsProcessor
 
     public async Task<AgentModel?> GetById(int agentId)
     {
-        return await _db.Agents.Include(e => e.Tags).AsNoTracking().FirstOrDefaultAsync(e => e.AgentId == agentId);
+        await using var db = await _dbFactory.CreateDbContextAsync();
+        return await db.Agents.Include(e => e.Tags).AsNoTracking().FirstOrDefaultAsync(e => e.AgentId == agentId);
     }
 
     public async Task<AgentModel?> GetByName(string agentName, int? workspaceId)
     {
-        var qry = _db.Agents.Include(e => e.Tags).AsNoTracking();
+        await using var db = await _dbFactory.CreateDbContextAsync();
+        var qry = db.Agents.Include(e => e.Tags).AsNoTracking();
         if (workspaceId == 0)
             qry = qry.Where(item => item.WorkspaceId == null || item.WorkspaceId == 0);
         else if (workspaceId != null)
@@ -53,7 +57,8 @@ public class AgentsProcessor : IAgentsProcessor
 
     public async Task<AgentModel?> Update(AgentModel agentModel)
     {
-        var existingAgent = await _db.Agents
+        await using var db = await _dbFactory.CreateDbContextAsync();
+        var existingAgent = await db.Agents
             .Include(e => e.Tags)
             .FirstOrDefaultAsync(item => item.AgentId == agentModel.AgentId);
         if (existingAgent == null)
@@ -61,48 +66,51 @@ public class AgentsProcessor : IAgentsProcessor
         agentModel.WorkspaceId = existingAgent.WorkspaceId;
         var tIds = agentModel.Tags.Select(e => e.TagId);
         var tags = tIds.Any()
-            ? await _db.Tags.Where(e => tIds.Contains(e.TagId)).ToListAsync()
+            ? await db.Tags.Where(e => tIds.Contains(e.TagId)).ToListAsync()
             : new List<TagModel>();
-        _db.Entry(existingAgent).CurrentValues.SetValues(agentModel);
+        db.Entry(existingAgent).CurrentValues.SetValues(agentModel);
         existingAgent.Tags = tags;
-        _db.Agents.Update(existingAgent);
-        await _db.SaveChangesAsync();
+        db.Agents.Update(existingAgent);
+        await db.SaveChangesAsync();
         return existingAgent;
     }
 
     public async Task<AgentModel> Add(AgentModel agentModel, int workspaceId)
     {
-        var existingAgent = await _db.Agents
+        await using var db = await _dbFactory.CreateDbContextAsync();
+        var existingAgent = await db.Agents
             .Include(e => e.Tags)
             .FirstOrDefaultAsync(item => item.AgentId == agentModel.AgentId);
         if (existingAgent != null) return existingAgent;
 
         if (agentModel.Tags is { Count: > 0 })
         {
-            var tags = _db.Tags.ToList();
+            var tags = db.Tags.ToList();
             var tIds = agentModel.Tags.Select(e => e.TagId);
             agentModel.Tags = tags.Where(e => tIds.Contains(e.TagId)).ToList();
         }
         agentModel.WorkspaceId = workspaceId > 0 ? workspaceId : null;
-        await _db.Agents.AddAsync(agentModel);
-        await _db.SaveChangesAsync();
+        await db.Agents.AddAsync(agentModel);
+        await db.SaveChangesAsync();
         return agentModel;
     }
 
     public async Task Delete(int agentId)
     {
-        var agent = await _db.Agents
+        await using var db = await _dbFactory.CreateDbContextAsync();
+        var agent = await db.Agents
             .Include(e => e.Tags)
             .FirstOrDefaultAsync(item => item.AgentId == agentId);
         if (agent == null)
             return;
-        _db.Agents.Remove(agent);
-        await _db.SaveChangesAsync();
+        db.Agents.Remove(agent);
+        await db.SaveChangesAsync();
     }
 
     public async Task UpdateFlowNameForAsync(string flowName, string? value, int? workspaceId)
     {
-        var qry = _db.Agents.Where(e => e.FlowName == flowName);
+        await using var db = await _dbFactory.CreateDbContextAsync();
+        var qry = db.Agents.Where(e => e.FlowName == flowName);
         if (workspaceId == null || workspaceId == 0)
             qry = qry.Where(item => item.WorkspaceId == null || item.WorkspaceId == 0);
         else
@@ -113,14 +121,15 @@ public class AgentsProcessor : IAgentsProcessor
         foreach (var agent in agents)
         {
             agent.FlowName = value;
-            _db.Agents.Update(agent);
+            db.Agents.Update(agent);
         }
-        await _db.SaveChangesAsync();
+        await db.SaveChangesAsync();
     }
 
     public async Task UpdateFlowNameForAsync(List<int> ids, string? value, int? workspaceId)
     {
-        var qry = _db.Agents.Where(e => ids.Contains(e.AgentId));
+        await using var db = await _dbFactory.CreateDbContextAsync();
+        var qry = db.Agents.Where(e => ids.Contains(e.AgentId));
         if (workspaceId == null || workspaceId == 0)
             qry = qry.Where(item => item.WorkspaceId == null || item.WorkspaceId == 0);
         else 
@@ -131,9 +140,9 @@ public class AgentsProcessor : IAgentsProcessor
         foreach (var agent in agents)
         {
             agent.FlowName = value;
-            _db.Agents.Update(agent);
+            db.Agents.Update(agent);
         }
-        await _db.SaveChangesAsync();
+        await db.SaveChangesAsync();
     }
 }
 

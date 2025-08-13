@@ -6,110 +6,105 @@ using AiCoreApi.Services.IngestionServices;
 
 namespace AiCoreApi.Services.ProcessingServices
 {
-    internal class TaskProcessingHostedService : IHostedService, IDisposable
+    public sealed class TaskProcessingHostedService : BackgroundService
     {
         private const int CheckIntervalSeconds = 5;
         private const int MaxConcurrentTasks = 2;
 
-        private readonly IServiceProvider _serviceProvider;
+        private readonly IServiceScopeFactory _scopeFactory;
         private readonly IInstanceSync _instanceSync;
         private readonly ILogger<TaskProcessingHostedService> _logger;
 
         private readonly object _sync = new();
-        private readonly List<int> _activities = new();
-        
-        private Timer? _timer;
+        private readonly HashSet<int> _activities = new();
+        private readonly SemaphoreSlim _concurrency = new(MaxConcurrentTasks, MaxConcurrentTasks);
 
         public TaskProcessingHostedService(
-            IServiceProvider serviceProvider,
+            IServiceScopeFactory scopeFactory,
             IInstanceSync instanceSync,
             ILogger<TaskProcessingHostedService> logger)
         {
-            _serviceProvider = serviceProvider;
+            _scopeFactory = scopeFactory;
             _instanceSync = instanceSync;
             _logger = logger;
         }
 
-        public Task StartAsync(CancellationToken cancellationToken)
+        protected override async Task ExecuteAsync(CancellationToken ct)
         {
-            _timer = new Timer(Process, null, TimeSpan.Zero, TimeSpan.FromSeconds(CheckIntervalSeconds));
-            return Task.CompletedTask;
-        }
-
-        public async void Process(object? state)
-        {
-            // Check if this is the main instance, only the main instance should process Ingestion tasks
-            if (!_instanceSync.IsMainInstance)
-                return;
+            var timer = new PeriodicTimer(TimeSpan.FromSeconds(CheckIntervalSeconds));
 
             try
             {
-                var taskProcessor = _serviceProvider.GetService<ITaskProcessor>() ?? throw new InvalidOperationException($"'{nameof(ITaskProcessor)}' service not found.");
-                var tasks = taskProcessor.GetNew();
-                foreach (var task in tasks)
+                while (await timer.WaitForNextTickAsync(ct))
                 {
-                    if (TryLockActivity(task.IngestionId))
+                    if (!_instanceSync.IsMainInstance)
+                        continue;
+
+                    using var scope = _scopeFactory.CreateScope();
+                    var taskProcessor = scope.ServiceProvider.GetRequiredService<ITaskProcessor>();
+
+                    var tasks = await taskProcessor.GetNew();
+
+                    foreach (var task in tasks)
                     {
-                        try
-                        {
-                            await ProcessTask(taskProcessor, task);
-                            return;
-                        }
-                        finally
-                        {
-                            UnlockActivity(task.IngestionId);
-                        }
+                        if (!TryLockActivity(task.IngestionId))
+                            continue;
+
+                        _ = ProcessOneAsync(task, ct)
+                            .ContinueWith(_ => UnlockActivity(task.IngestionId), TaskScheduler.Default);
                     }
                 }
             }
-            catch (Exception e)
+            catch (OperationCanceledException) when (ct.IsCancellationRequested) { }
+            catch (Exception ex)
             {
-                _logger.LogError(e, "Task processing service error.");
+                _logger.LogError(ex, "TaskProcessingHostedService crashed.");
             }
         }
 
-        public Task StopAsync(CancellationToken cancellationToken)
+        private async Task ProcessOneAsync(TaskModel task, CancellationToken ct)
         {
-            _timer?.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
-            return Task.CompletedTask;
-        }
-
-        private async Task ProcessTask(ITaskProcessor taskProcessor, TaskModel task)
-        {
-            await SetTaskState(TaskState.InProgress);
+            await _concurrency.WaitAsync(ct);
             try
             {
-                var dataServiceFactory =
-                    _serviceProvider.GetService<IIngestionDataServiceFactory>() ??
-                    throw new InvalidOperationException($"'{nameof(IIngestionDataServiceFactory)}' service not found.");
+                using var scope = _scopeFactory.CreateScope();
+                var taskProcessor = scope.ServiceProvider.GetRequiredService<ITaskProcessor>();
+                var dataServiceFactory = scope.ServiceProvider.GetRequiredService<IIngestionDataServiceFactory>();
 
-                var service = dataServiceFactory.GetService(task);
-                var payload = "";
-                if (task.Context is { Count: > 0 })
+                async Task SetTaskState(TaskState state, string? error = null)
                 {
-                    payload = task.Context.ToDictionary(key => key.Key, value => value.Value.ToString()).ToJson();
+                    task.State = state;
+                    task.ErrorMessage = error ?? "";
+                    await taskProcessor.Set(task);
                 }
-                await service.Process(task.IngestionId, task.TaskId, payload ?? "");
 
-                await SetTaskState(TaskState.Completed);
+                await SetTaskState(TaskState.InProgress);
+
+                try
+                {
+                    var service = dataServiceFactory.GetService(task);
+                    var payload = task.Context is { Count: > 0 }
+                        ? task.Context.ToDictionary(k => k.Key, v => v.Value?.ToString() ?? string.Empty).ToJson()
+                        : string.Empty;
+
+                    await service.Process(task.IngestionId, task.TaskId, payload ?? string.Empty);
+
+                    await SetTaskState(TaskState.Completed);
+                }
+                catch (Exception e)
+                {
+                    _logger.LogError(e, "Failed to '{Type}' data source '{IngestionId}'.", task.Type, task.IngestionId);
+                    await SetTaskState(TaskState.Failed, e.Message);
+                }
             }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested) { /* ignore */ }
             catch (Exception e)
             {
-                _logger.LogError(e, $"Failed to '{task.Type}' data source '{task.IngestionId}'.");
-                await SetTaskFailed(e.Message);
+                _logger.LogError(e, "{TaskId} task error.", task.TaskId);
             }
-
-            async Task SetTaskState(TaskState state)
+            finally
             {
-                task.State = state;
-                await taskProcessor.Set(task);
-            }
-
-            async Task SetTaskFailed(string errorMessage)
-            {
-                task.State = TaskState.Failed;
-                task.ErrorMessage = errorMessage;
-                await taskProcessor.Set(task);
+                _concurrency.Release();
             }
         }
 
@@ -117,25 +112,16 @@ namespace AiCoreApi.Services.ProcessingServices
         {
             lock (_sync)
             {
-                if (_activities.Contains(activityId) ||
-                    (MaxConcurrentTasks > 0 && MaxConcurrentTasks <= _activities.Count))
-                    return false;
-                _activities.Add(activityId);
-                return true;
+                return _activities.Add(activityId);
             }
         }
 
-        private bool UnlockActivity(int activityId)
+        private void UnlockActivity(int activityId)
         {
             lock (_sync)
             {
-                return _activities.Remove(activityId);
+                _activities.Remove(activityId);
             }
-        }
-
-        public void Dispose()
-        {
-            _timer?.Dispose();
         }
     }
 }

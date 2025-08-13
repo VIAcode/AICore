@@ -21,9 +21,9 @@ namespace AiCoreApi.Services.ControllersServices
             _mapper = mapper;
         }
 
-        public TagViewModel? GetTag(int tagId)
+        public async Task<TagViewModel?> GetTag(int tagId)
         {
-            var tag = _tagsProcessor.Get(tagId);
+            var tag = await _tagsProcessor.Get(tagId);
 
             if (tag == null) return null;
 
@@ -38,9 +38,9 @@ namespace AiCoreApi.Services.ControllersServices
             return result;
         }
 
-        public List<TagViewModel> ListTags()
+        public async Task<List<TagViewModel>> ListTags()
         {
-            var tags = _tagsProcessor.List();
+            var tags = await _tagsProcessor.List();
             var tagsViewModelList = _mapper.Map<List<TagViewModel>>(tags);
             return tagsViewModelList;
         }
@@ -61,9 +61,9 @@ namespace AiCoreApi.Services.ControllersServices
 
     public interface ITagsService
     {
-        TagViewModel? GetTag(int tagId);
+        Task<TagViewModel?> GetTag(int tagId);
         Task<TagViewModel> AddOrUpdateTag(TagViewModel tagViewModel);
-        List<TagViewModel> ListTags();
+        Task<List<TagViewModel>> ListTags();
         Task<List<TagViewModel>> ListUserTags(string login, LoginTypeEnum loginType);
         Task<bool> RemoveTag(int tagId);
     }

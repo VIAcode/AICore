@@ -290,7 +290,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             var llmConnection = await GetLlmConnection(agent);
 
             var searchResults = await DoSearchAsync(agent);
-            _responseAccessor.CurrentMessage.Sources = MapSources(searchResults);
+            _responseAccessor.CurrentMessage.Sources = await MapSources(searchResults);
 
             var resultText = string.Join($"{Environment.NewLine}{Environment.NewLine}", searchResults.SelectMany(r => r.Partitions.Select(p => p.Text).ToList()));
             var question = await GetParameterValueAsync(AgentContentParameters.Question);
@@ -451,10 +451,10 @@ namespace AiCoreApi.SemanticKernel.Agents
             return llmConnection;
         }
 
-        private List<MessageDialogViewModel.MessageSource> MapSources(List<SearchResult>? searchResults)
+        private async Task<List<MessageDialogViewModel.MessageSource>> MapSources(List<SearchResult>? searchResults)
         {
             var documentIds = searchResults?.Select(r => r.DocumentId).Distinct().ToList();
-            var documents = _documentMetadataProcessor.Get(documentIds);
+            var documents = await _documentMetadataProcessor.Get(documentIds);
 
             return searchResults.Select(s =>
                 {

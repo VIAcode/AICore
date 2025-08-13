@@ -50,7 +50,13 @@ public class Startup
         // More than twenty 'IServiceProvider' instances have been created for internal use by Entity Framework. ...
         // See: https://stackoverflow.com/questions/60047465/more-than-twenty-iserviceprovider-instances-have-been-created-for-internal-use
         services.AddSingleton<IDataSourceProvider, DataSourceProvider>(e => new DataSourceProvider(_config));
-        services.ForInterfacesMatching("^I").OfAssemblies(Assembly.GetExecutingAssembly()).AddTransients();
+        services.ForInterfacesMatching("^I.*Processor$")
+            .OfAssemblies(Assembly.GetExecutingAssembly())
+            .AddScoped();
+        services.ForInterfacesMatching("^I(?!.*Processor$).*")
+            .OfAssemblies(Assembly.GetExecutingAssembly())
+            .AddTransients();
+
         services.AddStackExchangeRedisCache(options =>
         {
             options.Configuration = _config.DistributedCacheUrl;
@@ -59,10 +65,11 @@ public class Startup
                 EndPoints = { _config.DistributedCacheUrl },
                 Password = _config.DistributedCachePassword,
             };
-        });
-        services.AddTransient<Db>();
+        }); 
+        services.AddScoped<Db>();
+        services.AddDbContextFactory<Db>();
         services.AddHttpContextAccessor();
-        services.AddSingleton(sp => sp);
+        //services.AddSingleton(sp => sp);
         services.AddSingleton<IMetricsAccessor, MetricsAccessor>();
         services.AddScoped<RequestAccessor>();
         services.AddScoped<UserContextAccessor>();

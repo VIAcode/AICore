@@ -7,36 +7,39 @@ namespace AiCoreApi.Data.Processors
 {
     public class TaskProcessor : ITaskProcessor
     {
-        private readonly Db _db;
+        private readonly IDbContextFactory<Db> _dbFactory;
         private readonly ExtendedConfig _config;
 
-        public TaskProcessor(Db db, ExtendedConfig config)
+        public TaskProcessor(IDbContextFactory<Db> dbFactory, ExtendedConfig config)
         {
-            _db = db;
+            _dbFactory = dbFactory;
             _config = config;
         }
 
-        public List<TaskModel> GetNew()
+        public async Task<List<TaskModel>> GetNew()
         {
-            return _db.Tasks.AsNoTracking()
+            await using var db = await _dbFactory.CreateDbContextAsync();
+            return await db.Tasks.AsNoTracking()
                 .Where(t => t.State == TaskState.New && t.LockerTaskId == null)
-                .OrderBy(t => t.TaskId).ToList();
+                .OrderBy(t => t.TaskId).ToListAsync();
         }
 
-        public List<TaskModel> GetByIngestion(int ingestionId)
+        public async Task<List<TaskModel>> GetByIngestion(int ingestionId)
         {
-            return _db.Tasks.AsNoTracking()
-                .Where(t => t.IngestionId == ingestionId).ToList();
+            await using var db = await _dbFactory.CreateDbContextAsync();
+            return await db.Tasks.AsNoTracking()
+                .Where(t => t.IngestionId == ingestionId).ToListAsync();
         }
 
         public async Task<TaskModel> ScheduleTask(TaskModel taskModel)
         {
+            await using var db = await _dbFactory.CreateDbContextAsync();
             if (taskModel.TaskId != 0)
             {
                 throw new ArgumentException("Value should be 0.", nameof(TaskModel.TaskId));
             }
 
-            var active = _db.Tasks.AsNoTracking()
+            var active = db.Tasks.AsNoTracking()
                 .FirstOrDefault(t =>
                     t.IngestionId == taskModel.IngestionId && 
                     t.Type == taskModel.Type &&
@@ -52,60 +55,58 @@ namespace AiCoreApi.Data.Processors
 
         public async Task<TaskModel?> Set(TaskModel taskModel)
         {
+            await using var db = await _dbFactory.CreateDbContextAsync();
             TaskModel? entity;
             if (taskModel.TaskId == 0)
             {
                 entity = taskModel;
-                await _db.Tasks.AddAsync(entity);
+                await db.Tasks.AddAsync(entity);
             }
             else
             {
-                entity = _db.Tasks.FirstOrDefault(item => item.TaskId == taskModel.TaskId);
+                entity = db.Tasks.FirstOrDefault(item => item.TaskId == taskModel.TaskId);
                 if (entity == null)
                     return null;
 
                 taskModel.Updated = DateTime.UtcNow;
-                _db.Entry(entity).CurrentValues.SetValues(taskModel);
-                _db.Tasks.Update(entity);
+                db.Entry(entity).CurrentValues.SetValues(taskModel);
+                db.Tasks.Update(entity);
             }
 
-            await _db.SaveChangesAsync();
+            await db.SaveChangesAsync();
             // Unlock all tasks that were locked by this task if it is completed
             if (taskModel.State == TaskState.Completed)
             {
-                var tasksToUpdate = _db.Tasks
+                var tasksToUpdate = db.Tasks
                     .Where(t => t.LockerTaskId == taskModel.TaskId && t.State == TaskState.New)
                     .ToList();
                 foreach (var task in tasksToUpdate)
                 {
                     task.LockerTaskId = null;
                     task.Updated = DateTime.UtcNow;
-                    _db.Tasks.Update(task);
+                    db.Tasks.Update(task);
                 }
-                await _db.SaveChangesAsync();
+                await db.SaveChangesAsync();
             }
             return entity;
         }
 
         public async Task<TaskModel?> SetMessage(int taskId, string message)
         {
-            var entity = _db.Tasks.FirstOrDefault(item => item.TaskId == taskId);
+            await using var db = await _dbFactory.CreateDbContextAsync();
+            var entity = db.Tasks.FirstOrDefault(item => item.TaskId == taskId);
             if (entity == null)
                 return null;
             entity.ErrorMessage = message;
-            _db.Tasks.Update(entity);
-            await _db.SaveChangesAsync();
+            db.Tasks.Update(entity);
+            await db.SaveChangesAsync();
             return entity;
-        }
-
-        public List<TaskModel> List()
-        {
-            return _db.Tasks.AsNoTracking().ToList();
         }
 
         public async Task<List<TaskModel>> ListWithIngestion(int workspaceId)
         {
-            var qry = _db.Tasks
+            await using var db = await _dbFactory.CreateDbContextAsync();
+            var qry = db.Tasks
                 .Include(t => t.Ingestion)
                 .Select(t => new TaskModel
                 {
@@ -129,7 +130,8 @@ namespace AiCoreApi.Data.Processors
 
         public async Task<List<TaskModel>> LastTaskList(List<int> ingestionIds)
         {
-            var result = await _db.Tasks
+            await using var db = await _dbFactory.CreateDbContextAsync();
+            var result = await db.Tasks
                 .Where(t => ingestionIds.Contains(t.IngestionId))
                 .GroupBy(t => t.IngestionId)
                 .Select(g => g.OrderByDescending(e => e.Updated).First())
@@ -141,10 +143,11 @@ namespace AiCoreApi.Data.Processors
 
         public async Task ClearHistory()
         {
+            await using var db = await _dbFactory.CreateDbContextAsync();
             var threshold = 
                 DateTime.UtcNow - TimeSpan.FromHours(_config.MaxTaskHistory);
 
-            await _db.Tasks.Where(t =>
+            await db.Tasks.Where(t =>
                     (t.State == TaskState.Completed || t.State == TaskState.Failed) &&
                     t.Updated < threshold)
                 .ExecuteDeleteAsync();
@@ -152,19 +155,19 @@ namespace AiCoreApi.Data.Processors
 
         public async Task ResetUnfinishedTasks()
         {
-            await _db.Tasks.Where(t => (t.State == TaskState.InProgress) && t.IsRetriable)
+            await using var db = await _dbFactory.CreateDbContextAsync();
+            await db.Tasks.Where(t => (t.State == TaskState.InProgress) && t.IsRetriable)
                 .ExecuteUpdateAsync(t => t.SetProperty(x => x.State, TaskState.New));
         }
     }
 
     public interface ITaskProcessor
     {
-        List<TaskModel> GetNew();
-        List<TaskModel> GetByIngestion(int ingestionId);
+        Task<List<TaskModel>> GetNew();
+        Task<List<TaskModel>> GetByIngestion(int ingestionId);
         Task<TaskModel> ScheduleTask(TaskModel taskModel);
         Task<TaskModel?> Set(TaskModel taskModel);
         Task<TaskModel?> SetMessage(int taskId, string message);
-        List<TaskModel> List();
         Task ClearHistory();
         Task<List<TaskModel>> ListWithIngestion(int workspaceId);
         Task<List<TaskModel>> LastTaskList(List<int> ingestionIds);

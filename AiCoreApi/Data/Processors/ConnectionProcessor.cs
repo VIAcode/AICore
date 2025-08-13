@@ -7,18 +7,17 @@ namespace AiCoreApi.Data.Processors
 {
     public class ConnectionProcessor : IConnectionProcessor
     {
-        private readonly Db _db;
-        private readonly ExtendedConfig _config;
+        private readonly IDbContextFactory<Db> _dbFactory;
 
-        public ConnectionProcessor(Db db, ExtendedConfig config)
+        public ConnectionProcessor(IDbContextFactory<Db> dbFactory)
         {
-            _db = db;
-            _config = config;
+            _dbFactory = dbFactory;
         }
 
         public async Task<List<ConnectionModel?>> List(int? workspaceId)
         {
-            var qry = _db.Connections.OrderBy(item => item.ConnectionId).AsNoTracking();
+            await using var db = await _dbFactory.CreateDbContextAsync();
+            var qry = db.Connections.OrderBy(item => item.ConnectionId).AsNoTracking();
             if (workspaceId == 0)
             {
                 qry = qry.Where(e => e.WorkspaceId == null || e.WorkspaceId == 0);
@@ -33,6 +32,7 @@ namespace AiCoreApi.Data.Processors
 
         public async Task<ConnectionModel> Set(ConnectionModel connectionModel, int? workspaceId)
         {
+            await using var db = await _dbFactory.CreateDbContextAsync();
             ConnectionModel? settingValue;
             if (connectionModel.ConnectionId == 0)
             {
@@ -45,38 +45,41 @@ namespace AiCoreApi.Data.Processors
                     Content = connectionModel.Content,
                     WorkspaceId = workspaceId == 0 ? null : workspaceId,
                 };
-                await _db.Connections.AddAsync(settingValue);
+                await db.Connections.AddAsync(settingValue);
             }
             else
             {
-                settingValue = await _db.Connections.FirstAsync(item => item.ConnectionId == connectionModel.ConnectionId);
+                settingValue = await db.Connections.FirstAsync(item => item.ConnectionId == connectionModel.ConnectionId);
                 settingValue.Name = connectionModel.Name;
                 settingValue.Content = connectionModel.Content;
-                _db.Connections.Update(settingValue);
+                db.Connections.Update(settingValue);
             }
 
-            await _db.SaveChangesAsync();
+            await db.SaveChangesAsync();
             return settingValue;
         }
 
         public async Task Remove(int connectionId)
         {
-            var connection = await _db.Connections
+            await using var db = await _dbFactory.CreateDbContextAsync();
+            var connection = await db.Connections
                 .FirstOrDefaultAsync(item => item.ConnectionId == connectionId);
             if (connection == null)
                 return;
-            _db.Connections.Remove(connection);
-            await _db.SaveChangesAsync();
+            db.Connections.Remove(connection);
+            await db.SaveChangesAsync();
         }
 
         public async Task<ConnectionModel?> GetById(int connectionId)
         {
-            return await _db.Connections.AsNoTracking().FirstOrDefaultAsync(t => t.ConnectionId == connectionId);
+            await using var db = await _dbFactory.CreateDbContextAsync();
+            return await db.Connections.AsNoTracking().FirstOrDefaultAsync(t => t.ConnectionId == connectionId);
         }
 
         public async Task<ConnectionModel?> GetByName(string connectionName, int? workspaceId)
         {
-            var qry = _db.Connections.AsNoTracking();
+            await using var db = await _dbFactory.CreateDbContextAsync();
+            var qry = db.Connections.AsNoTracking();
             if (workspaceId == 0)
             {
                 qry = qry.Where(e => e.Name == connectionName && (e.WorkspaceId == null || e.WorkspaceId == 0));

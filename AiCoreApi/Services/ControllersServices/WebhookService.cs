@@ -83,6 +83,9 @@ namespace AiCoreApi.Services.ControllersServices
             _requestAccessor.LoginTypeString = LoginTypeEnum.Password.ToString();
             _requestAccessor.UserContext.SetLoginId(webHookLogin.LoginId);
             _requestAccessor.UserContext.SetTags(webHookLogin.Tags);
+            _requestAccessor.Tags = webHookLogin.Tags
+                .Select(tag => tag.TagId)
+                .ToList();
 
             _requestAccessor.MessageDialog = new MessageDialogViewModel
             {

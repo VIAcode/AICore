@@ -3,6 +3,7 @@ using AiCoreApi.Common.Extensions;
 using AiCoreApi.Models.DbModels;
 using AiCoreApi.Models.ViewModels;
 using System.Security.Claims;
+using Newtonsoft.Json;
 
 namespace AiCoreApi.Common
 {
@@ -10,12 +11,12 @@ namespace AiCoreApi.Common
     {
         private readonly IHttpContextAccessor? _httpContextAccessor;
         public readonly UserContextAccessor UserContext;
-        public readonly IAgentsHelper AgentsHelper;
+        [JsonIgnore] public readonly IAgentsHelper? AgentsHelper;
 
         public RequestAccessor(
             IHttpContextAccessor httpContextAccessor,
             UserContextAccessor userContextAccessor,
-            IAgentsHelper agentsHelper
+            IAgentsHelper? agentsHelper = null 
             )
         {
             AgentsHelper = agentsHelper; 
@@ -98,10 +99,28 @@ namespace AiCoreApi.Common
         public int? AgentId { get; set; }
         public MessageDialogViewModel? MessageDialog { get; set; }
 
-        public List<int> Tags => (TagsString ?? "")
-            .Split(',')
-            .Select(item => Convert.ToInt32(item))
-            .ToList();
+        private List<int>? _tags;
+        public List<int> Tags
+        {
+            get
+            {
+                if (_tags == null)
+                {
+                    _tags = (TagsString ?? "")
+                        .Split(',', StringSplitOptions.RemoveEmptyEntries)
+                        .Select(item => int.TryParse(item.Trim(), out var value) ? (int?)value : null)
+                        .Where(val => val.HasValue)
+                        .Select(val => val.Value)
+                        .ToList();
+                }
+                return _tags;
+            }
+            set
+            {
+                _tags = value;
+                TagsString = _tags == null ? "" : string.Join(",", _tags);
+            }
+        }
 
         public LoginTypeEnum LoginType => Enum.TryParse<LoginTypeEnum>(LoginTypeString, out var loginType) ? loginType : LoginTypeEnum.Password;
 

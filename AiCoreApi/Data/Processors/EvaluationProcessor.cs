@@ -6,29 +6,32 @@ namespace AiCoreApi.Data.Processors;
 
 public class EvaluationProcessor: IEvaluationProcessor
 {
-    private readonly Db _db;
+    private readonly IDbContextFactory<Db> _dbFactory;
 
-    public EvaluationProcessor(Db db)
+    public EvaluationProcessor(IDbContextFactory<Db> dbFactory)
     {
-        _db = db;
+        _dbFactory = dbFactory;
     }
 
     public async Task<EvaluationModel?> Get(int evaluationId)
     {
-        return await _db.Evaluation.AsNoTracking().FirstOrDefaultAsync(e => e.EvaluationId == evaluationId);
+        await using var db = await _dbFactory.CreateDbContextAsync();
+        return await db.Evaluation.AsNoTracking().FirstOrDefaultAsync(e => e.EvaluationId == evaluationId);
     }
 
     public async Task<EvaluationModel?> Get(string evaluationName, int workspaceId)
     {
+        await using var db = await _dbFactory.CreateDbContextAsync();
         if (string.IsNullOrEmpty(evaluationName))
             return null;
-        var qry = _db.Evaluation.AsNoTracking().Where(e => e.Name == evaluationName && e.WorkspaceId == workspaceId);
+        var qry = db.Evaluation.AsNoTracking().Where(e => e.Name == evaluationName && e.WorkspaceId == workspaceId);
         return await qry.FirstOrDefaultAsync();
     }
 
     public async Task<List<EvaluationModel>> List(int workspaceId)
     {
-        var qry = _db.Evaluation.OrderByDescending(item => item.EvaluationId).AsNoTracking();
+        await using var db = await _dbFactory.CreateDbContextAsync();
+        var qry = db.Evaluation.OrderByDescending(item => item.EvaluationId).AsNoTracking();
         qry = qry.Where(e => e.WorkspaceId == workspaceId);
         var data = await qry.ToListAsync();
         return data;
@@ -36,32 +39,35 @@ public class EvaluationProcessor: IEvaluationProcessor
 
     public async Task Delete(int evaluationId)
     {
-        var evaluation = await _db.Evaluation.FirstOrDefaultAsync(item => item.EvaluationId == evaluationId);
+        await using var db = await _dbFactory.CreateDbContextAsync();
+        var evaluation = await db.Evaluation.FirstOrDefaultAsync(item => item.EvaluationId == evaluationId);
         if (evaluation == null) return;
-        _db.Evaluation.Remove(evaluation);
-        await _db.SaveChangesAsync();
+        db.Evaluation.Remove(evaluation);
+        await db.SaveChangesAsync();
     }
 
     public async Task<EvaluationModel> Add(EvaluationModel evaluationModel)
     {
+        await using var db = await _dbFactory.CreateDbContextAsync();
         if (evaluationModel.EvaluationId != 0) 
             throw new ArgumentException("Evaluation identifier must be zero");
 
-        await _db.Evaluation.AddAsync(evaluationModel);
-        await _db.SaveChangesAsync();
+        await db.Evaluation.AddAsync(evaluationModel);
+        await db.SaveChangesAsync();
 
         return evaluationModel;
     }
 
     public async Task<EvaluationModel> Update(EvaluationModel evaluationModel)
     {
+        await using var db = await _dbFactory.CreateDbContextAsync();
         if (evaluationModel.EvaluationId == 0) 
             throw new ArgumentException("Evaluation identifier mustn't be zero");
 
-        var existingEvaluation = await _db.Evaluation.FirstAsync(item => item.EvaluationId == evaluationModel.EvaluationId);
-        _db.Entry(existingEvaluation).CurrentValues.SetValues(evaluationModel);
-        _db.Evaluation.Update(existingEvaluation);
-        await _db.SaveChangesAsync();
+        var existingEvaluation = await db.Evaluation.FirstAsync(item => item.EvaluationId == evaluationModel.EvaluationId);
+        db.Entry(existingEvaluation).CurrentValues.SetValues(evaluationModel);
+        db.Evaluation.Update(existingEvaluation);
+        await db.SaveChangesAsync();
         return existingEvaluation;
     }
 }

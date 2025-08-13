@@ -32,7 +32,7 @@ namespace AiCoreApi.Services.IngestionServices
             var embeddingConnectionModel = new EmbeddingConnectionModel().Populate(embeddingConnection);
             await _dataIngestionHelperService.FillVectorDbConnection(ingestion, embeddingConnectionModel);
 
-            var documentMetadataModels = _documentMetadataProcessor.GetByIngestion(ingestionId);
+            var documentMetadataModels = await _documentMetadataProcessor.GetByIngestion(ingestionId);
             var i = 0;
             foreach (var documentMetadataModel in documentMetadataModels)
             {
