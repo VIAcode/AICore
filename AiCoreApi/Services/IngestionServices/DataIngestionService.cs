@@ -23,8 +23,11 @@ namespace AiCoreApi.Services.IngestionServices
                 throw new InvalidOperationException($"Data source '{ingestionId}' not found.");
 
             var service = _ingestionWorkerFactory.GetService(ingestion);
-            await service.Process(ingestion, taskId);
-
+            if (!ingestion.Content.ContainsKey(DataIngestionHelperService.Constants.AutoSyncField) ||
+                ingestion.Content[DataIngestionHelperService.Constants.AutoSyncField].ToLower() == "true")
+            {
+                await service.Process(ingestion, taskId);
+            }
             await _ingestionProcessor.SetSyncTime(ingestionId, DateTime.UtcNow);
         }
 
