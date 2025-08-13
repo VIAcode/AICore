@@ -68,7 +68,7 @@ namespace AiCoreApi.Services.ControllersServices
                     ? DateTime.UtcNow.AddDays(_config.PermanentTokenExpirationTimeDays)
                     : DateTime.UtcNow.AddMinutes(_config.TokenExpirationTimeMinutes)
             };
-            _loginHistoryProcessor.Add(loginHistory);
+            await _loginHistoryProcessor.Add(loginHistory);
             return loginHistory.Code;
         }
 
@@ -138,7 +138,7 @@ namespace AiCoreApi.Services.ControllersServices
                     ? DateTime.UtcNow.AddDays(_config.PermanentTokenExpirationTimeDays)
                     : DateTime.UtcNow.AddMinutes(_config.TokenExpirationTimeMinutes)
             };
-            _loginHistoryProcessor.Add(loginHistory);
+            await _loginHistoryProcessor.Add(loginHistory);
             return loginHistory.Code;
         }
 
@@ -202,7 +202,7 @@ namespace AiCoreApi.Services.ControllersServices
                     ? DateTime.UtcNow.AddDays(_config.PermanentTokenExpirationTimeDays)
                     : DateTime.UtcNow.AddMinutes(_config.TokenExpirationTimeMinutes)
             };
-            _loginHistoryProcessor.Add(loginHistory);
+            await _loginHistoryProcessor.Add(loginHistory);
             return loginHistory.Code;
         }
 
@@ -300,7 +300,7 @@ namespace AiCoreApi.Services.ControllersServices
 
         public async Task<TokenModel?> GetByCode(string code, string codeVerifier)
         {
-            var loginHistory = _loginHistoryProcessor.GetByCode(code);
+            var loginHistory = await _loginHistoryProcessor.GetByCode(code);
             if (loginHistory == null)
                 return null;
 
@@ -312,7 +312,7 @@ namespace AiCoreApi.Services.ControllersServices
 
         public async Task<TokenModel?> GetByRefreshToken(string refreshToken)
         {
-            var loginHistory = _loginHistoryProcessor.GetByRefreshToken(refreshToken);
+            var loginHistory = await _loginHistoryProcessor.GetByRefreshToken(refreshToken);
             if (loginHistory == null)
                 return null;
             return await GetTokenModel(loginHistory);
@@ -339,7 +339,7 @@ namespace AiCoreApi.Services.ControllersServices
             loginHistory.ValidUntilTime = isPermanentToken
                 ? DateTime.UtcNow.AddDays(_config.PermanentTokenExpirationTimeDays)
                 : DateTime.UtcNow.AddMinutes(_config.TokenExpirationTimeMinutes);
-            _loginHistoryProcessor.Update(loginHistory);
+            await _loginHistoryProcessor.Update(loginHistory);
 
             var login = await _loginProcessor.GetById(loginHistory.LoginId);
 
@@ -437,15 +437,15 @@ namespace AiCoreApi.Services.ControllersServices
             return idToken;
         }
 
-        public void Logout(string idToken)
+        public async Task Logout(string idToken)
         {
             var jsonToken = new JwtSecurityTokenHandler().ReadToken(idToken) as JwtSecurityToken;
             var sessionId = Convert.ToInt32(jsonToken?.Payload[IdTokenClaims.SessionId].ToString());
-            var loginHistory = _loginHistoryProcessor.GetBySessionId(sessionId);
+            var loginHistory = await _loginHistoryProcessor.GetBySessionId(sessionId);
             if (loginHistory == null)
                 return;
             loginHistory.ValidUntilTime = DateTime.UtcNow;
-            _loginHistoryProcessor.Update(loginHistory);
+            await _loginHistoryProcessor.Update(loginHistory);
             if(_monitoringConfig.LogLoginLogout)
                 _logger.LogCritical("[{DateTime}][User Logout] Login: {Login}, Session id: {sessionId}", DateTime.UtcNow.ToString("g"), loginHistory.Login, sessionId);
         }
@@ -458,6 +458,6 @@ namespace AiCoreApi.Services.ControllersServices
         Task<TokenModel?> GetByCode(string code, string codeVerifier);
         Task<TokenModel?> GetByRefreshToken(string refreshToken);
         Task<LoginModel?> CheckAccessToken(string accessToken);
-        void Logout(string idToken);
+        Task Logout(string idToken);
     }
 }

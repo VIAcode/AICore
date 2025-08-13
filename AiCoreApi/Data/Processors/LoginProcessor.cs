@@ -7,18 +7,17 @@ namespace AiCoreApi.Data.Processors
 {
     public class LoginProcessor : ILoginProcessor
     {
-        private readonly IDbQuery _dbQuery;
-        private readonly Db _db;
+        private readonly IDbContextFactory<Db> _dbFactory;
 
-        public LoginProcessor(Db db, IDbQuery dbQuery)
+        public LoginProcessor(IDbContextFactory<Db> dbFactory)
         {
-            _dbQuery = dbQuery;
-            _db = db;
+            _dbFactory = dbFactory;
         }
 
         public async Task<LoginModel?> GetByCredentials(string login, string password)
         {
-            var loginModel = await _db.Login.Include(e => e.Tags).AsNoTracking()
+            await using var db = await _dbFactory.CreateDbContextAsync();
+            var loginModel = await db.Login.Include(e => e.Tags).AsNoTracking()
                 .FirstOrDefaultAsync(item => item.Login == login && item.LoginType == LoginTypeEnum.Password);
             return loginModel == null || !loginModel.IsEnabled || loginModel.PasswordHash != password.GetHash()
                 ? null
@@ -27,15 +26,17 @@ namespace AiCoreApi.Data.Processors
 
         public async Task<List<LoginModel>> List()
         {
-            return await _db.Login.Include(e => e.Tags).AsNoTracking().ToListAsync();
+            await using var db = await _dbFactory.CreateDbContextAsync();
+            return await db.Login.Include(e => e.Tags).AsNoTracking().ToListAsync();
         }
 
         public async Task<List<LoginWithSpentModel>> ListWithSpent()
         {
-            var loginModelExtended = await _db.Login
+            await using var db = await _dbFactory.CreateDbContextAsync();
+            var loginModelExtended = await db.Login
                 .Include(e => e.Tags)
                 .GroupJoin(
-                    _db.Spent
+                    db.Spent
                         .Where(x => x.Date == DateTime.UtcNow.Date)
                         .GroupBy(x => x.LoginId)
                         .Select(group => new
@@ -64,7 +65,8 @@ namespace AiCoreApi.Data.Processors
 
         public async Task<LoginModel?> GetById(int id)
         {
-            var login = await _db.Login.AsNoTracking()
+            await using var db = await _dbFactory.CreateDbContextAsync();
+            var login = await db.Login.AsNoTracking()
                 .Include(e => e.Tags)
                 .Include(e => e.Groups).AsNoTracking()
                 .FirstOrDefaultAsync(item => item.LoginId == id);
@@ -73,7 +75,8 @@ namespace AiCoreApi.Data.Processors
 
         public async Task<LoginModel?> GetByLogin(string login, LoginTypeEnum loginType)
         {
-            return await _db.Login.AsNoTracking()
+            await using var db = await _dbFactory.CreateDbContextAsync();
+            return await db.Login.AsNoTracking()
                 .Include(e => e.Tags).AsNoTracking()
                 .Include(e => e.Groups).AsNoTracking()
                 .FirstOrDefaultAsync(item => item.Login == login && item.LoginType == loginType);
@@ -81,7 +84,8 @@ namespace AiCoreApi.Data.Processors
 
         public async Task<List<TagModel>> GetTagsByLogin(string login, LoginTypeEnum loginType)
         {
-            var loginModel = await _db.Login.AsNoTracking()
+            await using var db = await _dbFactory.CreateDbContextAsync();
+            var loginModel = await db.Login.AsNoTracking()
                 .Include(e => e.Tags)
                 .Include(e => e.Groups).ThenInclude(e => e.Tags)
                 .AsNoTracking()
@@ -106,7 +110,8 @@ namespace AiCoreApi.Data.Processors
 
         public async Task Update(LoginModel loginModel)
         {
-            var existingLogin = await _db.Login
+            await using var db = await _dbFactory.CreateDbContextAsync();
+            var existingLogin = await db.Login
                 .Include(e => e.Tags)
                 .Include(e => e.Groups)
                 .FirstOrDefaultAsync(item => item.Login == loginModel.Login && loginModel.LoginType == item.LoginType);
@@ -118,33 +123,35 @@ namespace AiCoreApi.Data.Processors
             var gIds = loginModel.Groups.Select(e => e.GroupId);
 
             var tags = tIds.Any()
-                ? await _db.Tags.Where(e => tIds.Contains(e.TagId)).ToListAsync()
+                ? await db.Tags.Where(e => tIds.Contains(e.TagId)).ToListAsync()
                 : new List<TagModel>();
 
             var groups = gIds.Any()
-                ? await _db.Groups.Where(e => gIds.Contains(e.GroupId)).ToListAsync()
+                ? await db.Groups.Where(e => gIds.Contains(e.GroupId)).ToListAsync()
             : new List<GroupModel>();
 
-            _db.Entry(existingLogin).CurrentValues.SetValues(loginModel);
+            db.Entry(existingLogin).CurrentValues.SetValues(loginModel);
 
             existingLogin.Tags = tags;
             existingLogin.Groups = groups;
 
-            _db.Login.Update(existingLogin);
-            await _db.SaveChangesAsync();
+            db.Login.Update(existingLogin);
+            await db.SaveChangesAsync();
         }
 
         public async Task Delete(int id)
         {
-            var login = await _db.Login.FirstOrDefaultAsync(item => item.LoginId == id);
+            await using var db = await _dbFactory.CreateDbContextAsync();
+            var login = await db.Login.FirstOrDefaultAsync(item => item.LoginId == id);
             if (login == null) return;
-            _db.Login.Remove(login);
-            await _db.SaveChangesAsync();
+            db.Login.Remove(login);
+            await db.SaveChangesAsync();
         }
 
         public async Task<LoginModel> Add(LoginModel loginModel)
         {
-            var existingLogin = await _db.Login
+            await using var db = await _dbFactory.CreateDbContextAsync();
+            var existingLogin = await db.Login
                 .Include(e => e.Tags)
                 .Include(e => e.Groups)
                 .FirstOrDefaultAsync(item => item.Login == loginModel.Login && loginModel.LoginType == item.LoginType);
@@ -153,7 +160,7 @@ namespace AiCoreApi.Data.Processors
 
             if(loginModel.Tags != null && loginModel.Tags.Count > 0)
             {
-                var tags = _db.Tags.ToList();
+                var tags = db.Tags.ToList();
                 var tIds = loginModel.Tags.Select(e => e.TagId);
 
                 loginModel.Tags = tags.Where(e => tIds.Contains(e.TagId)).ToList();
@@ -161,14 +168,14 @@ namespace AiCoreApi.Data.Processors
 
             if (loginModel.Groups != null && loginModel.Groups.Count > 0)
             {
-                var groups = _db.Groups.ToList();
+                var groups = db.Groups.ToList();
                 var gIds = loginModel.Groups.Select(e => e.GroupId);
 
                 loginModel.Groups = groups.Where(e => gIds.Contains(e.GroupId)).ToList();
             }
 
-            await _db.Login.AddAsync(loginModel);
-            await _db.SaveChangesAsync();
+            await db.Login.AddAsync(loginModel);
+            await db.SaveChangesAsync();
             return loginModel;
         }
     }

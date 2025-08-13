@@ -27,16 +27,16 @@ public class TagsController : ControllerBase
 
     [Authorize]
     [HttpGet("{tagId}")]
-    public IActionResult GetTag(int tagId)
+    public async Task<IActionResult> GetTag(int tagId)
     {
-        return Ok(_tagsService.GetTag(tagId));
+        return Ok(await _tagsService.GetTag(tagId));
     }
 
     [HttpGet]
     [Authorize]
-    public IActionResult List()
+    public async Task<IActionResult> List()
     {
-        return Ok(_tagsService.ListTags());
+        return Ok(await _tagsService.ListTags());
     }
 
     [HttpGet("my")]

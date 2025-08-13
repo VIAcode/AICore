@@ -4,92 +4,99 @@ using AiCoreApi.Models.DbModels;
 
 namespace AiCoreApi.Services.ProcessingServices
 {
-    internal class IngestionSchedulerHostedService : IHostedService, IDisposable
+    public sealed class IngestionSchedulerHostedService : BackgroundService
     {
         private const string ServiceName = "Scheduler";
         private const int CheckIntervalSeconds = 600;
         private const int MaxTasksCount = 2;
 
-        private readonly IIngestionProcessor _ingestionProcessor;
-        private readonly ITaskProcessor _taskProcessor;
+        private readonly IServiceScopeFactory _scopeFactory;
         private readonly IInstanceSync _instanceSync;
         private readonly ILogger<IngestionSchedulerHostedService> _logger;
 
-        private Timer? _timer;
-
-        public IngestionSchedulerHostedService(
-            IIngestionProcessor ingestionProcessor,
-            ITaskProcessor taskProcessor,
-            IInstanceSync instanceSync,
-            ILogger<IngestionSchedulerHostedService> logger)
+        public IngestionSchedulerHostedService(IServiceScopeFactory scopeFactory, IInstanceSync instanceSync, ILogger<IngestionSchedulerHostedService> logger)
         {
-            _ingestionProcessor = ingestionProcessor;
-            _taskProcessor = taskProcessor;
+            _scopeFactory = scopeFactory;
             _instanceSync = instanceSync;
             _logger = logger;
         }
 
-        public async Task StartAsync(CancellationToken cancellationToken)
+        public override async Task StartAsync(CancellationToken cancellationToken)
         {
-            await _taskProcessor.ResetUnfinishedTasks();
-
-            _timer = new Timer(Process, null, TimeSpan.Zero, Timeout.InfiniteTimeSpan);
+            using var scope = _scopeFactory.CreateScope();
+            var taskProcessor = scope.ServiceProvider.GetRequiredService<ITaskProcessor>();
+            await taskProcessor.ResetUnfinishedTasks();
+            await base.StartAsync(cancellationToken);
         }
 
-        public async void Process(object? state)
+        protected override async Task ExecuteAsync(CancellationToken ct)
         {
-            // Check if this is the main instance, only the main instance should process Ingestion tasks
-            if (!_instanceSync.IsMainInstance)
-                return;
+            var timer = new PeriodicTimer(TimeSpan.FromSeconds(CheckIntervalSeconds));
 
             try
             {
-                await ProcessSync();
+                await RunOnceAsync(ct);
 
-                await _taskProcessor.ClearHistory();
+                while (await timer.WaitForNextTickAsync(ct))
+                {
+                    await RunOnceAsync(ct);
+                }
             }
-            catch (Exception e)
+            catch (OperationCanceledException) when (ct.IsCancellationRequested) { }
+            catch (Exception ex)
             {
-                _logger.LogError(e, $"{ServiceName} service error.");
-            }
-            finally
-            {
-                _timer?.Change(TimeSpan.FromSeconds(CheckIntervalSeconds), Timeout.InfiniteTimeSpan);
+                _logger.LogError(ex, "{Service} crashed.", ServiceName);
             }
         }
 
-        private async Task ProcessSync()
+        private async Task RunOnceAsync(CancellationToken ct)
         {
-            var ingestions = _ingestionProcessor.GetStale().Take(MaxTasksCount);
+            if (!_instanceSync.IsMainInstance) return;
+
+            try
+            {
+                using var scope = _scopeFactory.CreateScope();
+                var ingestionProcessor = scope.ServiceProvider.GetRequiredService<IIngestionProcessor>();
+                var taskProcessor = scope.ServiceProvider.GetRequiredService<ITaskProcessor>();
+
+                await ProcessSyncAsync(ingestionProcessor, taskProcessor, ct);
+
+                await taskProcessor.ClearHistory();
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested) { }
+            catch (Exception e)
+            {
+                _logger.LogError(e, "{Service} service error.", ServiceName);
+            }
+        }
+
+        private static async Task ProcessSyncAsync(IIngestionProcessor ingestionProcessor, ITaskProcessor taskProcessor, CancellationToken ct)
+        {
+            var ingestions = (await ingestionProcessor.GetStale())
+               .Take(MaxTasksCount)
+               .ToList();
+
             foreach (var ingestion in ingestions)
             {
-                var tasks = _taskProcessor.GetByIngestion(ingestion.IngestionId);
+                var tasks = await taskProcessor.GetByIngestion(ingestion.IngestionId);
                 var active = tasks.FirstOrDefault(t =>
-                    t.Type == TaskType.DataSync && t.State is TaskState.InProgress or TaskState.New);
+                    t.Type == TaskType.DataSync &&
+                    (t.State == TaskState.InProgress || t.State == TaskState.New));
+
                 if (active != null)
                 {
-                    return;
+                    continue;
                 }
 
                 var task = new TaskModel
                 {
                     IngestionId = ingestion.IngestionId,
                     Type = TaskType.DataSync,
-                    CreatedBy = ServiceName,
+                    CreatedBy = ServiceName
                 };
-                await _taskProcessor.ScheduleTask(task);
+
+                await taskProcessor.ScheduleTask(task);
             }
-        }
-
-        public Task StopAsync(CancellationToken cancellationToken)
-        {
-            _timer?.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
-            return Task.CompletedTask;
-        }
-
-        public void Dispose()
-        {
-            _timer?.Dispose();
         }
     }
 }

@@ -6,20 +6,22 @@ namespace AiCoreApi.Data.Processors;
 
 public class TagsProcessor : ITagsProcessor
 {
-    private readonly Db _db;
+    private readonly IDbContextFactory<Db> _dbFactory;
 
-    public TagsProcessor(Db db)
+    public TagsProcessor(IDbContextFactory<Db> dbFactory)
     {
-        _db = db;
+        _dbFactory = dbFactory;
     }
 
-    public TagModel? Get(int tagId)
+    public async Task<TagModel?> Get(int tagId)
     {
-        return _db.Tags.AsNoTracking().FirstOrDefault(item => item.TagId == tagId);
+        await using var db = await _dbFactory.CreateDbContextAsync();
+        return await db.Tags.AsNoTracking().FirstOrDefaultAsync(item => item.TagId == tagId);
     }
 
     public async Task<TagModel?> Set(TagModel tagModel)
     {
+        await using var db = await _dbFactory.CreateDbContextAsync();
         TagModel? tag;
         if (tagModel.TagId == 0)
         {
@@ -32,11 +34,11 @@ public class TagsProcessor : ITagsProcessor
                 CreatedBy = tagModel.CreatedBy,
                 Color = tagModel.Color
             };
-            await _db.Tags.AddAsync(tag);
+            await db.Tags.AddAsync(tag);
         }
         else
         {
-            tag = _db.Tags.FirstOrDefault(item => item.TagId == tagModel.TagId);
+            tag = db.Tags.FirstOrDefault(item => item.TagId == tagModel.TagId);
 
             if (tag == null) return null;
 
@@ -44,15 +46,16 @@ public class TagsProcessor : ITagsProcessor
             tag.Name = tagModel.Name;
             tag.Description = tagModel.Description;
             tag.Color = tagModel.Color;
-            _db.Tags.Update(tag);
+            db.Tags.Update(tag);
         }
-        await _db.SaveChangesAsync();
+        await db.SaveChangesAsync();
         return tag;
     }
 
-    public List<TagModel> List()
+    public async Task<List<TagModel>> List()
     {
-        return _db.Tags.
+        await using var db = await _dbFactory.CreateDbContextAsync();
+        return await db.Tags.
             Select(item => new TagModel
             {
                 TagId = item.TagId,
@@ -62,30 +65,31 @@ public class TagsProcessor : ITagsProcessor
                 CreatedBy = item.CreatedBy,
                 Color = item.Color,
             })
-            .AsNoTracking().ToList();
+            .AsNoTracking().ToListAsync();
     }
 
     public async Task<bool> Remove(int tagId)
     {
-        var tag = await _db.Tags.FirstOrDefaultAsync(item => item.TagId == tagId);
+        await using var db = await _dbFactory.CreateDbContextAsync();
+        var tag = await db.Tags.FirstOrDefaultAsync(item => item.TagId == tagId);
         if (tag != null)
         {
             // Check if the tag is in use in Ingestions, we cannot delete it
-            var isInUse = await _db.Tags
+            var isInUse = await db.Tags
                 .FromSqlRaw("SELECT * FROM tags_x_ingestions WHERE tags_tag_id = {0}", tagId)
                 .AnyAsync();
             if (isInUse)
                 return false;
 
             // Clean up many-to-many relations
-            await _db.Database.ExecuteSqlRawAsync("DELETE FROM tags_x_groups WHERE tags_tag_id = {0}", tagId);
-            await _db.Database.ExecuteSqlRawAsync("DELETE FROM tags_x_logins WHERE tags_tag_id = {0}", tagId);
-            await _db.Database.ExecuteSqlRawAsync("DELETE FROM tags_x_rbac_role_sync WHERE tags_tag_id = {0}", tagId);
-            await _db.Database.ExecuteSqlRawAsync("DELETE FROM tags_x_agents WHERE tags_tag_id = {0}", tagId);
-            await _db.Database.ExecuteSqlRawAsync("DELETE FROM tags_x_workspaces WHERE tags_tag_id = {0}", tagId);
+            await db.Database.ExecuteSqlRawAsync("DELETE FROM tags_x_groups WHERE tags_tag_id = {0}", tagId);
+            await db.Database.ExecuteSqlRawAsync("DELETE FROM tags_x_logins WHERE tags_tag_id = {0}", tagId);
+            await db.Database.ExecuteSqlRawAsync("DELETE FROM tags_x_rbac_role_sync WHERE tags_tag_id = {0}", tagId);
+            await db.Database.ExecuteSqlRawAsync("DELETE FROM tags_x_agents WHERE tags_tag_id = {0}", tagId);
+            await db.Database.ExecuteSqlRawAsync("DELETE FROM tags_x_workspaces WHERE tags_tag_id = {0}", tagId);
 
-            _db.Tags.Remove(tag);
-            await _db.SaveChangesAsync();
+            db.Tags.Remove(tag);
+            await db.SaveChangesAsync();
         }
         return true;
     }
@@ -93,8 +97,8 @@ public class TagsProcessor : ITagsProcessor
 
 public interface ITagsProcessor
 {
-    TagModel? Get(int tagId);
+    Task<TagModel?> Get(int tagId);
     Task<TagModel?> Set(TagModel tagModel);
-    List<TagModel> List();
+    Task<List<TagModel>> List();
     Task<bool> Remove(int tagId);
 }

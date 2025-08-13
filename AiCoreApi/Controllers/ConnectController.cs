@@ -182,9 +182,9 @@ namespace AiCoreApi.Controllers
         }
 
         [HttpGet("logout")]
-        public IActionResult Logout([FromQuery(Name = "id_token_hint")] string idToken, [FromQuery(Name = "post_logout_redirect_uri")] string postLogoutRedirectUri = "")
+        public async Task<IActionResult> Logout([FromQuery(Name = "id_token_hint")] string idToken, [FromQuery(Name = "post_logout_redirect_uri")] string postLogoutRedirectUri = "")
         {
-            _connectService.Logout(idToken);
+            await _connectService.Logout(idToken);
             if (string.IsNullOrEmpty(postLogoutRedirectUri))
                 return Ok();
             return Redirect(postLogoutRedirectUri);

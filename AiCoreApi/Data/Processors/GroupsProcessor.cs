@@ -1,5 +1,4 @@
-﻿using AiCoreApi.Common;
-using AiCoreApi.Common.Data;
+﻿using AiCoreApi.Common.Data;
 using AiCoreApi.Models.DbModels;
 using Microsoft.EntityFrameworkCore;
 
@@ -7,20 +6,17 @@ namespace AiCoreApi.Data.Processors;
 
 public class GroupsProcessor : IGroupsProcessor
 {
-    private readonly Db _db;
-    private readonly IDbQuery _dbQuery;
-    private readonly ExtendedConfig _config;
+    private readonly IDbContextFactory<Db> _dbFactory;
 
-    public GroupsProcessor(Db db, IDbQuery dbQuery, ExtendedConfig config)
+    public GroupsProcessor(IDbContextFactory<Db> dbFactory)
     {
-        _db = db;
-        _dbQuery = dbQuery;
-        _config = config;
+        _dbFactory = dbFactory;
     }
 
     public async Task<GroupModel?> Get(int groupId)
     {
-        var data = await _db.Groups
+        await using var db = await _dbFactory.CreateDbContextAsync();
+        var data = await db.Groups
             .Include(e => e.Tags)
             .Include(e => e.Logins)
             .AsNoTracking()
@@ -30,7 +26,8 @@ public class GroupsProcessor : IGroupsProcessor
 
     public async Task<GroupModel?> Get(string groupName)
     {
-        var data = await _db.Groups
+        await using var db = await _dbFactory.CreateDbContextAsync();
+        var data = await db.Groups
             .Include(e => e.Tags)
             .Include(e => e.Logins)
             .AsNoTracking()
@@ -40,6 +37,7 @@ public class GroupsProcessor : IGroupsProcessor
 
     public async Task<GroupModel> Set(GroupModel groupModel)
     {
+        await using var db = await _dbFactory.CreateDbContextAsync();
         GroupModel? group;
 
         var gId = groupModel.GroupId;
@@ -47,11 +45,11 @@ public class GroupsProcessor : IGroupsProcessor
         var uIds = groupModel.Logins.Select(e => e.LoginId);
 
         var tags = tIds.Any() 
-            ? await _db.Tags.Where(e => tIds.Contains(e.TagId)).ToListAsync()
+            ? await db.Tags.Where(e => tIds.Contains(e.TagId)).ToListAsync()
             : new List<TagModel>();
 
         var users = uIds.Any()
-            ? await _db.Login.Where(e => uIds.Contains(e.LoginId)).ToListAsync()
+            ? await db.Login.Where(e => uIds.Contains(e.LoginId)).ToListAsync()
             : new List<LoginModel>();
         
         if (gId == 0)
@@ -66,11 +64,11 @@ public class GroupsProcessor : IGroupsProcessor
                 Logins = users
             };
 
-            await _db.Groups.AddAsync(group);
+            await db.Groups.AddAsync(group);
         }
         else
         {
-            group = await _db.Groups
+            group = await db.Groups
                 .Include(e => e.Tags)
                 .Include(e => e.Logins)
                 .FirstAsync(e => e.GroupId == gId);
@@ -82,16 +80,17 @@ public class GroupsProcessor : IGroupsProcessor
             group.Tags = tags;
             group.Logins = users;
 
-            _db.Groups.Update(group);
+            db.Groups.Update(group);
         }
 
-        await _db.SaveChangesAsync();
+        await db.SaveChangesAsync();
         return group;
     }
 
     public async Task<List<GroupModel>> List()
     {
-        var data = await _db.Groups.Include(e => e.Tags).AsNoTracking().ToListAsync();
+        await using var db = await _dbFactory.CreateDbContextAsync();
+        var data = await db.Groups.Include(e => e.Tags).AsNoTracking().ToListAsync();
         return data;
     }
 }

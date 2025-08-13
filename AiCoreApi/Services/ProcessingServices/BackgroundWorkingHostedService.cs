@@ -5,81 +5,86 @@ using AiCoreApi.Services.ProcessingServices.AgentsHandlers;
 
 namespace AiCoreApi.Services.ProcessingServices
 {
-    public class BackgroundWorkingHostedService : IHostedService
+    public sealed class BackgroundWorkingHostedService : BackgroundService
     {
-        private readonly ISchedulerAgentService _schedulerAgentService;
-        private readonly IAgentsProcessor _agentsProcessor;
-        private readonly IBackgroundWorkerAgentService _backgroundWorkerAgentService;
-        private readonly IAzureServiceBusListenerAgentService _azureServiceBusListenerAgentService;
-        private readonly IRabbitMqListenerAgentService _rabbitMqListenerAgentService;
-        private readonly IImapListenerAgentService _imapListenerAgentService;
-        private readonly IDebugLogsProcessingService _debugLogsProcessingService;
-        private readonly IGraphMailListenerAgentService _graphMailListenerAgentService;
-        private readonly IGraphTeamsListenerAgentService _graphTeamsListenerAgentService;
+        private readonly IServiceScopeFactory _scopeFactory;
         private readonly IInstanceSync _instanceSync;
         private readonly Config _config;
+        private readonly ILogger<BackgroundWorkingHostedService> _logger;
 
         public BackgroundWorkingHostedService(
-            IAgentsProcessor agentsProcessor,
-            ISchedulerAgentService schedulerAgentService,
-            IBackgroundWorkerAgentService backgroundWorkerAgentService,
-            IAzureServiceBusListenerAgentService azureServiceBusListenerAgentService,
-            IRabbitMqListenerAgentService rabbitMqListenerAgentService,
-            IImapListenerAgentService imapListenerAgentService,
-            IDebugLogsProcessingService debugLogsProcessingService,
-            IGraphMailListenerAgentService graphMailListenerAgentService,
-            IGraphTeamsListenerAgentService graphTeamsListenerAgentService,
+            IServiceScopeFactory scopeFactory,
             IInstanceSync instanceSync,
-            Config config)
+            Config config,
+            ILogger<BackgroundWorkingHostedService> logger)
         {
-            _agentsProcessor = agentsProcessor;
-            _schedulerAgentService = schedulerAgentService;
-            _backgroundWorkerAgentService = backgroundWorkerAgentService;
-            _azureServiceBusListenerAgentService = azureServiceBusListenerAgentService;
-            _rabbitMqListenerAgentService = rabbitMqListenerAgentService;
-            _imapListenerAgentService = imapListenerAgentService;
-            _debugLogsProcessingService = debugLogsProcessingService;
-            _graphMailListenerAgentService = graphMailListenerAgentService;
-            _graphTeamsListenerAgentService = graphTeamsListenerAgentService;
+            _scopeFactory = scopeFactory;
             _instanceSync = instanceSync;
             _config = config;
+            _logger = logger;
         }
 
-        public async Task StartAsync(CancellationToken cancellationToken)
+        protected override async Task ExecuteAsync(CancellationToken ct)
         {
-            while (!cancellationToken.IsCancellationRequested)
+            var timer = new PeriodicTimer(TimeSpan.FromSeconds(3));
+
+            try
             {
-                var agents = await _agentsProcessor.List(null);
-                await _azureServiceBusListenerAgentService.ProcessTask(agents);
-                await _rabbitMqListenerAgentService.ProcessTask(agents);
-                await _debugLogsProcessingService.ProcessTask();
-                if (_instanceSync.IsMainInstance)
+                while (await timer.WaitForNextTickAsync(ct))
                 {
-                    await _backgroundWorkerAgentService.ProcessTask();
-                    await _schedulerAgentService.ProcessTask(agents);
-                    await _imapListenerAgentService.ProcessTask(agents);
-                    await _graphMailListenerAgentService.ProcessTask(agents);
-                    await _graphTeamsListenerAgentService.ProcessTask(agents);
+                    using var scope = _scopeFactory.CreateScope();
+
+                    var agentsProcessor = scope.ServiceProvider.GetRequiredService<IAgentsProcessor>();
+                    var schedulerAgentService = scope.ServiceProvider.GetRequiredService<ISchedulerAgentService>();
+                    var backgroundWorkerAgentService = scope.ServiceProvider.GetRequiredService<IBackgroundWorkerAgentService>();
+                    var azureServiceBusListenerService = scope.ServiceProvider.GetRequiredService<IAzureServiceBusListenerAgentService>();
+                    var rabbitListenerService = scope.ServiceProvider.GetRequiredService<IRabbitMqListenerAgentService>();
+                    var imapListenerService = scope.ServiceProvider.GetRequiredService<IImapListenerAgentService>();
+                    var debugLogsProcessingService = scope.ServiceProvider.GetRequiredService<IDebugLogsProcessingService>();
+                    var graphMailListenerAgentService = scope.ServiceProvider.GetRequiredService<IGraphMailListenerAgentService>();
+                    var graphTeamsListenerAgentService = scope.ServiceProvider.GetRequiredService<IGraphTeamsListenerAgentService>();
+
+                    var agents = await agentsProcessor.List(null);
+
+                    var tasks = new List<Task>
+                    {
+                        azureServiceBusListenerService.ProcessTask(agents),
+                        rabbitListenerService.ProcessTask(agents),
+                        debugLogsProcessingService.ProcessTask()
+                    };
+
+                    if (_instanceSync.IsMainInstance)
+                    {
+                        tasks.Add(backgroundWorkerAgentService.ProcessTask());
+                        tasks.Add(schedulerAgentService.ProcessTask(agents));
+                        tasks.Add(imapListenerService.ProcessTask(agents));
+                        tasks.Add(graphMailListenerAgentService.ProcessTask(agents));
+                        tasks.Add(graphTeamsListenerAgentService.ProcessTask(agents));
+                    }
+
+                    await Task.WhenAll(tasks);
+
+                    MaybeCompactLoh();
                 }
-                await Task.Run(AutoCompactLargeObjectHeap, cancellationToken);
-                // Await all tasks to complete in parallel
-                //await Task.WhenAll(backgroundWorkerTask, schedulerTask, azureServiceBusListenerTask, autoCompactTask);
-                await Task.Delay(TimeSpan.FromSeconds(3), cancellationToken);
             }
-        }
-
-        private void AutoCompactLargeObjectHeap()
-        {
-            if (_config.AutoCompactLargeObjectHeap)
+            catch (OperationCanceledException) when (ct.IsCancellationRequested) {  }
+            catch (Exception ex)
             {
-                GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
-                GC.Collect();
+                _logger.LogError(ex, "BackgroundWorkingHostedService crashed.");
             }
         }
 
-        public Task StopAsync(CancellationToken cancellationToken)
+        private DateTime _lastLohCompactUtc = DateTime.MinValue;
+        private void MaybeCompactLoh()
         {
-            return Task.CompletedTask;
+            if (!_config.AutoCompactLargeObjectHeap) 
+                return;
+            if ((DateTime.UtcNow - _lastLohCompactUtc) < TimeSpan.FromMinutes(5)) 
+                return;
+
+            GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
+            GC.Collect();
+            _lastLohCompactUtc = DateTime.UtcNow;
         }
     }
 }

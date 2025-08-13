@@ -6,17 +6,17 @@ namespace AiCoreApi.Data.Processors
 {
     public class SchedulerAgentTaskProcessor : ISchedulerAgentTaskProcessor
     {
-        private readonly Db _db;
+        private readonly IDbContextFactory<Db> _dbFactory;
 
-        public SchedulerAgentTaskProcessor(
-            Db db)
+        public SchedulerAgentTaskProcessor(IDbContextFactory<Db> dbFactory)
         {
-            _db = db;
+            _dbFactory = dbFactory;
         }
 
         public async Task<SchedulerAgentTaskModel?> GetNext()
         {
-            return await _db.SchedulerAgentTasks
+            await using var db = await _dbFactory.CreateDbContextAsync();
+            return await db.SchedulerAgentTasks
                 .Where(x => x.SchedulerAgentTaskState == SchedulerAgentTaskState.New)
                 .OrderBy(x => x.CreatedAt)
                 .FirstOrDefaultAsync();
@@ -24,40 +24,44 @@ namespace AiCoreApi.Data.Processors
 
         public async Task<SchedulerAgentTaskModel?> GetByGuid(string schedulerAgentTaskGuid)
         {
-            return await _db.SchedulerAgentTasks
+            await using var db = await _dbFactory.CreateDbContextAsync();
+            return await db.SchedulerAgentTasks
                 .FirstOrDefaultAsync(x => x.SchedulerAgentTaskGuid == schedulerAgentTaskGuid);
         }
 
         public async Task<SchedulerAgentTaskModel> Update(SchedulerAgentTaskModel schedulerAgentTaskModel)
         {
-            var existingAgent = await _db.SchedulerAgentTasks
+            await using var db = await _dbFactory.CreateDbContextAsync();
+            var existingAgent = await db.SchedulerAgentTasks
                 .FirstOrDefaultAsync(item => item.SchedulerAgentTaskId == schedulerAgentTaskModel.SchedulerAgentTaskId);
             if (existingAgent == null)
                 return await Add(schedulerAgentTaskModel);
-            _db.Entry(existingAgent).CurrentValues.SetValues(schedulerAgentTaskModel);
-            _db.SchedulerAgentTasks.Update(existingAgent);
-            await _db.SaveChangesAsync();
+            db.Entry(existingAgent).CurrentValues.SetValues(schedulerAgentTaskModel);
+            db.SchedulerAgentTasks.Update(existingAgent);
+            await db.SaveChangesAsync();
             return existingAgent;
         }
 
         public async Task<SchedulerAgentTaskModel> Add(SchedulerAgentTaskModel schedulerAgentTaskModel)
         {
-            var existingAgent = await _db.SchedulerAgentTasks
+            await using var db = await _dbFactory.CreateDbContextAsync();
+            var existingAgent = await db.SchedulerAgentTasks
                 .FirstOrDefaultAsync(item => item.SchedulerAgentTaskId == schedulerAgentTaskModel.SchedulerAgentTaskId);
             if (existingAgent != null)
                 return existingAgent;
-            _db.SchedulerAgentTasks.Add(schedulerAgentTaskModel);
-            await _db.SaveChangesAsync();
+            db.SchedulerAgentTasks.Add(schedulerAgentTaskModel);
+            await db.SaveChangesAsync();
             return schedulerAgentTaskModel;
         }
 
         public async Task RemoveExpired()
         {
-            var expiredAgents = await _db.SchedulerAgentTasks
+            await using var db = await _dbFactory.CreateDbContextAsync();
+            var expiredAgents = await db.SchedulerAgentTasks
                 .Where(x => x.ValidTill < DateTime.UtcNow)
                 .ToListAsync();
-            _db.SchedulerAgentTasks.RemoveRange(expiredAgents);
-            await _db.SaveChangesAsync();
+            db.SchedulerAgentTasks.RemoveRange(expiredAgents);
+            await db.SaveChangesAsync();
         }
     }
 

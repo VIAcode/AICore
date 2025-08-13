@@ -30,7 +30,7 @@ namespace AiCoreApi.Services.IngestionServices
 
         public async Task Process(IngestionModel ingestion, int taskId)
         {
-            var metadata = _documentMetadataProcessor.GetByIngestion(ingestion.IngestionId);
+            var metadata = await _documentMetadataProcessor.GetByIngestion(ingestion.IngestionId);
             var file = ingestion.Content["File"];
             var fileName = ingestion.Content["FileName"];
             var translateStepModel = await _dataIngestionHelperService.GetTranslateStepModel(ingestion);

@@ -6,16 +6,17 @@ namespace AiCoreApi.Data.Processors;
 
 public class EvaluationHistoryProcessor : IEvaluationHistoryProcessor
 {
-    private readonly Db _db;
+    private readonly IDbContextFactory<Db> _dbFactory;
 
-    public EvaluationHistoryProcessor(Db db)
+    public EvaluationHistoryProcessor(IDbContextFactory<Db> dbFactory)
     {
-        _db = db;
+        _dbFactory = dbFactory;
     }
 
     public async Task<EvaluationHistoryModel?> Get(int evaluationHistoryId)
     {
-        return await _db.EvaluationHistory.AsNoTracking().FirstOrDefaultAsync(e => e.EvaluationHistoryId == evaluationHistoryId);
+        await using var db = await _dbFactory.CreateDbContextAsync();
+        return await db.EvaluationHistory.AsNoTracking().FirstOrDefaultAsync(e => e.EvaluationHistoryId == evaluationHistoryId);
     }
 
     public async Task<EvaluationHistoryModel?> GetShort(int evaluationHistoryId)
@@ -29,7 +30,8 @@ public class EvaluationHistoryProcessor : IEvaluationHistoryProcessor
 
     public async Task<List<EvaluationHistoryModel>> List(int workspaceId)
     {
-        var qry = _db.EvaluationHistory
+        await using var db = await _dbFactory.CreateDbContextAsync();
+        var qry = db.EvaluationHistory
             .AsNoTracking();
         qry = qry.OrderByDescending(item => item.EvaluationHistoryId);
         qry = qry.Where(e => e.WorkspaceId == workspaceId);
@@ -51,7 +53,8 @@ public class EvaluationHistoryProcessor : IEvaluationHistoryProcessor
 
     public async Task<List<EvaluationHistoryModel>> List(int evaluationId, int workspaceId)
     {
-        var agentNames = await _db.EvaluationHistory
+        await using var db = await _dbFactory.CreateDbContextAsync();
+        var agentNames = await db.EvaluationHistory
             .AsNoTracking()
             .Where(e => e.WorkspaceId == workspaceId && e.EvaluationId == evaluationId)
             .OrderByDescending(e => e.EvaluationHistoryId)
@@ -74,32 +77,35 @@ public class EvaluationHistoryProcessor : IEvaluationHistoryProcessor
 
     public async Task Delete(int evaluationHistoryId)
     {
-        var evaluationHistory = await _db.EvaluationHistory.FirstOrDefaultAsync(item => item.EvaluationHistoryId == evaluationHistoryId);
+        await using var db = await _dbFactory.CreateDbContextAsync();
+        var evaluationHistory = await db.EvaluationHistory.FirstOrDefaultAsync(item => item.EvaluationHistoryId == evaluationHistoryId);
         if (evaluationHistory == null) return;
-        _db.EvaluationHistory.Remove(evaluationHistory);
-        await _db.SaveChangesAsync();
+        db.EvaluationHistory.Remove(evaluationHistory);
+        await db.SaveChangesAsync();
     }
 
     public async Task<EvaluationHistoryModel> Add(EvaluationHistoryModel evaluationHistoryModel)
     {
+        await using var db = await _dbFactory.CreateDbContextAsync();
         if (evaluationHistoryModel.EvaluationHistoryId != 0) 
             throw new ArgumentException("Evaluation History identifier must be zero");
 
-        await _db.EvaluationHistory.AddAsync(evaluationHistoryModel);
-        await _db.SaveChangesAsync();
+        await db.EvaluationHistory.AddAsync(evaluationHistoryModel);
+        await db.SaveChangesAsync();
 
         return evaluationHistoryModel;
     }
 
     public async Task<EvaluationHistoryModel> Update(EvaluationHistoryModel evaluationHistoryModel)
     {
+        await using var db = await _dbFactory.CreateDbContextAsync();
         if (evaluationHistoryModel.EvaluationHistoryId == 0) 
             throw new ArgumentException("Evaluation History identifier mustn't be zero");
 
-        var existingEvaluationHistory = await _db.EvaluationHistory.FirstAsync(item => item.EvaluationHistoryId == evaluationHistoryModel.EvaluationHistoryId);
-        _db.Entry(existingEvaluationHistory).CurrentValues.SetValues(evaluationHistoryModel);
-        _db.EvaluationHistory.Update(existingEvaluationHistory);
-        await _db.SaveChangesAsync();
+        var existingEvaluationHistory = await db.EvaluationHistory.FirstAsync(item => item.EvaluationHistoryId == evaluationHistoryModel.EvaluationHistoryId);
+        db.Entry(existingEvaluationHistory).CurrentValues.SetValues(evaluationHistoryModel);
+        db.EvaluationHistory.Update(existingEvaluationHistory);
+        await db.SaveChangesAsync();
         return existingEvaluationHistory;
     }
 }

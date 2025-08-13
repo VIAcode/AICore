@@ -8,20 +8,21 @@ namespace AiCoreApi.Data.Processors
 {
     public class DebugLogProcessor : IDebugLogProcessor
     {
-        private readonly Db _db;
+        private readonly IDbContextFactory<Db> _dbFactory;
         private readonly ExtendedConfig _extendedConfig;
 
         public DebugLogProcessor(
-            Db db, 
+            IDbContextFactory<Db> dbFactory,
             ExtendedConfig extendedConfig)
         {
-            _db = db;
+            _dbFactory = dbFactory;
             _extendedConfig = extendedConfig;
         }
 
         public async Task<List<DebugLogModel>> List(DebugLogFilterModel filter, int workspaceId)
         {
-            var result = _db.DebugLog.AsNoTracking();
+            await using var db = await _dbFactory.CreateDbContextAsync();
+            var result = db.DebugLog.AsNoTracking();
             if (!string.IsNullOrEmpty(filter.Login))
                 result = result.Where(item => item.Login.Contains(filter.Login));
             if (!string.IsNullOrEmpty(filter.Result))
@@ -56,7 +57,8 @@ namespace AiCoreApi.Data.Processors
 
         public async Task<int> PagesCount(DebugLogFilterModel filter, int workspaceId)
         {
-            var result = _db.DebugLog.AsNoTracking();
+            await using var db = await _dbFactory.CreateDbContextAsync();
+            var result = db.DebugLog.AsNoTracking();
             if (!string.IsNullOrEmpty(filter.Login))
                 result = result.Where(item => item.Login.Contains(filter.Login));
             if (!string.IsNullOrEmpty(filter.Result))
@@ -75,6 +77,7 @@ namespace AiCoreApi.Data.Processors
 
         public async Task<DebugLogModel> Set(DebugLogModel debugLogModel, int workspaceId)
         {
+            await using var db = await _dbFactory.CreateDbContextAsync();
             DebugLogModel? debugLogValue;
             if (debugLogModel.DebugLogId == 0)
             {
@@ -89,11 +92,11 @@ namespace AiCoreApi.Data.Processors
                     SpentTokens = debugLogModel.SpentTokens,
                     WorkspaceId = workspaceId,
                 };
-                await _db.DebugLog.AddAsync(debugLogValue);
+                await db.DebugLog.AddAsync(debugLogValue);
             }
             else
             {
-                debugLogValue = await _db.DebugLog.FirstAsync(item => item.DebugLogId == debugLogModel.DebugLogId);
+                debugLogValue = await db.DebugLog.FirstAsync(item => item.DebugLogId == debugLogModel.DebugLogId);
                 debugLogValue.Login = debugLogModel.Login;
                 debugLogValue.Date = debugLogModel.Date;
                 debugLogValue.Prompt = debugLogModel.Prompt;
@@ -101,10 +104,10 @@ namespace AiCoreApi.Data.Processors
                 debugLogValue.DebugMessages = debugLogModel.DebugMessages;
                 debugLogValue.Files = debugLogModel.Files;
                 debugLogValue.SpentTokens = debugLogModel.SpentTokens;
-                _db.DebugLog.Update(debugLogValue);
+                db.DebugLog.Update(debugLogValue);
             }
 
-            await _db.SaveChangesAsync();
+            await db.SaveChangesAsync();
             return debugLogValue;
         }
 
@@ -136,16 +139,18 @@ namespace AiCoreApi.Data.Processors
 
         public async Task Remove(DateTime dateLimit)
         {
-            var oldLogs = await _db.DebugLog.FirstOrDefaultAsync(item => item.Date < dateLimit);
+            await using var db = await _dbFactory.CreateDbContextAsync();
+            var oldLogs = await db.DebugLog.FirstOrDefaultAsync(item => item.Date < dateLimit);
             if (oldLogs == null)
                 return;
-            _db.DebugLog.Remove(oldLogs);
-            await _db.SaveChangesAsync();
+            db.DebugLog.Remove(oldLogs);
+            await db.SaveChangesAsync();
         }
 
         public async Task<List<DebugMessage>?> GetDebugMessages(int debugLogId)
         {
-            var debugLog = await _db.DebugLog.AsNoTracking()
+            await using var db = await _dbFactory.CreateDbContextAsync();
+            var debugLog = await db.DebugLog.AsNoTracking()
                 .FirstOrDefaultAsync(item => item.DebugLogId == debugLogId);
             return debugLog?.DebugMessages;
         }

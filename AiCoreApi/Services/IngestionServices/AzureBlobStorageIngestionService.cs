@@ -235,7 +235,7 @@ namespace AiCoreApi.Services.IngestionServices
 
         private async Task RemoveDeletedFiles(EmbeddingConnectionModel embeddingConnectionModel, IngestionModel ingestion, HashSet<string> currentDocIds, int taskId)
         {
-            var filesInDatabase = _documentMetadataProcessor.GetByIngestion(ingestion.IngestionId);
+            var filesInDatabase = await _documentMetadataProcessor.GetByIngestion(ingestion.IngestionId);
             var toRemove = filesInDatabase.Where(f => !currentDocIds.Contains(f.DocumentId)).ToList();
             int i = 0;
             foreach (var file in toRemove)
