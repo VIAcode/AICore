@@ -46,7 +46,7 @@ namespace AiCoreApi.Services.IngestionServices
 
             var tags = ingestion.Tags.Select(t => t.Name).ToList();
             var azureConfig = GetAzureOpenAiConfig(embeddingConnection);
-            var documents = _documentProcessor.GetByIngestion(ingestionId);
+            var documents = await _documentProcessor.GetByIngestion(ingestionId);
 
             IMemoryDb memoryDb = embeddingModel.ConnectionType switch
             {

@@ -6,68 +6,70 @@ namespace AiCoreApi.Data.Processors
 {
     public class RbacRoleSyncProcessor : IRbacRoleSyncProcessor
     {
-        private readonly IDbQuery _dbQuery;
-        private readonly Db _db;
+        private readonly IDbContextFactory<Db> _dbFactory;
 
-        public RbacRoleSyncProcessor(Db db, IDbQuery dbQuery)
+        public RbacRoleSyncProcessor(IDbContextFactory<Db> dbFactory)
         {
-            _dbQuery = dbQuery;
-            _db = db;
+            _dbFactory = dbFactory;
         }
         
         public async Task<List<RbacRoleSyncModel>> ListAsync()
         {
-            return await _db.RbacRoleSync.Include(e => e.Tags).AsNoTracking().ToListAsync();
+            await using var db = await _dbFactory.CreateDbContextAsync();
+            return await db.RbacRoleSync.Include(e => e.Tags).AsNoTracking().ToListAsync();
         }
 
         public async Task DeleteAsync(int rbacRoleSyncId)
         {
-            var rbacRoleSync = await _db.RbacRoleSync.Include(e => e.Tags)
+            await using var db = await _dbFactory.CreateDbContextAsync();
+            var rbacRoleSync = await db.RbacRoleSync.Include(e => e.Tags)
                 .FirstOrDefaultAsync(item => item.RbacRoleSyncId == rbacRoleSyncId);
             if (rbacRoleSync == null)
                 return;
-            _db.RbacRoleSync.Remove(rbacRoleSync);
-            await _db.SaveChangesAsync();
+            db.RbacRoleSync.Remove(rbacRoleSync);
+            await db.SaveChangesAsync();
         }
 
         public async Task<RbacRoleSyncModel> AddAsync(RbacRoleSyncModel rbacRoleSyncModel)
         {
-            var existingRbacRoleSync = await _db.RbacRoleSync.Include(e => e.Tags)
+            await using var db = await _dbFactory.CreateDbContextAsync();
+            var existingRbacRoleSync = await db.RbacRoleSync.Include(e => e.Tags)
                 .FirstOrDefaultAsync(item => item.RbacRoleName == rbacRoleSyncModel.RbacRoleName);
             if (existingRbacRoleSync != null)
                 return existingRbacRoleSync;
 
             if (rbacRoleSyncModel.Tags != null && rbacRoleSyncModel.Tags.Count > 0)
             {
-                var tags = _db.Tags.ToList();
+                var tags = db.Tags.ToList();
                 var tIds = rbacRoleSyncModel.Tags.Select(e => e.TagId);
 
                 rbacRoleSyncModel.Tags = tags.Where(e => tIds.Contains(e.TagId)).ToList();
             }
 
-            _db.RbacRoleSync.Add(rbacRoleSyncModel);
-            await _db.SaveChangesAsync();
+            db.RbacRoleSync.Add(rbacRoleSyncModel);
+            await db.SaveChangesAsync();
             return rbacRoleSyncModel;
         }
 
         public async Task<RbacRoleSyncModel> UpdateAsync(RbacRoleSyncModel rbacRoleSyncModel)
         {
-            var existingRbacRoleSync = await _db.RbacRoleSync.Include(e => e.Tags)
+            await using var db = await _dbFactory.CreateDbContextAsync();
+            var existingRbacRoleSync = await db.RbacRoleSync.Include(e => e.Tags)
                 .FirstOrDefaultAsync(item => item.RbacRoleSyncId == rbacRoleSyncModel.RbacRoleSyncId);
             if (existingRbacRoleSync == null)
                 return null;
             var createdBy = existingRbacRoleSync.CreatedBy;
-            _db.Entry(existingRbacRoleSync).CurrentValues.SetValues(rbacRoleSyncModel);
+            db.Entry(existingRbacRoleSync).CurrentValues.SetValues(rbacRoleSyncModel);
             existingRbacRoleSync.CreatedBy = createdBy;
             if (rbacRoleSyncModel.Tags != null && rbacRoleSyncModel.Tags.Count > 0)
             {
-                var tags = _db.Tags.ToList();
+                var tags = db.Tags.ToList();
                 var tIds = rbacRoleSyncModel.Tags.Select(e => e.TagId);
 
                 existingRbacRoleSync.Tags = tags.Where(e => tIds.Contains(e.TagId)).ToList();
             }
-            _db.RbacRoleSync.Update(existingRbacRoleSync);
-            await _db.SaveChangesAsync();
+            db.RbacRoleSync.Update(existingRbacRoleSync);
+            await db.SaveChangesAsync();
             return rbacRoleSyncModel;
         }
     }

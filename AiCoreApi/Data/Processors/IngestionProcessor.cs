@@ -7,20 +7,19 @@ namespace AiCoreApi.Data.Processors
 {
     public class IngestionProcessor : IIngestionProcessor
     {
-        private readonly Db _db;
-        private readonly IDbQuery _dbQuery;
+        private readonly IDbContextFactory<Db> _dbFactory;
         private readonly ExtendedConfig _config;
 
-        public IngestionProcessor(Db db, IDbQuery dbQuery, ExtendedConfig config)
+        public IngestionProcessor(IDbContextFactory<Db> dbFactory, ExtendedConfig config)
         {
-            _db = db;
-            _dbQuery = dbQuery;
+            _dbFactory = dbFactory;
             _config = config;
         }
 
         public async Task<IngestionModel?> Get(string ingestionName, int? workspaceId)
         {
-            var qry = _db.Ingestions.Include(e => e.Tags)
+            await using var db = await _dbFactory.CreateDbContextAsync();
+            var qry = db.Ingestions.Include(e => e.Tags)
                 .Where(t => t.Name == ingestionName);
             if (workspaceId == 0)
                 qry = qry.Where(t => t.WorkspaceId == null);
@@ -48,7 +47,8 @@ namespace AiCoreApi.Data.Processors
 
         public async Task<IngestionModel?> GetIngestionById(int ingestionId, bool excludeFile = false)
         {
-            var result = await _db.Ingestions.Include(e => e.Tags)
+            await using var db = await _dbFactory.CreateDbContextAsync();
+            var result = await db.Ingestions.Include(e => e.Tags)
                 .Where(t => t.IngestionId == ingestionId)
                 .Select(item => new IngestionModel
                 {
@@ -72,7 +72,8 @@ namespace AiCoreApi.Data.Processors
 
         public async Task<List<IngestionModel>> List(int? workspaceId)
         {
-            var qry = _db.Ingestions.Include(e => e.Tags)
+            await using var db = await _dbFactory.CreateDbContextAsync();
+            var qry = db.Ingestions.Include(e => e.Tags)
                 .Select(item => new IngestionModel
                 {
                     Content = item.Content,
@@ -105,13 +106,14 @@ namespace AiCoreApi.Data.Processors
 
         public async Task<IngestionModel> Set(IngestionModel ingestionModel, int? workspaceId)
         {
+            await using var db = await _dbFactory.CreateDbContextAsync();
             IngestionModel? settingValue;
 
             var itId = ingestionModel.IngestionId;
             var tIds = ingestionModel.Tags.Select(e => e.TagId);
 
             var tags = tIds.Any()
-                ? await _db.Tags.Where(e => tIds.Contains(e.TagId)).ToListAsync()
+                ? await db.Tags.Where(e => tIds.Contains(e.TagId)).ToListAsync()
                 : new();
 
             if (itId == 0)
@@ -128,11 +130,11 @@ namespace AiCoreApi.Data.Processors
                     Tags = tags,
 
                 };
-                await _db.Ingestions.AddAsync(settingValue);
+                await db.Ingestions.AddAsync(settingValue);
             }
             else
             {
-                settingValue = await _db.Ingestions
+                settingValue = await db.Ingestions
                     .Include(e => e.Tags)
                     .FirstAsync(item => item.IngestionId == itId);
 
@@ -142,44 +144,45 @@ namespace AiCoreApi.Data.Processors
                 settingValue.Content = ingestionModel.Content;
                 settingValue.Tags = tags;
 
-                _db.Ingestions.Update(settingValue);
+                db.Ingestions.Update(settingValue);
             }
 
-            await _db.SaveChangesAsync();
+            await db.SaveChangesAsync();
             return settingValue;
         }
 
         public async Task<IngestionModel> SetSyncTime(int ingestionId, DateTime syncTime)
         {
-            var settingValue =
-                await _db.Ingestions.FirstAsync(item => item.IngestionId == ingestionId);
+            await using var db = await _dbFactory.CreateDbContextAsync();
+            var settingValue = await db.Ingestions.FirstAsync(item => item.IngestionId == ingestionId);
 
             settingValue.LastSync = syncTime;
 
-            _db.Ingestions.Update(settingValue);
+            db.Ingestions.Update(settingValue);
 
-            await _db.SaveChangesAsync();
+            await db.SaveChangesAsync();
             return settingValue;
         }
 
-        public List<IngestionModel> GetStale()
+        public async Task<List<IngestionModel>> GetStale()
         {
-            var delayThreshold =
-                DateTime.UtcNow - TimeSpan.FromHours(_config.IngestionDelay);
+            await using var db = await _dbFactory.CreateDbContextAsync();
+            var delayThreshold = DateTime.UtcNow - TimeSpan.FromHours(_config.IngestionDelay);
 
-            return _db.Ingestions.Include(e => e.Tags).AsNoTracking()
+            return await db.Ingestions.Include(e => e.Tags).AsNoTracking()
                 .Where(i => i.LastSync < delayThreshold)
-                .OrderBy(i => i.LastSync).ToList();
+                .OrderBy(i => i.LastSync).ToListAsync();
         }
 
         public async Task Remove(int ingestionId)
         {
-            var ingestion = await _db.Ingestions
+            await using var db = await _dbFactory.CreateDbContextAsync();
+            var ingestion = await db.Ingestions
                 .FirstOrDefaultAsync(item => item.IngestionId == ingestionId);
             if (ingestion == null)
                 return;
-            _db.Ingestions.Remove(ingestion);
-            await _db.SaveChangesAsync();
+            db.Ingestions.Remove(ingestion);
+            await db.SaveChangesAsync();
         }
 
         public async Task<List<int>> GetActiveConnectionIds(int? workspaceId)
@@ -199,7 +202,7 @@ namespace AiCoreApi.Data.Processors
         Task<IngestionModel?> GetIngestionById(int ingestionId, bool excludeFile = false);
         Task<IngestionModel> Set(IngestionModel ingestionModel, int? workspaceId);
         Task<IngestionModel> SetSyncTime(int ingestionId, DateTime syncTime);
-        List<IngestionModel> GetStale();
+        Task<List<IngestionModel>> GetStale();
         Task Remove(int ingestionId);
         Task<List<int>> GetActiveConnectionIds(int? workspaceId);
     }

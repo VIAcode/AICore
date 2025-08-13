@@ -365,7 +365,7 @@ public class AgentsService : IAgentsService
         var agent = await _agentsProcessor.GetByName(agentModel.Name, workspaceId);
         if (agentModel.Tags.Count > 0)
         {
-            var existingTags = _tagsProcessor.List();
+            var existingTags = await _tagsProcessor.List();
             agentModel.Tags = await HandleImportTags(agentModel, existingTags);
         }
         if (agent == null)

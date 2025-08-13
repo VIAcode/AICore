@@ -3,6 +3,7 @@ using AiCoreApi.Common.Extensions;
 using AiCoreApi.Models.DbModels;
 using AiCoreApi.Models.ViewModels;
 using System.Security.Claims;
+using Newtonsoft.Json;
 
 namespace AiCoreApi.Common
 {
@@ -10,12 +11,12 @@ namespace AiCoreApi.Common
     {
         private readonly IHttpContextAccessor? _httpContextAccessor;
         public readonly UserContextAccessor UserContext;
-        public readonly IAgentsHelper AgentsHelper;
+        [JsonIgnore] public readonly IAgentsHelper? AgentsHelper;
 
         public RequestAccessor(
             IHttpContextAccessor httpContextAccessor,
             UserContextAccessor userContextAccessor,
-            IAgentsHelper agentsHelper
+            IAgentsHelper? agentsHelper = null 
             )
         {
             AgentsHelper = agentsHelper; 

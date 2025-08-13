@@ -6,53 +6,55 @@ namespace AiCoreApi.Data.Processors
 {
     public class RbacGroupSyncProcessor : IRbacGroupSyncProcessor
     {
-        private readonly IDbQuery _dbQuery;
-        private readonly Db _db;
+        private readonly IDbContextFactory<Db> _dbFactory;
 
-        public RbacGroupSyncProcessor(Db db, IDbQuery dbQuery)
+        public RbacGroupSyncProcessor(IDbContextFactory<Db> dbFactory)
         {
-            _dbQuery = dbQuery;
-            _db = db;
+            _dbFactory = dbFactory;
         }
         
         public async Task<List<RbacGroupSyncModel>> ListAsync()
         {
-            return await _db.RbacGroupSync.AsNoTracking().ToListAsync();
+            await using var db = await _dbFactory.CreateDbContextAsync();
+            return await db.RbacGroupSync.AsNoTracking().ToListAsync();
         }
 
         public async Task DeleteAsync(int rbacGroupSyncId)
         {
-            var rbacGroupSync = await _db.RbacGroupSync
+            await using var db = await _dbFactory.CreateDbContextAsync();
+            var rbacGroupSync = await db.RbacGroupSync
                 .FirstOrDefaultAsync(item => item.RbacGroupSyncId == rbacGroupSyncId);
             if (rbacGroupSync == null)
                 return;
-            _db.RbacGroupSync.Remove(rbacGroupSync);
-            await _db.SaveChangesAsync();
+            db.RbacGroupSync.Remove(rbacGroupSync);
+            await db.SaveChangesAsync();
         }
 
         public async Task<RbacGroupSyncModel> AddAsync(RbacGroupSyncModel rbacGroupSyncModel)
         {
-            var existingRbacGroupSync = await _db.RbacGroupSync
+            await using var db = await _dbFactory.CreateDbContextAsync();
+            var existingRbacGroupSync = await db.RbacGroupSync
                 .FirstOrDefaultAsync(item => item.RbacGroupName == rbacGroupSyncModel.RbacGroupName);
             if (existingRbacGroupSync != null)
                 return existingRbacGroupSync;
 
-            _db.RbacGroupSync.Add(rbacGroupSyncModel);
-            await _db.SaveChangesAsync();
+            db.RbacGroupSync.Add(rbacGroupSyncModel);
+            await db.SaveChangesAsync();
             return rbacGroupSyncModel;
         }
 
         public async Task<RbacGroupSyncModel> UpdateAsync(RbacGroupSyncModel rbacGroupSyncModel)
         {
-            var existingRbacGroupSync = await _db.RbacGroupSync
+            await using var db = await _dbFactory.CreateDbContextAsync();
+            var existingRbacGroupSync = await db.RbacGroupSync
                 .FirstOrDefaultAsync(item => item.RbacGroupSyncId == rbacGroupSyncModel.RbacGroupSyncId);
             if (existingRbacGroupSync == null)
                 return null;
             var createdBy = existingRbacGroupSync.CreatedBy;
-            _db.Entry(existingRbacGroupSync).CurrentValues.SetValues(rbacGroupSyncModel);
+            db.Entry(existingRbacGroupSync).CurrentValues.SetValues(rbacGroupSyncModel);
             existingRbacGroupSync.CreatedBy = createdBy;
-            _db.RbacGroupSync.Update(existingRbacGroupSync);
-            await _db.SaveChangesAsync();
+            db.RbacGroupSync.Update(existingRbacGroupSync);
+            await db.SaveChangesAsync();
             return rbacGroupSyncModel;
         }
     }

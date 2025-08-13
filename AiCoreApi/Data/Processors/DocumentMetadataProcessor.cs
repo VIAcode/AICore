@@ -6,60 +6,63 @@ namespace AiCoreApi.Data.Processors;
 
 public class DocumentMetadataProcessor : IDocumentMetadataProcessor
 {
-    private readonly Db _db;
-    private readonly IDbQuery _dbQuery;
+    private readonly IDbContextFactory<Db> _dbFactory;
 
-    public DocumentMetadataProcessor(Db db, IDbQuery dbQuery)
+    public DocumentMetadataProcessor(IDbContextFactory<Db> dbFactory)
     {
-        _db = db;
-        _dbQuery = dbQuery;
+        _dbFactory = dbFactory;
     }
 
     public DocumentMetadataModel? Get(string documentId)
     {
-        return _db.DocumentMetadata.AsNoTracking().FirstOrDefault(item => item.DocumentId == documentId);
+        using var db = _dbFactory.CreateDbContext();
+        return db.DocumentMetadata.AsNoTracking().FirstOrDefault(item => item.DocumentId == documentId);
     }
 
-    public List<DocumentMetadataModel> Get(List<string>? documentIds)
+    public async Task<List<DocumentMetadataModel>> Get(List<string>? documentIds)
     {
+        await using var db = await _dbFactory.CreateDbContextAsync();
         if (documentIds == null || !documentIds.Any())
             return new List<DocumentMetadataModel>();
-        return _db.DocumentMetadata.AsNoTracking()
+        return await db.DocumentMetadata.AsNoTracking()
             .Where(item => documentIds.Contains(item.DocumentId))
-            .ToList();
+            .ToListAsync();
     }
 
-    public List<DocumentMetadataModel> GetByIngestion(int ingestionId)
+    public async Task<List<DocumentMetadataModel>> GetByIngestion(int ingestionId)
     {
-        return _db.DocumentMetadata.AsNoTracking().Where(t => t.IngestionId == ingestionId).ToList();
+        await using var db = await _dbFactory.CreateDbContextAsync();
+        return await db.DocumentMetadata.AsNoTracking().Where(t => t.IngestionId == ingestionId).ToListAsync();
     }
 
     public async Task Set(DocumentMetadataModel model)
     {
+        await using var db = await _dbFactory.CreateDbContextAsync();
         model.LastMetadataUpdateTime = DateTime.UtcNow;
-        var entity = _db.DocumentMetadata.Local.FirstOrDefault(item => item.DocumentId == model.DocumentId)
-            ?? _db.DocumentMetadata.FirstOrDefault(item => item.DocumentId == model.DocumentId);        
+        var entity = db.DocumentMetadata.Local.FirstOrDefault(item => item.DocumentId == model.DocumentId)
+            ?? db.DocumentMetadata.FirstOrDefault(item => item.DocumentId == model.DocumentId);        
 
         if (entity == null)
-            await _db.DocumentMetadata.AddAsync(model);
+            await db.DocumentMetadata.AddAsync(model);
         else
-            _db.Entry(entity).CurrentValues.SetValues(model);
+            db.Entry(entity).CurrentValues.SetValues(model);
 
-        await _db.SaveChangesAsync();
+        await db.SaveChangesAsync();
     }
 
     public async Task Remove(DocumentMetadataModel documentMetadataModel)
     {
-        _db.DocumentMetadata.Remove(documentMetadataModel);
-        await _db.SaveChangesAsync();
+        await using var db = await _dbFactory.CreateDbContextAsync();
+        db.DocumentMetadata.Remove(documentMetadataModel);
+        await db.SaveChangesAsync();
     }
 }
 
 public interface IDocumentMetadataProcessor
 {
     DocumentMetadataModel? Get(string documentId);
-    List<DocumentMetadataModel> Get(List<string>? documentIds);
-    List<DocumentMetadataModel> GetByIngestion(int ingestionId);
+    Task<List<DocumentMetadataModel>> Get(List<string>? documentIds);
+    Task<List<DocumentMetadataModel>> GetByIngestion(int ingestionId);
     Task Set(DocumentMetadataModel ingestionTaskModel);
     Task Remove(DocumentMetadataModel documentMetadataModel);
 }

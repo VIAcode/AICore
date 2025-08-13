@@ -29,7 +29,7 @@ public class IngestionService : IIngestionService
     {
         var ingestion = await _ingestionProcessor.GetIngestionById(ingestionId, excludeFile:true);
         var viewModel = _mapper.Map<IngestionViewModel>(ingestion);
-        viewModel.Status = GetIngestionStatus(ingestionId);
+        viewModel.Status = await GetIngestionStatus(ingestionId);
         return viewModel;
     }
 
@@ -70,18 +70,17 @@ public class IngestionService : IIngestionService
                 .Distinct().ToList());
         var viewModels = _mapper.Map<List<IngestionViewModel>>(ingestions);
 
-        viewModels.ForEach(v => {
-            v.Status = GetIngestionStatus(v.IngestionId);
+        foreach (var v in viewModels)
+        {
+            v.Status = await GetIngestionStatus(v.IngestionId);
             var lastTask = tasksFailed.SingleOrDefault(e => e.IngestionId == v.IngestionId);
-            if(lastTask != null)
+            if(lastTask is { State: TaskState.Failed })
             {
-                if (lastTask.State == TaskState.Failed)
-                {
-                    v.IsLastSyncFailed = true;
-                    v.LastSyncFailedMessage = lastTask.ErrorMessage;
-                }
+                v.IsLastSyncFailed = true;
+                v.LastSyncFailedMessage = lastTask.ErrorMessage;
             }
-        });
+        }
+
         return viewModels;
     }
 
@@ -136,10 +135,9 @@ public class IngestionService : IIngestionService
         await _taskProcessor.ScheduleTask(task);
     }
 
-    private IngestionStatus GetIngestionStatus(int ingestionId)
+    private async Task<IngestionStatus> GetIngestionStatus(int ingestionId)
     {
-        var tasks =
-            _taskProcessor.GetByIngestion(ingestionId);
+        var tasks = await _taskProcessor.GetByIngestion(ingestionId);
 
         var active = tasks.FirstOrDefault(t => t.State == TaskState.InProgress);
         if (active != null)

@@ -87,7 +87,7 @@ namespace AiCoreApi.Services.IngestionServices
             if (decoded.Length == 1)
             {
                 path = path.Replace(" ", "%20");
-                var metadata = _documentMetadataProcessor.GetByIngestion(ingestion.IngestionId)
+                var metadata = (await _documentMetadataProcessor.GetByIngestion(ingestion.IngestionId))
                     .FirstOrDefault(x => x.Url.EndsWith(path));
                 if (metadata == null)
                     throw new InvalidOperationException($"File with path '{path}' not found in metadata.");
@@ -374,7 +374,7 @@ namespace AiCoreApi.Services.IngestionServices
 
         private async Task IndexDocuments(EmbeddingConnectionModel embeddingConnectionModel, IngestionModel ingestion, GraphServiceClient graph, List<File> filesInSharePoint, int taskId, TranslateStepModel translateStepModel, IKernelMemory kernelMemory)
         {
-            var filesInDatabase = _documentMetadataProcessor.GetByIngestion(ingestion.IngestionId);
+            var filesInDatabase = await _documentMetadataProcessor.GetByIngestion(ingestion.IngestionId);
             // Remove files that were deleted from SharePoint
             await RemoveDeletedFiles(embeddingConnectionModel, filesInDatabase, filesInSharePoint, taskId);
             var i = 0;
