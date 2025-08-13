@@ -11,6 +11,7 @@ namespace AiCoreApi.Services.IngestionServices
         {
             public const string EmbeddingConnectionField = "EmbeddingConnection";
             public const string VectorDbConnectionField = "VectorDBConnectionName";
+            public const string AutoSyncField = "AutoSync";
         }
         private readonly IConnectionProcessor _connectionProcessor;
         private readonly Config _config;
