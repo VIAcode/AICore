@@ -25,22 +25,19 @@ namespace AiCoreApi.Common
         public MessageDialogViewModel.Message CurrentMessage { get; set; } = new() { Sender = PlannerHelpers.AssistantName };
         public void AddDebugMessage(string sender, string title, string details)
         {
-            if (_requestAccessor.UseDebug)
+            CurrentMessage.DebugMessages ??= new List<MessageDialogViewModel.DebugMessage>();
+            CurrentMessage.DebugMessages.Add(new MessageDialogViewModel.DebugMessage
             {
-                CurrentMessage.DebugMessages ??= new List<MessageDialogViewModel.DebugMessage>();
-                CurrentMessage.DebugMessages.Add(new MessageDialogViewModel.DebugMessage
-                {
-                    Sender = sender,
-                    Title = title,
-                    Details = details,
-                    DateTime = DateTime.UtcNow,
-                    Level = Level,
-                });
-                var chatItemId = _requestAccessor?.MessageDialog?.Messages?.Last().ChatItemId;
-                if (!string.IsNullOrEmpty(chatItemId))
-                {
-                    _cacheAccessor.SetCacheValue($"{ReasoningCachePrefix}{chatItemId}", CurrentMessage.DebugMessages.ToJson()!, ReasoningCacheTimeout);
-                }
+                Sender = sender,
+                Title = title,
+                Details = details,
+                DateTime = DateTime.UtcNow,
+                Level = Level,
+            });
+            var chatItemId = _requestAccessor?.MessageDialog?.Messages?.Last().ChatItemId;
+            if (!string.IsNullOrEmpty(chatItemId))
+            {
+                _cacheAccessor.SetCacheValue($"{ReasoningCachePrefix}{chatItemId}", CurrentMessage.DebugMessages.ToJson()!, ReasoningCacheTimeout);
             }
             _logger.LogDebug($"{4}, {0}: {1}, {2}", sender, title, details, _requestAccessor.Login);
         }

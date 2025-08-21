@@ -65,16 +65,19 @@ namespace AiCoreApi.Services.ControllersServices
             try
             {
                 var response = await _planner.GetChatResponse();
+                var actualDebugMessages = _responseAccessor.CurrentMessage.DebugMessages;
+                response.DebugMessages = _requestAccessor.UseDebug ? actualDebugMessages : null;
                 messageDialog.Messages!.Add(response);
             }
             // Tokens limit reached
             catch (TokensLimitException ex)
             {
+                var actualDebugMessages = _responseAccessor.CurrentMessage.DebugMessages;
                 messageDialog.Messages!.Add(new MessageDialogViewModel.Message
                 {
                     Sender = PlannerHelpers.AssistantName, 
                     Text = _extendedConfig.DailyTokenLimitReachedText,
-                    DebugMessages = _responseAccessor.CurrentMessage.DebugMessages
+                    DebugMessages = _requestAccessor.UseDebug ? actualDebugMessages : null
                 });
             }
             messageDialog.ClearFilesContent();
@@ -91,7 +94,13 @@ namespace AiCoreApi.Services.ControllersServices
                 var parametersString = string.Join(Environment.NewLine, messageItem.Parameters.Select(x => $" - {x.Key}: {x.Value}"));
                 message = $"Agent: {messageItem.Name}{Environment.NewLine}Parameters:{Environment.NewLine}{parametersString}";
             }
+            // Ensure debug messages are persisted even if hidden in the response for non-admin/developer
+            var lastMessage = messageDialog.Messages.Last();
+            var originalResponseDebugs = lastMessage.DebugMessages;
+            lastMessage.DebugMessages = _responseAccessor.CurrentMessage.DebugMessages;
             await _debugLogProcessor.Add(_requestAccessor.Login, message, messageDialog, _requestAccessor.WorkspaceId ?? 0);
+            // Restore what the client should see
+            lastMessage.DebugMessages = originalResponseDebugs;
             return messageDialog;
         }
 

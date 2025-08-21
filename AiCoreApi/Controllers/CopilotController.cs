@@ -1,4 +1,5 @@
 ﻿using AiCoreApi.Authorization;
+using AiCoreApi.Authorization.Attributes;
 using AiCoreApi.Common.Extensions;
 using AiCoreApi.Models.ViewModels;
 using AiCoreApi.Services.ControllersServices;
@@ -167,6 +168,7 @@ namespace AiCoreApi.Controllers
 
         [HttpGet("debug/{chatMessageId}")]
         [CombinedAuthorize]
+        [RoleAuthorize(Role.Admin, Role.Developer)]
         [Consumes("application/json")]
         [SwaggerResponse(StatusCodes.Status200OK, Type = typeof(List<MessageDialogViewModel.DebugMessage>))]
         public async Task<IActionResult> GetDebugMessages(string chatMessageId)
