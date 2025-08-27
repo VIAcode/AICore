@@ -145,30 +145,18 @@ namespace AiCoreApi.Services.ControllersServices
         public async Task<string> GetMicrosoftCodeBySsoId(ExtendedTokenModel extendedTokenModel, bool isOfflineMode, LoginProcessViewModel loginProcessViewModel)
         {
             var login = await _loginProcessor.GetByLogin(extendedTokenModel.Email, LoginTypeEnum.SsoMicrosoft);
-            var userGroups = await _microsoftSso.GetUserGroups(extendedTokenModel);
-            // If the user is not found, check if the user is in the allowed domain & group and create a new login
+
+            var accessValidation = await ValidateUserSsoAccess(extendedTokenModel);
+            if (!accessValidation.IsValid)
+            {
+                return accessValidation.ErrorMessage!;
+            }
+
             if (login == null)
             {
-                var userDomain = extendedTokenModel.Email.Split('@')[1].ToLower();
-                var clientSsoList = (await _clientSsoProcessor
-                    .List())
-                    .Where(sso =>
-                        sso.LoginType == LoginTypeEnum.SsoMicrosoft
-                        && (!sso.Settings.ContainsKey(MicrosoftSso.Parameters.Domain)
-                            || string.IsNullOrEmpty(sso.Settings[MicrosoftSso.Parameters.Domain])
-                            || sso.Settings[MicrosoftSso.Parameters.Domain] == userDomain)
-                        && (!sso.Settings.ContainsKey(MicrosoftSso.Parameters.Group)
-                            || string.IsNullOrWhiteSpace(sso.Settings[MicrosoftSso.Parameters.Group])
-                            || userGroups.Contains(sso.Settings[MicrosoftSso.Parameters.Group])))
-                    .ToList();
-
-                // If the user is not in the allowed domain & group, return null
-                if (clientSsoList.Count == 0)
-                    return "Error: User not in allowed domain or group. Or Add Registration permissions for domain/group are not set.";
-
-                // Get all attached groups
-                var groups = clientSsoList.SelectMany(e => e.Groups).DistinctBy(e => e.GroupId).ToList();
-                var autoAdmin = clientSsoList.Any(sso => sso.Settings.ContainsKey(MicrosoftSso.Parameters.AutoAdmin) && sso.Settings[MicrosoftSso.Parameters.AutoAdmin] == "True");
+                var validConfigs = accessValidation.ValidConfigs;
+                var groups = validConfigs.SelectMany(e => e.Groups).DistinctBy(e => e.GroupId).ToList();
+                var autoAdmin = validConfigs.Any(sso => sso.Settings.ContainsKey(MicrosoftSso.Parameters.AutoAdmin) && sso.Settings[MicrosoftSso.Parameters.AutoAdmin] == "True");
 
                 login = await _loginProcessor.Add(new LoginModel
                 {
@@ -180,12 +168,12 @@ namespace AiCoreApi.Services.ControllersServices
                     IsEnabled = true,
                     Created = DateTime.UtcNow,
                     CreatedBy = "system",
-                    TokensLimit = GetDailyTokensLimit(clientSsoList, MicrosoftSso.Parameters.DailyTokenLimit),
+                    TokensLimit = GetDailyTokensLimit(validConfigs, MicrosoftSso.Parameters.DailyTokenLimit),
                     Groups = groups
                 });
             }
 
-            await SyncRbacUserGroups(extendedTokenModel.Email, userGroups);
+            await SyncRbacUserGroups(extendedTokenModel.Email, accessValidation.UserGroups);
             await SyncRbacUserRoles(extendedTokenModel);
 
             if (!login.IsEnabled)
@@ -206,7 +194,7 @@ namespace AiCoreApi.Services.ControllersServices
             return loginHistory.Code;
         }
 
-        private int GetDailyTokensLimit(List<ClientSsoModel> clientSsoList, string key)
+        private static int GetDailyTokensLimit(List<ClientSsoModel> clientSsoList, string key)
         {
             var dailyTokenLimitSetting = clientSsoList.FirstOrDefault(sso => sso.Settings.ContainsKey(key))?.Settings[key];
             int dailyTokenLimit = 0;
@@ -449,6 +437,71 @@ namespace AiCoreApi.Services.ControllersServices
             if(_monitoringConfig.LogLoginLogout)
                 _logger.LogCritical("[{DateTime}][User Logout] Login: {Login}, Session id: {sessionId}", DateTime.UtcNow.ToString("g"), loginHistory.Login, sessionId);
         }
+
+        private async Task<SsoAccessValidationResult> ValidateUserSsoAccess(ExtendedTokenModel token)
+        {
+            var allSso = (await _clientSsoProcessor.List())
+                .Where(sso => sso.LoginType == LoginTypeEnum.SsoMicrosoft)
+                .ToList();
+
+            if (allSso.Count == 0)
+            {
+                return new SsoAccessValidationResult { IsValid = true, ValidConfigs = [], UserGroups = [] };
+            }
+
+            var userDomain = token.Email.Split('@')[1].ToLowerInvariant();
+
+            var domainConfigs = allSso
+                .Where(sso => sso.Settings.TryGetValue(MicrosoftSso.Parameters.Domain, out var d) &&
+                              !string.IsNullOrWhiteSpace(d) &&
+                              d.Equals(userDomain, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            if (domainConfigs.Count == 0)
+            {
+                var global = allSso
+                    .Where(sso => !sso.Settings.ContainsKey(MicrosoftSso.Parameters.Domain) ||
+                                  string.IsNullOrWhiteSpace(sso.Settings[MicrosoftSso.Parameters.Domain]))
+                    .ToList();
+
+                return global.Count > 0
+                    ? new SsoAccessValidationResult { IsValid = true, ValidConfigs = global, UserGroups = [] }
+                    : new SsoAccessValidationResult { IsValid = false, ErrorMessage = $"Error: User domain '{userDomain}' is not allowed for Microsoft SSO." };
+            }
+
+            var requiresGroups = domainConfigs.Any(sso =>
+                sso.Settings.TryGetValue(MicrosoftSso.Parameters.Group, out var g) && !string.IsNullOrWhiteSpace(g));
+
+            var userGroups = requiresGroups ? await _microsoftSso.GetUserGroups(token) : [];
+
+            if (requiresGroups && userGroups.Count == 0)
+            {
+                return new SsoAccessValidationResult
+                {
+                    IsValid = false,
+                    ErrorMessage = $"Error: Unable to retrieve user groups for domain configuration '{userDomain}'."
+                };
+            }
+
+            var validConfigs = domainConfigs
+                .Where(sso => !sso.Settings.TryGetValue(MicrosoftSso.Parameters.Group, out var g) ||
+                              string.IsNullOrWhiteSpace(g) ||
+                              userGroups.Contains(g))
+                .ToList();
+
+            return validConfigs.Count > 0
+                ? new SsoAccessValidationResult { IsValid = true, ValidConfigs = validConfigs, UserGroups = userGroups }
+                : new SsoAccessValidationResult { IsValid = false, ErrorMessage = "Error: User is not a member of any required groups for Microsoft SSO access." };
+        }
+
+    }
+
+    public class SsoAccessValidationResult
+    {
+        public bool IsValid { get; set; }
+        public List<ClientSsoModel> ValidConfigs { get; set; } = [];
+        public List<string> UserGroups { get; set; } = [];
+        public string? ErrorMessage { get; set; }
     }
 
     public interface IConnectService
