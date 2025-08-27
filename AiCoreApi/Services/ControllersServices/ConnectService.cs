@@ -146,7 +146,7 @@ namespace AiCoreApi.Services.ControllersServices
         {
             var login = await _loginProcessor.GetByLogin(extendedTokenModel.Email, LoginTypeEnum.SsoMicrosoft);
 
-            var accessValidation = await ValidateUserSsoAccess(extendedTokenModel);
+            var accessValidation = await ValidateMicrosoftSsoAccess(extendedTokenModel);
             if (!accessValidation.IsValid)
             {
                 return accessValidation.ErrorMessage!;
@@ -438,7 +438,7 @@ namespace AiCoreApi.Services.ControllersServices
                 _logger.LogCritical("[{DateTime}][User Logout] Login: {Login}, Session id: {sessionId}", DateTime.UtcNow.ToString("g"), loginHistory.Login, sessionId);
         }
 
-        private async Task<SsoAccessValidationResult> ValidateUserSsoAccess(ExtendedTokenModel token)
+        private async Task<SsoAccessValidationResult> ValidateMicrosoftSsoAccess(ExtendedTokenModel token)
         {
             var allSso = (await _clientSsoProcessor.List())
                 .Where(sso => sso.LoginType == LoginTypeEnum.SsoMicrosoft)
@@ -466,7 +466,7 @@ namespace AiCoreApi.Services.ControllersServices
 
                 return global.Count > 0
                     ? new SsoAccessValidationResult { IsValid = true, ValidConfigs = global, UserGroups = [] }
-                    : new SsoAccessValidationResult { IsValid = false, ErrorMessage = $"Error: User domain '{userDomain}' is not allowed for Microsoft SSO." };
+                    : new SsoAccessValidationResult { IsValid = false, ErrorMessage = "Error: User domain is not allowed for Microsoft SSO." };
             }
 
             var requiresGroups = domainConfigs.Any(sso =>
@@ -479,7 +479,7 @@ namespace AiCoreApi.Services.ControllersServices
                 return new SsoAccessValidationResult
                 {
                     IsValid = false,
-                    ErrorMessage = $"Error: Unable to retrieve user groups for domain configuration '{userDomain}'."
+                    ErrorMessage = "Error: Unable to retrieve user groups for domain configuration."
                 };
             }
 
