@@ -111,24 +111,29 @@ namespace AiCoreApi.SemanticKernel.Agents
                 index: vectorIndexName,
                 limit: maxResultsCount,
                 filters: _featureFlags.IsEnabled(FeatureFlags.Names.Tagging) ? filters : null);
-            var result = searchResults.Results.Select(citation =>
-            {
-                var documentMetadata = _documentMetadataProcessor.Get(citation.DocumentId);
-                return new SearchItemModel
+            var result = searchResults.Results
+                .Select(citation =>
                 {
-                    SourceName = documentMetadata.Name,
-                    Link = documentMetadata.Url,
-                    CreateTime = documentMetadata.CreatedTime,
-                    UpdatedTime = documentMetadata.LastModifiedTime,
-                    SourceContentType = citation.SourceContentType,
-                    Texts = citation.Partitions.Select(partition => new SearchItemPartitionTextModel
+                    var documentMetadata = _documentMetadataProcessor.Get(citation.DocumentId);
+                    if (documentMetadata == null)
+                        return null;
+                    return new SearchItemModel
                     {
-                        Text = partition.Text,
-                        Relevance = partition.Relevance,
-                        PartNumber = Convert.ToInt32(partition.Tags.FirstOrDefault(tag => tag.Key.StartsWith("__part_n")).Value.FirstOrDefault())
-                    }).ToList(),
-                };
-            }).ToList();
+                        SourceName = documentMetadata.Name,
+                        Link = documentMetadata.Url,
+                        CreateTime = documentMetadata.CreatedTime,
+                        UpdatedTime = documentMetadata.LastModifiedTime,
+                        SourceContentType = citation.SourceContentType,
+                        Texts = citation.Partitions.Select(partition => new SearchItemPartitionTextModel
+                        {
+                            Text = partition.Text,
+                            Relevance = partition.Relevance,
+                            PartNumber = Convert.ToInt32(partition.Tags.FirstOrDefault(tag => tag.Key.StartsWith("__part_n")).Value.FirstOrDefault())
+                        }).ToList(),
+                    };
+                })
+                .Where(r => r != null)
+                .ToList();
             _responseAccessor.CurrentMessage.Text = result.ToJson();
             _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Response", _responseAccessor.CurrentMessage.Text);
             return _responseAccessor.CurrentMessage.Text;
