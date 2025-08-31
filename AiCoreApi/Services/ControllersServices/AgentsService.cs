@@ -470,7 +470,7 @@ public class AgentsService : IAgentsService
         }
     }
 
-    public async Task<List<string>> GetHistory(int agentId, string parameterCode)
+    public async Task<List<string>> GetHistory(int agentId, string? parameterCode)
     {
         var agent = await _agentsProcessor.GetById(agentId);
         if (agent == null || !_extendedConfig.UseGitStorage)
