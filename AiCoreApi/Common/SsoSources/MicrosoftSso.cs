@@ -98,19 +98,26 @@ namespace AiCoreApi.Common.SsoSources
 
         public async Task<List<string>> GetUserGroups(ExtendedTokenModel extendedTokenModel)
         {
-            var content = await GetCachedAsync("https://graph.microsoft.com/v1.0/me/transitiveMemberOf", extendedTokenModel.AccessToken);
-            var groups = content.JsonGet<List<UserGroup>>("value") ?? new List<UserGroup>();
-            var groupNames = groups
-                .Select(userGroup => userGroup.DisplayName)
-                .Where(userGroupName => !string.IsNullOrEmpty(userGroupName))
-                .ToList();
-            var groupIds = groups
-                .Select(userGroup => userGroup.Id)
-                .Where(userGroupId => !string.IsNullOrEmpty(userGroupId))
-                .ToList();
-            return groupNames
-                .Union(groupIds)
-                .ToList();
+            try
+            {
+                var content = await GetCachedAsync("https://graph.microsoft.com/v1.0/me/transitiveMemberOf", extendedTokenModel.AccessToken);
+                var groups = content.JsonGet<List<UserGroup>>("value") ?? new List<UserGroup>();
+                var groupNames = groups
+                    .Select(userGroup => userGroup.DisplayName)
+                    .Where(userGroupName => !string.IsNullOrEmpty(userGroupName))
+                    .ToList();
+                var groupIds = groups
+                    .Select(userGroup => userGroup.Id)
+                    .Where(userGroupId => !string.IsNullOrEmpty(userGroupId))
+                    .ToList();
+                return groupNames
+                    .Union(groupIds)
+                    .ToList();
+            }
+            catch
+            {
+                return [];
+            }
         }
 
         public async Task<List<string>> GetRoleUsers(string rbacRoleName, ExtendedTokenModel extendedTokenModel)
