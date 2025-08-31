@@ -470,7 +470,7 @@ public class AgentsService : IAgentsService
         }
     }
 
-    public async Task<List<string>> GetHistory(int agentId)
+    public async Task<List<string>> GetHistory(int agentId, string parameterCode)
     {
         var agent = await _agentsProcessor.GetById(agentId);
         if (agent == null || !_extendedConfig.UseGitStorage)
@@ -478,8 +478,12 @@ public class AgentsService : IAgentsService
 
         var gitBranch = _extendedConfig.GitStorageBranch;
         var repoPath = await EnsureClonedGitRepo();
-        var content = agent.Content.FirstOrDefault(x => !string.IsNullOrEmpty(x.Value.Extension));
-        var fileName = $"{agent.Name}-{content.Value.Code}.{content.Value.Extension}";
+        var content = string.IsNullOrEmpty(parameterCode) || !agent.Content.ContainsKey(parameterCode)
+            ? agent.Content.FirstOrDefault(x => !string.IsNullOrEmpty(x.Value.Extension)).Value
+            : agent.Content[parameterCode];
+        if (content == null || string.IsNullOrEmpty(content.Extension))
+            return new();
+        var fileName = $"{agent.Name}-{content.Code}.{content.Extension}";
         var workspaceId = agent.WorkspaceId ?? 0;
         var relativePath = Path.Combine(_extendedConfig.GitStoragePath.Trim('/'), workspaceId.ToString(), fileName).Replace("\\", "/");
 
@@ -511,7 +515,7 @@ public class AgentsService : IAgentsService
         return history;
     }
 
-    public async Task<string> GetHistoryCode(int agentId, string gitTitle)
+    public async Task<string> GetHistoryCode(int agentId, string gitTitle, string? parameterCode)
     {
         var agent = await _agentsProcessor.GetById(agentId);
         if (agent == null || !_extendedConfig.UseGitStorage)
@@ -519,8 +523,12 @@ public class AgentsService : IAgentsService
 
         var gitBranch = _extendedConfig.GitStorageBranch;
         var repoPath = await EnsureClonedGitRepo();
-        var content = agent.Content.FirstOrDefault(x => !string.IsNullOrEmpty(x.Value.Extension));
-        var fileName = $"{agent.Name}-{content.Value.Code}.{content.Value.Extension}";
+        var content = string.IsNullOrEmpty(parameterCode) || !agent.Content.ContainsKey(parameterCode)
+            ? agent.Content.FirstOrDefault(x => !string.IsNullOrEmpty(x.Value.Extension)).Value
+            : agent.Content[parameterCode];
+        if (content == null || string.IsNullOrEmpty(content.Extension))
+            return string.Empty;
+        var fileName = $"{agent.Name}-{content.Code}.{content.Extension}";
         var workspaceId = agent.WorkspaceId ?? 0;
         var relativePath = Path.Combine(_extendedConfig.GitStoragePath.Trim('/'), workspaceId.ToString(), fileName).Replace("\\", "/");
 
@@ -570,6 +578,6 @@ public interface IAgentsService
     Task<byte[]> ExportAgents(List<int> agentIdsList);
     Task<ImportAgentsResultModel> ImportAgents(IFormFile file, Dictionary<Models.ViewModels.AgentType, int> agentVersions, int workspaceId);
     Task ConfirmImportAgents(string confirmationId, int workspaceId);
-    Task<List<string>> GetHistory(int agentId);
-    Task<string> GetHistoryCode(int agentId, string gitTitle);
+    Task<List<string>> GetHistory(int agentId, string? parameterCode);
+    Task<string> GetHistoryCode(int agentId, string gitTitle, string? parameterCode);
 }

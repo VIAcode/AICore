@@ -20,9 +20,9 @@ namespace AiCoreApi.Services.ProcessingServices.AgentsHandlers
             IAgentsProcessor agentsProcessor, 
             IDebugLogProcessor debugLogProcessor,
             ExtendedConfig extendedConfig,
-            IServiceProvider serviceProvider,
+            IServiceScopeFactory scopeFactory,
             IConnectionProcessor connectionProcessor)
-            : base(loginProcessor, debugLogProcessor, extendedConfig, serviceProvider)
+            : base(loginProcessor, debugLogProcessor, extendedConfig, scopeFactory)
         {
             _agentsProcessor = agentsProcessor;
             _connectionProcessor = connectionProcessor;
@@ -105,7 +105,7 @@ namespace AiCoreApi.Services.ProcessingServices.AgentsHandlers
 
         private async Task ProcessMessageAsync(BasicDeliverEventArgs ea, int runAs, string currentAgentName, string agentToCallName)
         {
-            using var scope = ServiceProvider.CreateScope();
+            await using var scope = ScopeFactory.CreateAsyncScope();
             var agentsProcessor = scope.ServiceProvider.GetRequiredService<IAgentsProcessor>();
             var agents = await agentsProcessor.List(null);
             var agent = agents.FirstOrDefault(item => item.Name == currentAgentName);

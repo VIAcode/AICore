@@ -88,9 +88,9 @@ namespace AiCoreApi.SemanticKernel
             var plannerPrompt = await AddPlugins(_extendedConfig.PlannerPrompt, useAllPlugins, kernel);
             if (string.IsNullOrEmpty(plan))
             {
-                if (agentsList.Count(agent => agent.IsEnabled) == 1)
+                if (agentsList.Count(agent => string.IsNullOrEmpty(agent.FlowName) && agent.IsEnabled) == 1)
                 {
-                    var agent = agentsList.First(agent => agent.IsEnabled);
+                    var agent = agentsList.First(agent => string.IsNullOrEmpty(agent.FlowName) && agent.IsEnabled);
                     _responseAccessor.CurrentMessage.Text = await _plannerHelpers.ExecuteAgent(agent.Name, 
                         new List<string> { _requestAccessor.MessageDialog?.Messages?.Last().Text ?? "" },
                         true);
