@@ -21,9 +21,9 @@ namespace AiCoreApi.Services.ProcessingServices.AgentsHandlers
             IAgentsProcessor agentsProcessor,
             IDebugLogProcessor debugLogProcessor,
             ExtendedConfig extendedConfig,
-            IServiceProvider serviceProvider,
+            IServiceScopeFactory scopeFactory,
             IConnectionProcessor connectionProcessor)
-            : base(loginProcessor, debugLogProcessor, extendedConfig, serviceProvider)
+            : base(loginProcessor, debugLogProcessor, extendedConfig, scopeFactory)
         {
             _agentsProcessor = agentsProcessor;
             _connectionProcessor = connectionProcessor;

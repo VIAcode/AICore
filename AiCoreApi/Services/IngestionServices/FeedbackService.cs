@@ -29,7 +29,7 @@ namespace AiCoreApi.Services.IngestionServices
             public const string DocumentIds = "documentIds";
             public const string AutoSyncOnFeedback = "autoSyncOnFeedback";
             public const string MessageTitle = "FeedbackService task";
-            public const double PromptTemperature = 0.5;
+            public const double PromptTemperature = 1;
             public const double PromptTopP = 1;
             public const string ArticleTitle = "# [Article]"; 
         }
@@ -81,7 +81,8 @@ namespace AiCoreApi.Services.IngestionServices
             var autoSyncOnFeedback = payloadDictionary[Constants.AutoSyncOnFeedback].ToLower() == "true";
             var documentIds = payloadDictionary[Constants.DocumentIds].Split(','); 
 
-            var llmConnection = await _connectionProcessor.GetById(llmConnectionId);
+            var llmConnection = await _connectionProcessor.GetById(llmConnectionId) 
+                ?? throw new Exception($"FeedbackService: LLM Connection not found (Ingestion: {ingestionId})");
             var runAsUser = await _loginProcessor.GetById(loginId)
                 ?? throw new Exception($"FeedbackService: User not found (Ingestion: {ingestionId})");
 
@@ -105,6 +106,8 @@ namespace AiCoreApi.Services.IngestionServices
             userContextAccessor.SetLoginId(loginId);
             UserContextAccessor.AsyncScheduledLoginId.Value = loginId;
 
+            var temperature = llmConnection.Content.ContainsKey("temperature") ? Convert.ToDouble(llmConnection.Content["temperature"]) : Constants.PromptTemperature;
+
             var changedFiles = new Dictionary<string, object>();
             var i = 0;
             foreach (var documentId in documentIds)
@@ -123,7 +126,7 @@ namespace AiCoreApi.Services.IngestionServices
                         .Replace("{{file}}", file)
                         .Replace("{{feedback}}", feedback);
 
-                    var newFile = await _semanticKernelProvider.ExecutePrompt(llmConnection, prompt, Constants.PromptTemperature, Constants.PromptTopP, "");
+                    var newFile = await _semanticKernelProvider.ExecutePrompt(llmConnection, prompt, temperature, Constants.PromptTopP, "");
                     if (newFile.StartsWith(Constants.ArticleTitle))
                     {
                         newFile = newFile.Remove(0, Constants.ArticleTitle.Length).Trim();

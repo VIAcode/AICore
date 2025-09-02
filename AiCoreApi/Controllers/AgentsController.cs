@@ -139,9 +139,9 @@ public class AgentsController : ControllerBase
     [HttpGet]
     [Route("{agentId}/history")]
     [RoleAuthorize(Role.Admin, Role.Developer)]
-    public async Task<IActionResult> GetHistory(int agentId)
+    public async Task<IActionResult> GetHistory(int agentId, [FromQuery]string parameterCode = "")
     {
-        var agentHistory = await _agentsService.GetHistory(agentId);
+        var agentHistory = await _agentsService.GetHistory(agentId, parameterCode);
         return Ok(agentHistory);
     }
 
@@ -149,9 +149,9 @@ public class AgentsController : ControllerBase
     [HttpGet]
     [Route("{agentId}/history/{title}")]
     [RoleAuthorize(Role.Admin, Role.Developer)]
-    public async Task<IActionResult> GetHistory(int agentId, string title)
+    public async Task<IActionResult> GetHistoryCode(int agentId, string title, [FromQuery] string parameterCode = "")
     {
-        var agentCode = await _agentsService.GetHistoryCode(agentId, title);
+        var agentCode = await _agentsService.GetHistoryCode(agentId, title, parameterCode);
         return Ok(agentCode);
     }
 

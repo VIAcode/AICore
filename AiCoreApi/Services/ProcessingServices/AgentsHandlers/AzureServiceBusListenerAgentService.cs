@@ -12,7 +12,7 @@ namespace AiCoreApi.Services.ProcessingServices.AgentsHandlers
     {
         private static readonly Dictionary<string, ServiceBusProcessor> ServiceBusProcessors = new();
         private static readonly Dictionary<string, ServiceBusClient> ServiceBusClients = new();
-        private readonly IEntraTokenProvider _entraTokenProvider;
+        private readonly IEntraTokenProvider _entraTokenProvider; 
         private readonly IAgentsProcessor _agentsProcessor; 
         private readonly IConnectionProcessor _connectionProcessor;
 
@@ -20,11 +20,11 @@ namespace AiCoreApi.Services.ProcessingServices.AgentsHandlers
             IEntraTokenProvider entraTokenProvider,
             ILoginProcessor loginProcessor,
             IAgentsProcessor agentsProcessor,
-            IServiceProvider serviceProvider,
+            IServiceScopeFactory scopeFactory,
             IDebugLogProcessor debugLogProcessor,
             ExtendedConfig extendedConfig,
             IConnectionProcessor connectionProcessor)
-            : base(loginProcessor, debugLogProcessor, extendedConfig, serviceProvider)
+            : base(loginProcessor, debugLogProcessor, extendedConfig, scopeFactory)
         {
             _entraTokenProvider = entraTokenProvider;
             _agentsProcessor = agentsProcessor;
@@ -117,7 +117,7 @@ namespace AiCoreApi.Services.ProcessingServices.AgentsHandlers
 
         private async Task ProcessErrorAsync(ProcessErrorEventArgs args, string currentAgentName)
         {
-            using var scope = ServiceProvider.CreateScope();
+            await using var scope = ScopeFactory.CreateAsyncScope();
             var agentsProcessor = scope.ServiceProvider.GetRequiredService<IAgentsProcessor>();
 
             var agents = await agentsProcessor.List(null);
@@ -130,7 +130,7 @@ namespace AiCoreApi.Services.ProcessingServices.AgentsHandlers
 
         private async Task ProcessMessageAsync(ProcessMessageEventArgs args, int runAs, string currentAgentName, string agentToCallName)
         {
-            using var scope = ServiceProvider.CreateScope();
+            await using var scope = ScopeFactory.CreateAsyncScope();
             var agentsProcessor = scope.ServiceProvider.GetRequiredService<IAgentsProcessor>();
 
             var agents = await agentsProcessor.List(null);

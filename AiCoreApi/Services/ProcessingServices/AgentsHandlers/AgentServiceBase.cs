@@ -11,19 +11,19 @@ namespace AiCoreApi.Services.ProcessingServices.AgentsHandlers
     {
         private readonly ILoginProcessor _loginProcessor;
         private readonly IDebugLogProcessor _debugLogProcessor;
-        private readonly ExtendedConfig _extendedConfig;
-        protected readonly IServiceProvider ServiceProvider;
+        private readonly ExtendedConfig _extendedConfig; 
+        protected readonly IServiceScopeFactory ScopeFactory;
 
         public AgentServiceBase(
             ILoginProcessor loginProcessor,
             IDebugLogProcessor debugLogProcessor,
             ExtendedConfig extendedConfig,
-            IServiceProvider serviceProvider)
+            IServiceScopeFactory scopeFactory)
         {
             _loginProcessor = loginProcessor;
             _debugLogProcessor = debugLogProcessor;
             _extendedConfig = extendedConfig;
-            ServiceProvider = serviceProvider;
+            ScopeFactory = scopeFactory;
         }
 
         public async Task RunAgent(string sender, List<AgentModel> allAgents, AgentModel handlerAgent, string agentToCallName, int runAs, Dictionary<string, string> parametersValues)
@@ -49,7 +49,7 @@ namespace AiCoreApi.Services.ProcessingServices.AgentsHandlers
                 var runAsUser = await _loginProcessor.GetById(runAs);
                 if (runAsUser == null)
                     return "User not found";
-                await using (var scope = ServiceProvider.CreateAsyncScope())
+                await using (var scope = ScopeFactory.CreateAsyncScope())
                 {
                     var userContextAccessor = scope.ServiceProvider.GetRequiredService<UserContextAccessor>();
                     var requestAccessor = scope.ServiceProvider.GetRequiredService<RequestAccessor>();
