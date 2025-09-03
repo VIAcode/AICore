@@ -91,6 +91,17 @@ public class AgentsService : IAgentsService
         await SaveGit(agent?.WorkspaceId);
     }
 
+    public async Task DeleteAgentsInWorkspace(int workspaceId)
+    {
+        var agents = await _agentsProcessor.List(workspaceId);
+        foreach (var agent in agents)
+        {
+            await _plannerHelpers.OnDelete(agent.AgentId);
+            await _agentsProcessor.Delete(agent.AgentId);
+        }
+        await SaveGit(workspaceId);
+    }
+
     public async Task<List<ParameterModel>?> GetParameters(int agentId)
     {
         var agentViewModel = (await ListAgents(null)).FirstOrDefault(agent => agent.AgentId == agentId);
@@ -571,7 +582,8 @@ public interface IAgentsService
     Task<List<AgentViewModel>> ListAgents(int? workspaceId);
     Task<AgentViewModel> AddAgent(AgentViewModel agentViewModel, int workspaceId);
     Task<AgentViewModel> UpdateAgent(AgentViewModel agentViewModel);
-    Task DeleteAgent(int agentId); 
+    Task DeleteAgent(int agentId);
+    Task DeleteAgentsInWorkspace(int workspaceId);
     Task<List<ParameterModel>?> GetParameters(int agentId); 
     Task SwitchEnableAgent(int agentId, bool isEnabled);
     Task<bool> IsAgentEnabled(string agentName);
