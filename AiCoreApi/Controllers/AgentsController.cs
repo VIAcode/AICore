@@ -67,11 +67,21 @@ public class AgentsController : ControllerBase
         return Ok(true);
     }
 
+    [CombinedAuthorize]
     [HttpDelete("{agentId}")]
     [RoleAuthorize(Role.Admin, Role.Developer)]
     public async Task<IActionResult> Delete(int agentId)
     {
         await _agentsService.DeleteAgent(agentId);
+        return Ok(true);
+    }
+
+    [CombinedAuthorize]
+    [HttpDelete("workspace/{workspaceId}")]
+    [RoleAuthorize(Role.Admin, Role.Developer)]
+    public async Task<IActionResult> DeleteAgentsInWorkspace(int workspaceId)
+    {
+        await _agentsService.DeleteAgentsInWorkspace(workspaceId);
         return Ok(true);
     }
 
