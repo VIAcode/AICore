@@ -7,6 +7,7 @@ using AiCoreApi.Common.Monitoring;
 using System.Web;
 using AiCoreApi.Services.IngestionServices;
 using AiCoreApi.Data.Processors;
+using System.Text.RegularExpressions;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
@@ -18,6 +19,7 @@ namespace AiCoreApi.SemanticKernel.Agents
         private readonly IDataIngestionWorkerFactory _dataIngestionWorkerFactory;
         private readonly IIngestionProcessor _ingestionProcessor;
         private readonly ICacheAccessor _cacheAccessor;
+        private readonly IEntraTokenProvider _entraTokenProvider;
 
         private readonly ILogger<BaseAgent> _logger;
         private Dictionary<string, string>? _parameters;
@@ -31,6 +33,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             _monitoringConfig = baseAgentHelper.MonitoringConfig;
             _dataIngestionWorkerFactory = baseAgentHelper.DataIngestionWorkerFactory;
             _cacheAccessor = baseAgentHelper.CacheAccessor;
+            _entraTokenProvider = baseAgentHelper.EntraTokenProvider;
             _ingestionProcessor = baseAgentHelper.IngestionProcessor;
             _logger = logger;
         }
@@ -325,7 +328,7 @@ namespace AiCoreApi.SemanticKernel.Agents
                 connectionTypes.Contains(conn.Type) &&
                 (conn.ConnectionId == connectionId || conn.Name == connectionName));
             if (connection != null)
-                return connection;
+                return await ApplySecrets(connection);
 
             // Check connection specified in Request
             connection = connections.FirstOrDefault(conn =>
@@ -335,7 +338,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             {
                 if (connectionSpecified)
                     responseAccessor.AddDebugMessage(debugMessageSenderName, "Warning", $"Specified connection not found. Using default from Request: {connection.Name}");
-                return connection;
+                return await ApplySecrets(connection);
             }
 
             // Check just any connection
@@ -344,11 +347,34 @@ namespace AiCoreApi.SemanticKernel.Agents
             {
                 if (connectionSpecified)
                     responseAccessor.AddDebugMessage(debugMessageSenderName, "Warning", $"Specified connection not found. Using default: {connection.Name}");
-                return connection;
+                return await ApplySecrets(connection);
             }
             var connectionTypesString = string.Join(", ", connectionTypes.Select(e => e.ToString()));
             responseAccessor.AddDebugMessage(debugMessageSenderName, "Error", $"No any [{connectionTypesString}] connections found.");
             throw new Exception("No any LLM connections found.");
+        }
+
+        private async Task<ConnectionModel> ApplySecrets(ConnectionModel connectionModel)
+        {
+            var regex = new Regex(@"\{\{secret:(?<name>[^}]+)\}\}", RegexOptions.Compiled);
+            var keys = connectionModel.Content.Keys.ToList();
+            foreach (var key in keys)
+            {
+                var value = connectionModel.Content[key];
+                if (string.IsNullOrEmpty(value)) 
+                    continue;
+                var matches = regex.Matches(value);
+                if (matches.Count == 0) 
+                    continue;
+                foreach (Match match in matches)
+                {
+                    var secretName = match.Groups["name"].Value.Trim();
+                    var secretValue = await _entraTokenProvider.GetSecretFromKeyVaultAsync(secretName) ?? string.Empty;
+                    value = value.Replace(match.Value, secretValue);
+                }
+                connectionModel.Content[key] = value;
+            }
+            return connectionModel;
         }
     }
 }

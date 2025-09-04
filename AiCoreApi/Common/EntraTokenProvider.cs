@@ -16,6 +16,8 @@ namespace AiCoreApi.Common
         public const string DefaultStorageName = "defaultManagedIdentity";
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly ExtendedConfig _extendedConfig;
+        private static readonly ConcurrentDictionary<string, (string Value, DateTimeOffset Expiry)> SecretCache = new();
+        private static readonly TimeSpan SecretCacheTtl = TimeSpan.FromMinutes(15);
 
         public EntraTokenProvider(
             ExtendedConfig extendedConfig,
@@ -71,8 +73,13 @@ namespace AiCoreApi.Common
 
         public async Task SetCredentialsToKeyVaultAsync(string storageName, string tenantId, string clientId, string clientSecret)
         {
-            var client = GetSecretClient();
             var secretValue = $"{tenantId}|{clientId}|{clientSecret}";
+            await SetSecretToKeyVaultAsync(storageName, secretValue);
+        }
+
+        public async Task SetSecretToKeyVaultAsync(string storageName, string secretValue)
+        {
+            var client = GetSecretClient();
             await client.SetSecretAsync(new KeyVaultSecret(storageName, secretValue));
         }
 
@@ -103,9 +110,7 @@ namespace AiCoreApi.Common
 
         public async Task<ClientCredentials> GetCredentialsFromKeyVaultAsync(string storageName)
         {
-            var client = GetSecretClient();
-            var secretBundle = await client.GetSecretAsync(storageName);
-            var secretValue = secretBundle.Value.Value;
+            var secretValue = await GetSecretFromKeyVaultAsync(storageName);
             var secretParts = secretValue.Split('|');
             if (secretParts.Length != 3)
                 throw new InvalidOperationException($"Invalid credentials format in Key Vault for: {storageName}");
@@ -116,6 +121,21 @@ namespace AiCoreApi.Common
                 ClientId = secretParts[1],
                 ClientSecret = secretParts[2]
             };
+        }
+
+        public async Task<string> GetSecretFromKeyVaultAsync(string storageName)
+        {
+            if (SecretCache.TryGetValue(storageName, out var cached) && cached.Expiry > DateTimeOffset.UtcNow)
+            {
+                return cached.Value;
+            }
+
+            var client = GetSecretClient();
+            var secretBundle = await client.GetSecretAsync(storageName);
+            var secretValue = secretBundle.Value.Value;
+
+            SecretCache[storageName] = (secretValue, DateTimeOffset.UtcNow.Add(SecretCacheTtl));
+            return secretValue;
         }
 
         private bool IsTokenValid(AccessToken cachedToken) =>
@@ -209,9 +229,11 @@ namespace AiCoreApi.Common
     {
         Task<string> GetAccessTokenAsync(string storageName, string resource);
         Task<AccessToken> GetAccessTokenObjectAsync(string storageName, string resource);
+        Task SetSecretToKeyVaultAsync(string storageName, string secretValue);
         Task SetCredentialsToKeyVaultAsync(string storageName, string tenantId, string clientId, string clientSecret);
         Task RemoveCredentialsToKeyVaultAsync(string storageName);
         Task<AccessToken> GetAccessTokenByRefreshTokenAsync(string storageName, string refreshToken, string resource, string? tenantId = null);
+        Task<string> GetSecretFromKeyVaultAsync(string storageName);
         Task<ClientCredentials> GetCredentialsFromKeyVaultAsync(string storageName);
     }
 }

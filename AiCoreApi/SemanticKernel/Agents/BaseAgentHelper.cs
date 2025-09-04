@@ -14,7 +14,8 @@ namespace AiCoreApi.SemanticKernel.Agents
             ResponseAccessor responseAccessor,
             MonitoringConfig monitoringConfig,
             IIngestionProcessor ingestionProcessor,
-            ICacheAccessor cacheAccessor)
+            ICacheAccessor cacheAccessor,
+            IEntraTokenProvider entraTokenProvider)
         {
             AgentsProcessor = agentsProcessor;
             DataIngestionWorkerFactory = dataIngestionWorkerFactory;
@@ -23,6 +24,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             MonitoringConfig = monitoringConfig;
             IngestionProcessor = ingestionProcessor;
             CacheAccessor = cacheAccessor;
+            EntraTokenProvider = entraTokenProvider;
         }
 
         public IDataIngestionWorkerFactory DataIngestionWorkerFactory { get; }
@@ -32,6 +34,7 @@ namespace AiCoreApi.SemanticKernel.Agents
         public MonitoringConfig MonitoringConfig { get; }
         public IIngestionProcessor IngestionProcessor { get; }
         public ICacheAccessor CacheAccessor { get; }
+        public IEntraTokenProvider EntraTokenProvider { get; }
     }
 
     public interface IBaseAgentHelper
@@ -43,5 +46,6 @@ namespace AiCoreApi.SemanticKernel.Agents
         MonitoringConfig MonitoringConfig { get; }
         IIngestionProcessor IngestionProcessor { get; }
         ICacheAccessor CacheAccessor { get; }
+        IEntraTokenProvider EntraTokenProvider { get; }
     }
 }
