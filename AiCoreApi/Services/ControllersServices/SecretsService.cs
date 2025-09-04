@@ -99,13 +99,11 @@ public class SecretsService : ISecretsService
         {
             if (secretId >= SecretsIdStart)
             {
-                await DeleteInternal(secretId, SettingType.SecretValue,
-                    name => _entraTokenProvider.RemoveCredentialsToKeyVaultAsync(name));
+                await DeleteInternal(secretId, SettingType.SecretValue, name => _entraTokenProvider.RemoveItemFromKeyVaultAsync(name));
             }
             else
             {
-                await DeleteInternal(secretId, SettingType.EntraCredentials,
-                    name => _entraTokenProvider.RemoveCredentialsToKeyVaultAsync(name));
+                await DeleteInternal(secretId, SettingType.EntraCredentials, name => _entraTokenProvider.RemoveItemFromKeyVaultAsync(name));
             }
         }
         catch (Exception ex)

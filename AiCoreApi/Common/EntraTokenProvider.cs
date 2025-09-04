@@ -83,7 +83,7 @@ namespace AiCoreApi.Common
             await client.SetSecretAsync(new KeyVaultSecret(storageName, secretValue));
         }
 
-        public async Task RemoveCredentialsToKeyVaultAsync(string storageName)
+        public async Task RemoveItemFromKeyVaultAsync(string storageName)
         {
             var client = GetSecretClient();
             await client.StartDeleteSecretAsync(storageName);
@@ -231,7 +231,7 @@ namespace AiCoreApi.Common
         Task<AccessToken> GetAccessTokenObjectAsync(string storageName, string resource);
         Task SetSecretToKeyVaultAsync(string storageName, string secretValue);
         Task SetCredentialsToKeyVaultAsync(string storageName, string tenantId, string clientId, string clientSecret);
-        Task RemoveCredentialsToKeyVaultAsync(string storageName);
+        Task RemoveItemFromKeyVaultAsync(string storageName);
         Task<AccessToken> GetAccessTokenByRefreshTokenAsync(string storageName, string refreshToken, string resource, string? tenantId = null);
         Task<string> GetSecretFromKeyVaultAsync(string storageName);
         Task<ClientCredentials> GetCredentialsFromKeyVaultAsync(string storageName);
