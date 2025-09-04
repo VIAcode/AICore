@@ -42,7 +42,7 @@ namespace AiCoreApi.Common
                     _cacheAccessor.SetCacheValue($"{ReasoningCachePrefix}{chatItemId}", CurrentMessage.DebugMessages.ToJson()!, ReasoningCacheTimeout);
                 }
             }
-            _logger.LogDebug($"{4}, {0}: {1}, {2}", sender, title, details, _requestAccessor.Login);
+            _logger.LogDebug("{4}, {0}: {1}, {2}", sender, title, details, _requestAccessor.Login);
         }
         public int Level { get; set; } = 0;
 
