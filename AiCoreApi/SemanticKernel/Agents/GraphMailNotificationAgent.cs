@@ -23,11 +23,13 @@ namespace AiCoreApi.SemanticKernel.Agents
             public const string Attachments = "attachments";
         }
 
+        private string _debugMessageSenderName = nameof(GraphMailNotificationAgent);
         private readonly IConnectionProcessor _connectionProcessor;
         private readonly IEntraTokenProvider _entraTokenProvider;
         private readonly RequestAccessor _requestAccessor;
         private readonly ResponseAccessor _responseAccessor;
         private readonly IHttpClientFactory _httpClientFactory;
+        private readonly ILogger<GraphMailNotificationAgent> _logger;
 
         public GraphMailNotificationAgent(
             IBaseAgentHelper baseAgentHelper,
@@ -45,10 +47,13 @@ namespace AiCoreApi.SemanticKernel.Agents
             _requestAccessor = requestAccessor;
             _responseAccessor = responseAccessor;
             _httpClientFactory = httpClientFactory;
+            _logger = logger;
         }
 
         public override async Task<string> DoCall(AgentModel agent, Dictionary<string, string> parameters)
         {
+            _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
+
             parameters.ToList().ForEach(p => parameters[p.Key] = HttpUtility.HtmlDecode(p.Value));
             var debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
@@ -113,31 +118,50 @@ namespace AiCoreApi.SemanticKernel.Agents
             {
                 message.CcRecipients = cc.Split([',', ';']).Select(s => new Recipient { EmailAddress = new EmailAddress() { Address = s.Trim() } }).ToList();
             }
-            
-            // Parse attachments (format: "file1.txt:base64data,file2.pdf:base64data")
             if (!string.IsNullOrWhiteSpace(attachmentsRaw))
             {
-                var provider = new FileExtensionContentTypeProvider();                
-
-                message.Attachments = attachmentsRaw.Split(',').Select(attachmentRaw =>
-                {
-                    var parts = attachmentRaw.Split(':', 2);
-                    var fileName = parts[0].Trim();
-                    var contentData = parts.Length > 1 ? parts[1] : "";
-
-                    return new FileAttachment
-                    {
-                        Name = fileName,
-                        ContentBytes = Convert.FromBase64String(contentData),
-                        ContentType = provider.TryGetContentType(fileName, out var contentType) ? contentType : "application/octet-stream"
-                    } as Attachment;
-                }).ToList();
+                message.Attachments = ParseAttachments(attachmentsRaw).ToList();
             }
 
             return message;
         }
-    }
 
+        private List<Attachment> ParseAttachments(string attachmentsRaw)
+        {
+            // Parse attachments (format: "file1.txt:base64data,file2.pdf:base64data")
+
+            var provider = new FileExtensionContentTypeProvider();
+            var attachments = new List<Attachment>();
+
+            foreach (var attachmentRaw in attachmentsRaw.Split(','))
+            {
+                var parts = attachmentRaw.Split(':', 2);
+                try
+                {
+                    var fileName = parts[0].Trim();
+                    if (string.IsNullOrEmpty(fileName) || parts.Length < 2)
+                    {
+                        _logger.LogWarning("Invalid attachment format: {0}", attachmentRaw);
+                        _responseAccessor.AddDebugMessage(_debugMessageSenderName, "Attachment Parse Error", $"Invalid attachment format: {attachmentRaw}");
+                        continue;
+                    }
+
+                    attachments.Add(new FileAttachment
+                    {
+                        Name = fileName,
+                        ContentBytes = Convert.FromBase64String(parts[1]),
+                        ContentType = provider.TryGetContentType(fileName, out var contentType) ? contentType : "application/octet-stream"
+                    });
+                }
+                catch (FormatException ex)
+                {
+                    _logger.LogWarning($"Attachment Parse Error: Invalid base64 for {parts[0]}: {ex.Message}");
+                    _responseAccessor.AddDebugMessage(_debugMessageSenderName, "Attachment Parse Error", $"Invalid base64 for {parts[0]}: {ex.Message}");
+                }
+            }
+            return attachments;
+        }
+    }
     public interface IGraphMailNotificationAgent
     {
         Task AddAgent(AgentModel agent, Kernel kernel, List<string> pluginsInstructions);
