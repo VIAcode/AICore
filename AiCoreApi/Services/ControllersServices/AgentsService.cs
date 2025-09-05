@@ -19,6 +19,7 @@ public class AgentsService : IAgentsService
     private readonly IAgentsProcessor _agentsProcessor;
     private readonly IDistributedCache _distributedCache;
     private readonly ILoginProcessor _loginProcessor;
+    private readonly IConnectionProcessor _connectionProcessor;
     private readonly ITagsProcessor _tagsProcessor;
     private readonly RequestAccessor _requestAccessor;
     private readonly IPlannerHelpers _plannerHelpers;
@@ -32,6 +33,7 @@ public class AgentsService : IAgentsService
         ILogger<AgentsService> logger,
         IDistributedCache distributedCache,
         ILoginProcessor loginProcessor,
+        IConnectionProcessor connectionProcessor,
         ITagsProcessor tagsProcessor,
         RequestAccessor requestAccessor,
         IPlannerHelpers plannerHelpers)
@@ -42,6 +44,7 @@ public class AgentsService : IAgentsService
         _logger = logger;
         _distributedCache = distributedCache;
         _loginProcessor = loginProcessor;
+        _connectionProcessor = connectionProcessor;
         _tagsProcessor = tagsProcessor;
         _requestAccessor = requestAccessor;
         _plannerHelpers = plannerHelpers;
@@ -164,6 +167,23 @@ public class AgentsService : IAgentsService
         }
     }
 
+    private List<ConnectionModel?>? _connections;
+    private async Task<ConnectionModel?> GetConnectionById(int connectionId)
+    {
+        if (_connections == null)
+            _connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
+        var connection = _connections.FirstOrDefault(c => c.ConnectionId == connectionId);
+        return connection;
+    }
+    private async Task<ConnectionModel?> GetConnectionByName(string connectionName)
+    {
+        if (_connections == null)
+            _connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
+        var connection = _connections.FirstOrDefault(c => c.Name == connectionName);
+        return connection;
+    }
+
+
     private async Task<Dictionary<string, string>> PrepareAgentExportFiles(List<int> agentIdsList)
     {
         var agents = await _agentsProcessor.ListAll();
@@ -199,6 +219,10 @@ public class AgentsService : IAgentsService
 
         foreach (var agent in agentsToExportResult)
         {
+            if (!string.IsNullOrEmpty(agent.LlmType))
+            {
+                agent.LlmType = (await GetConnectionById(int.Parse(agent.LlmType)))?.Name ?? "0";
+            }
             foreach (var content in agent.Content)
             {
                 if (string.IsNullOrEmpty(content.Value.Extension))
@@ -240,6 +264,13 @@ public class AgentsService : IAgentsService
         }
         foreach (var agentExportModel in agentExportModels)
         {
+            if (!string.IsNullOrEmpty(agentExportModel.LlmType))
+            {
+                if (!int.TryParse(agentExportModel.LlmType, out _))
+                {
+                    agentExportModel.LlmType = (await GetConnectionByName(agentExportModel.LlmType))?.ConnectionId.ToString() ?? "0";
+                }
+            }
             foreach (var agentExportModelContent in agentExportModel.Content)
             {
                 if (!string.IsNullOrEmpty(agentExportModelContent.Value.Extension) && content.ContainsKey(agentExportModelContent.Value.Value))
