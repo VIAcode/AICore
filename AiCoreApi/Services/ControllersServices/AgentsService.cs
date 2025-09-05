@@ -167,23 +167,6 @@ public class AgentsService : IAgentsService
         }
     }
 
-    private List<ConnectionModel?>? _connections;
-    private async Task<ConnectionModel?> GetConnectionById(int connectionId)
-    {
-        if (_connections == null)
-            _connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
-        var connection = _connections.FirstOrDefault(c => c.ConnectionId == connectionId);
-        return connection;
-    }
-    private async Task<ConnectionModel?> GetConnectionByName(string connectionName)
-    {
-        if (_connections == null)
-            _connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
-        var connection = _connections.FirstOrDefault(c => c.Name == connectionName);
-        return connection;
-    }
-
-
     private async Task<Dictionary<string, string>> PrepareAgentExportFiles(List<int> agentIdsList)
     {
         var agents = await _agentsProcessor.ListAll();
@@ -216,12 +199,15 @@ public class AgentsService : IAgentsService
 
         var agentsToExportResult = _mapper.Map<List<AgentExportModel>>(agentsToExport);
         var fileMap = new Dictionary<string, string>();
-
+        var workspaceId = agentsToExport.FirstOrDefault(a => a.WorkspaceId != null)?.WorkspaceId;
+        var connections = await _connectionProcessor.List(workspaceId);
         foreach (var agent in agentsToExportResult)
         {
             if (!string.IsNullOrEmpty(agent.LlmType))
             {
-                agent.LlmType = (await GetConnectionById(int.Parse(agent.LlmType)))?.Name ?? "0";
+                var connectionId = int.Parse(agent.LlmType);
+                var connection = connections.FirstOrDefault(c => c.ConnectionId == connectionId);
+                agent.LlmType = connection?.Name ?? "0";
             }
             foreach (var content in agent.Content)
             {
@@ -262,13 +248,15 @@ public class AgentsService : IAgentsService
                 }
             }
         }
+        var connections = await _connectionProcessor.List(workspaceId);
         foreach (var agentExportModel in agentExportModels)
         {
             if (!string.IsNullOrEmpty(agentExportModel.LlmType))
             {
                 if (!int.TryParse(agentExportModel.LlmType, out _))
                 {
-                    agentExportModel.LlmType = (await GetConnectionByName(agentExportModel.LlmType))?.ConnectionId.ToString() ?? "0";
+                    var connection = connections.FirstOrDefault(c => c.Name == agentExportModel.LlmType);
+                    agentExportModel.LlmType = connection?.ConnectionId.ToString() ?? "0";
                 }
             }
             foreach (var agentExportModelContent in agentExportModel.Content)
