@@ -6,6 +6,7 @@ using Microsoft.Graph;
 using Microsoft.SemanticKernel;
 using Microsoft.Graph.Models;
 using AiCoreApi.Common.Monitoring;
+using Microsoft.AspNetCore.StaticFiles;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
@@ -16,15 +17,19 @@ namespace AiCoreApi.SemanticKernel.Agents
             public const string ConnectionName = "connectionName";
             public const string Recipient = "recipient";
             public const string Cc = "cc";
+            public const string From = "from";
             public const string Subject = "subject";
             public const string Body = "body";
+            public const string Attachments = "attachments";
         }
 
+        private string _debugMessageSenderName = nameof(GraphMailNotificationAgent);
         private readonly IConnectionProcessor _connectionProcessor;
         private readonly IEntraTokenProvider _entraTokenProvider;
         private readonly RequestAccessor _requestAccessor;
         private readonly ResponseAccessor _responseAccessor;
         private readonly IHttpClientFactory _httpClientFactory;
+        private readonly ILogger<GraphMailNotificationAgent> _logger;
 
         public GraphMailNotificationAgent(
             IBaseAgentHelper baseAgentHelper,
@@ -42,18 +47,23 @@ namespace AiCoreApi.SemanticKernel.Agents
             _requestAccessor = requestAccessor;
             _responseAccessor = responseAccessor;
             _httpClientFactory = httpClientFactory;
+            _logger = logger;
         }
 
         public override async Task<string> DoCall(AgentModel agent, Dictionary<string, string> parameters)
         {
+            _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
+
             parameters.ToList().ForEach(p => parameters[p.Key] = HttpUtility.HtmlDecode(p.Value));
             var debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
             var connectionName = agent.Content[AgentContentParameters.ConnectionName].Value;
             var recipient = await GetParameterValueAsync(AgentContentParameters.Recipient);
+            var from = await GetParameterValueAsync(AgentContentParameters.From);
             var cc = await GetParameterValueAsync(AgentContentParameters.Cc);
             var subject = await GetParameterValueAsync(AgentContentParameters.Subject);
             var body = await GetParameterValueAsync(AgentContentParameters.Body);
+            var attachmentsRaw = await GetParameterValueAsync(AgentContentParameters.Attachments);
 
             _responseAccessor.AddDebugMessage(debugMessageSenderName, "DoCall Request", $"To: {recipient}, Cc: {cc} Subject: {subject}");
 
@@ -73,12 +83,21 @@ namespace AiCoreApi.SemanticKernel.Agents
             var httpClient = _httpClientFactory.CreateClient(HttpClients.NoRetryClient);
             var graphClient = new GraphServiceClient(httpClient, tokenCredential);
 
-            await SendEmailAsync(graphClient, recipient, cc, subject, body);
+            var message = ComposeMessage(to: recipient,
+                                         from: from,
+                                         cc: cc,
+                                         subject: subject,
+                                         messageText: body,
+                                         attachmentsRaw: attachmentsRaw);
+
+            await graphClient.Me.SendMail.PostAsync(new Microsoft.Graph.Me.SendMail.SendMailPostRequestBody() { Message = message, SaveToSentItems = true });
+
             _responseAccessor.AddDebugMessage(debugMessageSenderName, "DoCall Response", $"Email message sent.");
+
             return "Email message sent.";
         }
 
-        private async Task SendEmailAsync(GraphServiceClient graphClient, string to, string? cc, string subject, string messageText)
+        private Message ComposeMessage(string to, string? from, string? cc, string subject, string messageText, string? attachmentsRaw)
         {
             var message = new Message
             {
@@ -90,15 +109,58 @@ namespace AiCoreApi.SemanticKernel.Agents
                 }
             };
             message.ToRecipients = to.Split([',', ';']).Select(s => new Recipient { EmailAddress = new EmailAddress() { Address = s.Trim() } }).ToList();
+
+            if (!string.IsNullOrWhiteSpace(from))
+            {
+                message.From = new Recipient { EmailAddress = new EmailAddress() { Address = from } };
+            }
             if (!string.IsNullOrWhiteSpace(cc))
             {
                 message.CcRecipients = cc.Split([',', ';']).Select(s => new Recipient { EmailAddress = new EmailAddress() { Address = s.Trim() } }).ToList();
             }
+            if (!string.IsNullOrWhiteSpace(attachmentsRaw))
+            {
+                message.Attachments = ParseAttachments(attachmentsRaw).ToList();
+            }
 
-            await graphClient.Me
-                .SendMail.PostAsync(new Microsoft.Graph.Me.SendMail.SendMailPostRequestBody() { Message = message, SaveToSentItems = true });
+            return message;
         }
 
+        private List<Attachment> ParseAttachments(string attachmentsRaw)
+        {
+            // Parse attachments (format: "file1.txt:base64data,file2.pdf:base64data")
+
+            var provider = new FileExtensionContentTypeProvider();
+            var attachments = new List<Attachment>();
+
+            foreach (var attachmentRaw in attachmentsRaw.Split(','))
+            {
+                var parts = attachmentRaw.Split(':', 2);
+                try
+                {
+                    var fileName = parts[0].Trim();
+                    if (string.IsNullOrEmpty(fileName) || parts.Length < 2)
+                    {
+                        _logger.LogWarning("Invalid attachment format: {0}", attachmentRaw);
+                        _responseAccessor.AddDebugMessage(_debugMessageSenderName, "Attachment Parse Error", $"Invalid attachment format: {attachmentRaw}");
+                        continue;
+                    }
+
+                    attachments.Add(new FileAttachment
+                    {
+                        Name = fileName,
+                        ContentBytes = Convert.FromBase64String(parts[1]),
+                        ContentType = provider.TryGetContentType(fileName, out var contentType) ? contentType : "application/octet-stream"
+                    });
+                }
+                catch (FormatException ex)
+                {
+                    _logger.LogWarning($"Attachment Parse Error: Invalid base64 for {parts[0]}: {ex.Message}");
+                    _responseAccessor.AddDebugMessage(_debugMessageSenderName, "Attachment Parse Error", $"Invalid base64 for {parts[0]}: {ex.Message}");
+                }
+            }
+            return attachments;
+        }
     }
     public interface IGraphMailNotificationAgent
     {
