@@ -31,5 +31,6 @@ namespace AiCoreApi.Models.DbModels
         AzDoWiki = 4,
         AzureBlobStorage = 5,
         Confluence = 6,
+        WikiJs = 7,
     }
 }
