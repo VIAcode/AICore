@@ -108,15 +108,16 @@ namespace AiCoreApi.SemanticKernel.Agents
                     Content = messageText
                 }
             };
-            message.ToRecipients = to.Split([',', ';']).Select(s => new Recipient { EmailAddress = new EmailAddress() { Address = s.Trim() } }).ToList();
 
-            if (!string.IsNullOrWhiteSpace(from))
+            message.ToRecipients = ParseRecipientList(to);
+
+            if (ParseRecipient(from, out var fromRecipient))
             {
-                message.From = new Recipient { EmailAddress = new EmailAddress() { Address = from } };
+                message.From = fromRecipient;
             }
             if (!string.IsNullOrWhiteSpace(cc))
             {
-                message.CcRecipients = cc.Split([',', ';']).Select(s => new Recipient { EmailAddress = new EmailAddress() { Address = s.Trim() } }).ToList();
+                message.CcRecipients = ParseRecipientList(cc);
             }
             if (!string.IsNullOrWhiteSpace(attachmentsRaw))
             {
@@ -124,6 +125,55 @@ namespace AiCoreApi.SemanticKernel.Agents
             }
 
             return message;
+        }
+
+        private List<Recipient> ParseRecipientList(string recipients)
+        {
+            var result = new List<Recipient>();
+            foreach (var entry in recipients.Split([',', ';'], StringSplitOptions.RemoveEmptyEntries))
+            {
+                if(ParseRecipient(entry, out var recipient))
+                {
+                    result.Add(recipient);
+                }
+            }
+            return result;
+        }
+
+        private static bool ParseRecipient(string? entry, out Recipient recipient)
+        {
+            recipient = null!;
+            if (string.IsNullOrWhiteSpace(entry))
+                return false;
+
+            // Try to match "Name <email@domain.com>"
+            var match = System.Text.RegularExpressions.Regex.Match(entry.Trim(), @"^(?:""?(?<name>[^""]+)""?\s*)?<(?<email>[^>]+)>$");
+            if (match.Success)
+            {
+                var name = match.Groups["name"].Value?.Trim();
+                var email = match.Groups["email"].Value?.Trim();
+                recipient = new Recipient
+                {
+                    EmailAddress = new EmailAddress
+                    {
+                        Address = email,
+                        Name = string.IsNullOrWhiteSpace(name) ? null : name
+                    }
+                };
+                return true;
+            }
+            else
+            {
+                // Assume it's just an email address
+                recipient = new Recipient
+                {
+                    EmailAddress = new EmailAddress
+                    {
+                        Address = entry.Trim(),
+                    }
+                };
+                return true;
+            }
         }
 
         private List<Attachment> ParseAttachments(string attachmentsRaw)
