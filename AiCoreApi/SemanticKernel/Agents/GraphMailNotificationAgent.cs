@@ -24,7 +24,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             public const string Attachments = "attachments";
         }
 
-        private static Regex _recipientRegex = new Regex(@"^[^@\s]+@[^@\s]+\.[^@\s]+$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+        private static Regex _recipientRegex = new Regex(@"^(?:""?(?<name>[^""]+)""?\s*)?<(?<email>[^>]+)>$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
         private string _debugMessageSenderName = nameof(GraphMailNotificationAgent);
 
