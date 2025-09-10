@@ -7,6 +7,7 @@ using Microsoft.SemanticKernel;
 using Microsoft.Graph.Models;
 using AiCoreApi.Common.Monitoring;
 using Microsoft.AspNetCore.StaticFiles;
+using System.Text.RegularExpressions;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
@@ -23,7 +24,10 @@ namespace AiCoreApi.SemanticKernel.Agents
             public const string Attachments = "attachments";
         }
 
+        private static Regex _recipientRegex = new Regex(@"^[^@\s]+@[^@\s]+\.[^@\s]+$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
         private string _debugMessageSenderName = nameof(GraphMailNotificationAgent);
+
         private readonly IConnectionProcessor _connectionProcessor;
         private readonly IEntraTokenProvider _entraTokenProvider;
         private readonly RequestAccessor _requestAccessor;
@@ -132,7 +136,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             var result = new List<Recipient>();
             foreach (var entry in recipients.Split([',', ';'], StringSplitOptions.RemoveEmptyEntries))
             {
-                if(ParseRecipient(entry, out var recipient))
+                if (ParseRecipient(entry, out var recipient))
                 {
                     result.Add(recipient);
                 }
@@ -142,12 +146,12 @@ namespace AiCoreApi.SemanticKernel.Agents
 
         private static bool ParseRecipient(string? entry, out Recipient recipient)
         {
-            recipient = null!;
+            recipient = new Recipient();
             if (string.IsNullOrWhiteSpace(entry))
                 return false;
 
             // Try to match "Name <email@domain.com>"
-            var match = System.Text.RegularExpressions.Regex.Match(entry.Trim(), @"^(?:""?(?<name>[^""]+)""?\s*)?<(?<email>[^>]+)>$");
+            var match = _recipientRegex.Match(entry.Trim());
             if (match.Success)
             {
                 var name = match.Groups["name"].Value?.Trim();
