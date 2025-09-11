@@ -214,19 +214,19 @@ namespace AiCoreApi.Services.IngestionServices
             // Extract path from URL and search for the page using GraphQL
             var path = url.Split('#')[0].Replace(baseUrl, "").TrimStart('/');
             
+            // Get all pages and filter by path since Wiki.js doesn't support path filtering in list query
             var query = new
             {
                 query = @"
-                    query($path: String!, $locale: String!) {
+                    query {
                         pages {
-                            list(path: $path, locale: $locale) {
+                            list (orderBy: TITLE) {
                                 id
                                 path
                                 title
                             }
                         }
-                    }",
-                variables = new { path = path, locale = locale }
+                    }"
             };
 
             var jsonBody = new StringContent(JsonConvert.SerializeObject(query),
@@ -286,19 +286,20 @@ namespace AiCoreApi.Services.IngestionServices
         {
             var query = new
             {
-                query = $@"
-                    {{
-                        pages {{
-                            single (id: {pageId}) {{
+                query = @"
+                    query($id: Int!) {
+                        pages {
+                            single (id: $id) {
                                 path
                                 title
                                 createdAt
                                 updatedAt
                                 content
                                 contentType
-                            }}
-                        }}
-                    }}"
+                            }
+                        }
+                    }",
+                variables = new { id = Convert.ToInt32(pageId) }
             };
 
             var jsonBody = new StringContent(JsonConvert.SerializeObject(query),
@@ -314,13 +315,13 @@ namespace AiCoreApi.Services.IngestionServices
 
         private async Task UpdatePageContent(HttpClient client, string baseUrl, string pageId, string content, string locale)
         {
-            // First get the current page info to get the version and other required fields
+            // First get the current page info to get the required fields
             var getPageQuery = new
             {
                 query = @"
-                    query($id: String!, $locale: String!) {
+                    query($id: Int!) {
                         pages {
-                            single(id: $id, locale: $locale) {
+                            single(id: $id) {
                                 id
                                 title
                                 path
@@ -328,11 +329,10 @@ namespace AiCoreApi.Services.IngestionServices
                                 isPrivate
                                 isPublished
                                 locale
-                                version
                             }
                         }
                     }",
-                variables = new { id = pageId, locale = locale }
+                variables = new { id = Convert.ToInt32(pageId) }
             };
 
             var getPageJsonBody = new StringContent(JsonConvert.SerializeObject(getPageQuery),
@@ -353,9 +353,9 @@ namespace AiCoreApi.Services.IngestionServices
             var updateQuery = new
             {
                 query = @"
-                    mutation($id: String!, $input: PageInput!) {
+                    mutation($id: Int!, $title: String!, $path: String!, $content: String!, $description: String!, $isPrivate: Boolean!, $isPublished: Boolean!, $locale: String!, $tags: [String]!) {
                         pages {
-                            update(id: $id, input: $input) {
+                            update(id: $id, title: $title, path: $path, content: $content, description: $description, isPrivate: $isPrivate, isPublished: $isPublished, locale: $locale, tags: $tags) {
                                 responseResult {
                                     succeeded
                                     errorCode
@@ -367,18 +367,15 @@ namespace AiCoreApi.Services.IngestionServices
                     }",
                 variables = new
                 {
-                    id = pageId,
-                    input = new
-                    {
-                        content = content,
-                        description = pageInfo.Description,
-                        isPrivate = pageInfo.IsPrivate,
-                        isPublished = pageInfo.IsPublished,
-                        locale = locale,
-                        path = pageInfo.Path,
-                        title = pageInfo.Title,
-                        version = pageInfo.Version
-                    }
+                    id = Convert.ToInt32(pageId),
+                    title = pageInfo.Title,
+                    path = pageInfo.Path,
+                    content = content,
+                    description = pageInfo.Description,
+                    isPrivate = pageInfo.IsPrivate,
+                    isPublished = pageInfo.IsPublished,
+                    locale = locale,
+                    tags = new string[] { } // Empty tags array as default
                 }
             };
 
@@ -567,9 +564,6 @@ namespace AiCoreApi.Services.IngestionServices
 
             [JsonProperty("locale")]
             public string Locale { get; set; } = string.Empty;
-
-            [JsonProperty("version")]
-            public int Version { get; set; }
 
             [JsonProperty("createdAt")]
             public DateTime CreatedAt { get; set; }
