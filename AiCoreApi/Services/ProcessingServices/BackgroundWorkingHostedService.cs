@@ -11,6 +11,8 @@ namespace AiCoreApi.Services.ProcessingServices
         private readonly IInstanceSync _instanceSync;
         private readonly Config _config;
         private readonly ILogger<BackgroundWorkingHostedService> _logger;
+        private DateTime _lastSettingsResetTime = DateTime.MinValue;
+        private const int SettingsResetIntervalSeconds = 15;
 
         public BackgroundWorkingHostedService(
             IServiceScopeFactory scopeFactory,
@@ -34,6 +36,8 @@ namespace AiCoreApi.Services.ProcessingServices
                 {
                     using var scope = _scopeFactory.CreateScope();
 
+                    var extendedConfig = scope.ServiceProvider.GetRequiredService<ExtendedConfig>();
+                    var settingsProcessor = scope.ServiceProvider.GetRequiredService<ISettingsProcessor>();
                     var agentsProcessor = scope.ServiceProvider.GetRequiredService<IAgentsProcessor>();
                     var schedulerAgentService = scope.ServiceProvider.GetRequiredService<ISchedulerAgentService>();
                     var backgroundWorkerAgentService = scope.ServiceProvider.GetRequiredService<IBackgroundWorkerAgentService>();
@@ -65,6 +69,12 @@ namespace AiCoreApi.Services.ProcessingServices
                     await Task.WhenAll(tasks);
 
                     MaybeCompactLoh();
+
+                    if ((DateTime.UtcNow - _lastSettingsResetTime).TotalSeconds > SettingsResetIntervalSeconds)
+                    {
+                        extendedConfig.Reset(settingsProcessor);
+                        _lastSettingsResetTime = DateTime.UtcNow;
+                    }
                 }
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested) {  }

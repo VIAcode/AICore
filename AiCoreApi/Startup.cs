@@ -12,6 +12,7 @@ using AspNetCore.Authentication.Basic;
 using Microsoft.OpenApi.Models;
 using AiCoreApi.Services.ProcessingServices;
 using AiCoreApi.Common.Monitoring;
+using AiCoreApi.Data.Processors;
 
 namespace AiCoreApi;
 
@@ -80,6 +81,8 @@ public class Startup
         var serviceProvider = services.BuildServiceProvider();
         _logger = serviceProvider.GetRequiredService<ILogger<Startup>>();
         var extendedConfig = serviceProvider.GetRequiredService<ExtendedConfig>();
+        var settingsProcessor = serviceProvider.GetRequiredService<ISettingsProcessor>();
+        extendedConfig.Reset(settingsProcessor);
         services.AddSingleton<IFileIngestionClient>(sp => new FileIngestionClient(sp));
 
         var tokenValidationParameters = new TokenValidationParameters

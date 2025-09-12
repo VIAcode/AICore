@@ -11,37 +11,22 @@ namespace AiCoreApi.Common;
 
 public class ExtendedConfig
 {
-    private DateTime _nextRefresh = DateTime.MinValue;
     private ConcurrentDictionary<string, string> _configValues = new();
-    private readonly ISettingsProcessor _settingsProcessor;
-    private const int RefreshTimeSec = 15;
     private readonly object _lock = new();
 
     private readonly string _appSettings = File.ReadAllText("appsettings.json");
 
-    public ExtendedConfig(ISettingsProcessor settingsProcessor)
-    {
-        _settingsProcessor = settingsProcessor;
-    }
-
-    public void Reset()
+    public void Reset(ISettingsProcessor settingsProcessor)
     {
         lock (_lock)
         {
-            if (DateTime.Now > _nextRefresh)
-            {
-                _configValues = new ConcurrentDictionary<string, string>(_settingsProcessor.Get(SettingType.Common));
-                _nextRefresh = DateTime.Now.AddSeconds(RefreshTimeSec);
-            }
+            _configValues = new ConcurrentDictionary<string, string>(settingsProcessor.Get(SettingType.Common));
         }
     }
 
     private T GetValue<T>(string key) => GetValue(key, default(T));
     private T GetValue<T>(string key, T defaultValue)
     {
-        if (DateTime.Now > _nextRefresh)
-            Reset();
-
         if (!_configValues.TryGetValue(key, out var value))
         {
             value = Environment.GetEnvironmentVariable(key.ToUpper());
