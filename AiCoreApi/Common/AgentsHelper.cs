@@ -62,7 +62,11 @@ namespace AiCoreApi.Common
                 InProgress = inProgress,
                 WorkspaceId = workspaceId
             };
-            var result = _notificationsProcessor.Add(notification).GetAwaiter().GetResult();
+            var result = _notificationsProcessor
+                .Add(notification)
+                .ConfigureAwait(false)
+                .GetAwaiter()
+                .GetResult();
             return result.NotificationId;
         }
 
@@ -79,7 +83,11 @@ namespace AiCoreApi.Common
                 InProgress = inProgress,
                 WorkspaceId = workspaceId
             };
-            var result = _notificationsProcessor.Update(notification).GetAwaiter().GetResult();
+            var result = _notificationsProcessor
+                .Update(notification)
+                .ConfigureAwait(false)
+                .GetAwaiter()
+                .GetResult();
             return result.NotificationId;
         }
     }

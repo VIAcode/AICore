@@ -24,14 +24,12 @@ public class NotificationsController : ControllerBase
         return Ok(notifications);
     }
 
-    [HttpPut("{notificationId}/read")]
     [Authorize]
+    [HttpPut("{notificationId}/read")]
     public async Task<IActionResult> MarkAsRead(int notificationId)
     {
-        var currentUser = this.GetLogin();
-        if (currentUser == null) return Unauthorized();
 
-        var result = await _notificationsService.MarkAsRead(notificationId);
-        return Ok(result);
+        await _notificationsService.MarkAsRead(notificationId);
+        return Ok();
     }
 }

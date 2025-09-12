@@ -28,10 +28,9 @@ public class NotificationsService : INotificationsService
         return notificationsViewModelList;
     }
 
-    public async Task<bool> MarkAsRead(int notificationId)
+    public async Task MarkAsRead(int notificationId)
     {
         await _notificationsProcessor.MarkAsRead(notificationId);
-        return true;
     }
 
 }
@@ -39,5 +38,5 @@ public class NotificationsService : INotificationsService
 public interface INotificationsService
 {
     Task<List<NotificationViewModel>> List();
-    Task<bool> MarkAsRead(int notificationId);
+    Task MarkAsRead(int notificationId);
 }
