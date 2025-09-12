@@ -172,7 +172,8 @@ namespace AiCoreApi.Services.IngestionServices
             try
             {
                 var metadata = _documentMetadataProcessor.Get(fileId) ?? throw new InvalidOperationException($"File with id '{fileId}' not found in metadata.");
-                return await GetFileByPath(ingestion, metadata.Url);
+                var urlWithoutHash = metadata.Url?.Split('#')[0];
+                return await GetFileByPath(ingestion, urlWithoutHash);
             }
             catch (Exception ex)
             {
