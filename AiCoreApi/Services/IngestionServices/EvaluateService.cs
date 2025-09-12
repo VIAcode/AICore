@@ -1,8 +1,8 @@
 ﻿using AiCoreApi.Common;
 using AiCoreApi.Common.Extensions;
 using AiCoreApi.Data.Processors;
+using AiCoreApi.Models.DbModels;
 using AiCoreApi.Models.ViewModels;
-using AiCoreApi.SemanticKernel.Agents;
 using AiCoreApi.Services.ControllersServices;
 
 namespace AiCoreApi.Services.IngestionServices
@@ -12,11 +12,10 @@ namespace AiCoreApi.Services.IngestionServices
         private readonly IIngestionProcessor _ingestionProcessor;
         private readonly IDataIngestionWorkerFactory _ingestionWorkerFactory;
         private readonly IEvaluationProcessor _evaluationProcessor;
-        private readonly IEvaluationService _evaluationService;
         private readonly ITaskProcessor _taskProcessor;
         private readonly IServiceProvider _serviceProvider;
         private readonly ILoginProcessor _loginProcessor;
-        private readonly RequestAccessor _requestAccessor;
+        private readonly INotificationsProcessor _notificationsProcessor;
 
         private static class Constants
         {
@@ -30,19 +29,19 @@ namespace AiCoreApi.Services.IngestionServices
             IIngestionProcessor ingestionProcessor,
             IDataIngestionWorkerFactory ingestionWorkerFactory,
             IEvaluationProcessor evaluationProcessor,
-            IEvaluationService evaluationService,
             ITaskProcessor taskProcessor,
             IServiceProvider serviceProvider,
-            ILoginProcessor loginProcessor
+            ILoginProcessor loginProcessor,
+            INotificationsProcessor notificationsProcessor
             )
         {
             _ingestionProcessor = ingestionProcessor;
             _ingestionWorkerFactory = ingestionWorkerFactory;
             _evaluationProcessor = evaluationProcessor;
-            _evaluationService = evaluationService;
             _taskProcessor = taskProcessor;
             _serviceProvider = serviceProvider;
             _loginProcessor = loginProcessor;
+            _notificationsProcessor = notificationsProcessor;
         }
 
         public async Task Process(int ingestionId, int taskId, string payload)
@@ -73,7 +72,6 @@ namespace AiCoreApi.Services.IngestionServices
 
             var evaluation = await _evaluationProcessor.Get(evaluationId) ?? throw new InvalidOperationException($"Evaluation '{evaluationId}' not found.");
             await _taskProcessor.SetMessage(taskId, $"Running evaluation {evaluation.Name}");
-
             await using (var scope = _serviceProvider.CreateAsyncScope())
             {
                 var userContextAccessor = scope.ServiceProvider.GetRequiredService<UserContextAccessor>();
@@ -97,6 +95,17 @@ namespace AiCoreApi.Services.IngestionServices
                     await _taskProcessor.SetMessage(taskId, errorMessage);
                     throw new InvalidOperationException(errorMessage);
                 }
+                var notification = await _notificationsProcessor.Add(new NotificationModel
+                {
+                    CreatedAt = DateTime.UtcNow,
+                    IsRead = false,
+                    Message = $"Evaluation '{evaluation.Name}' is in progress.",
+                    Title = "Evaluation In Progress",
+                    Type = NotificationTypes.Info,
+                    InProgress = true,
+                    User = login.Login,
+                    WorkspaceId = workspaceId
+                });
                 requestAccessor.Login = login.Login;
                 requestAccessor.LoginTypeString = login.LoginType.ToString();
                 requestAccessor.TagsString = string.Join(",", login.Tags.Select(tag => tag.TagId));
@@ -104,7 +113,7 @@ namespace AiCoreApi.Services.IngestionServices
 
                 userContextAccessor.SetLoginId(loginId);
                 UserContextAccessor.AsyncScheduledLoginId.Value = loginId;
-                var newScore = await scope.ServiceProvider.GetRequiredService<IEvaluationService>().Run(evaluationId);
+                var newScore = await scope.ServiceProvider.GetRequiredService<IEvaluationService>().Run(evaluationId, true);
 
                 if (newScore < evaluation.LastScore)
                 {
@@ -113,9 +122,37 @@ namespace AiCoreApi.Services.IngestionServices
                     {
                         i++;
                         await _taskProcessor.SetMessage(taskId, $"Revert file {changedFile.Key} [{i}/{changedFiles.Count}]");
+                        await _notificationsProcessor.Update(new NotificationModel
+                        {
+                            NotificationId = notification.NotificationId,
+                            CreatedAt = DateTime.UtcNow,
+                            IsRead = false,
+                            Message = $"Reverting file {changedFile.Key} [{i}/{changedFiles.Count}]",
+                            Title = "Evaluation Revert",
+                            Type = NotificationTypes.Info,
+                            InProgress = false,
+                            User = login.Login,
+                            WorkspaceId = workspaceId
+                        });
                         await service.SetFile(ingestion, changedFile.Key, changedFile.Value);
                     }
                 }
+                var notificationMessage = newScore >= evaluation.LastScore
+                    ? $"Evaluation '{evaluation.Name}' completed. New score: {newScore}, previous score: {evaluation.LastScore}."
+                    : $"Evaluation '{evaluation.Name}' completed. New score: {newScore}, previous score: {evaluation.LastScore}. Changes have been reverted.";
+                notificationMessage += $"<br><a href=\"/evaluations/history?evaluationId={evaluationId}\">View Evaluation Details</a>";
+                await _notificationsProcessor.Update(new NotificationModel
+                {
+                    NotificationId = notification.NotificationId,
+                    CreatedAt = DateTime.UtcNow,
+                    IsRead = false,
+                    Message = notificationMessage,
+                    Title = "Evaluation Completed",
+                    Type = NotificationTypes.Info,
+                    InProgress = false,
+                    User = login.Login,
+                    WorkspaceId = workspaceId
+                });
                 await _taskProcessor.SetMessage(taskId, $"Completed.");
             }
         }

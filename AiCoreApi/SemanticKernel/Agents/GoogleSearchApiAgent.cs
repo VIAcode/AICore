@@ -184,6 +184,7 @@ namespace AiCoreApi.SemanticKernel.Agents
 
     public interface IGoogleSearchApiAgent
     {
+        Task<string> DoCallWrapper(AgentModel agent, Dictionary<string, string> parameters);
         Task AddAgent(AgentModel agent, Kernel kernel, List<string> pluginsInstructions);
     }
 }

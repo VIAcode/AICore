@@ -26,6 +26,7 @@ namespace AiCoreApi.Common.Data
         public DbSet<WorkspaceModel> Workspaces { get; set; }
         public DbSet<EvaluationModel> Evaluation { get; set; }
         public DbSet<EvaluationHistoryModel> EvaluationHistory { get; set; }
+        public DbSet<NotificationModel> Notification { get; set; }
 
 
         private readonly IDbQuery _dbQuery;

@@ -31,7 +31,7 @@ namespace AiCoreApi.Services.ControllersServices
             var props = typeof(ExtendedConfig)
                 .GetProperties()
                 .ToList();
-            _extendedConfig.Reset();
+            _extendedConfig.Reset(_settingsProcessor);
 
             var settings = _settingsProcessor.Get(SettingType.Common);
             return props
@@ -56,7 +56,7 @@ namespace AiCoreApi.Services.ControllersServices
             var settings = settingsViewModels
                 .ToDictionary(x => x.SettingId, x => x.Value);
             _settingsProcessor.Set(SettingType.Common, settings);
-            _extendedConfig.Reset();
+            _extendedConfig.Reset(_settingsProcessor);
         }
 
         public void Reboot()

@@ -20,6 +20,11 @@ namespace AiCoreApi.Common
             _requestAccessor = requestAccessor;
             _cacheAccessor = cacheAccessor;
         }
+        public int AddNotification(string userName, string type, string title, string message, bool inProgress = false) => 
+            _requestAccessor.AgentsHelper?.AddNotification(userName, type, title, message, inProgress, _requestAccessor.WorkspaceId ?? 0) ?? 0;
+
+        public int UpdateNotification(int notificationId, string userName, string type, string title, string message, bool inProgress = false) =>
+            _requestAccessor.AgentsHelper?.UpdateNotification(notificationId, userName, type, title, message, inProgress, _requestAccessor.WorkspaceId ?? 0) ?? 0;
 
         public string? StepState { get; set; }
         public MessageDialogViewModel.Message CurrentMessage { get; set; } = new() { Sender = PlannerHelpers.AssistantName };
