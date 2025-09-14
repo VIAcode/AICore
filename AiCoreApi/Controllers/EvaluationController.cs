@@ -87,7 +87,7 @@ namespace AiCoreApi.Controllers
             var currentUser = this.GetLogin();
             if (currentUser == null) return Unauthorized();
 
-            await _evaluationService.Run(evaluationId);
+            await _evaluationService.Run(evaluationId, false);
             return Ok();
         }
 

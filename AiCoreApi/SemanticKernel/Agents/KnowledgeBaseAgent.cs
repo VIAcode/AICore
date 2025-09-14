@@ -34,9 +34,9 @@ namespace AiCoreApi.SemanticKernel.Agents
             public const string SummarizePrompt = "summarizePrompt";
             public const string Limit = "limit"; 
             public const string AutoSyncOnFeedback = "autoSyncOnFeedback";
-            public const string UseBingToEnrichFeedback = "useBingToEnrichFeedback";
-            public const string BingConnectionName = "bingConnectionName";
-            public const string BingResultsLimit = "bingResultsLimit";
+            public const string UseGoogleToEnrichFeedback = "useGoogleToEnrichFeedback";
+            public const string GoogleConnectionName = "googleSearchApiConnection";
+            public const string GoogleResultsLimit = "googleResultsLimit";
             public const string TopK = "topK";
             public const string Evaluation = "evaluation";
         }
@@ -65,7 +65,7 @@ namespace AiCoreApi.SemanticKernel.Agents
 
         private static class Constants
         {
-            public const double PromptTemperature = 0.5;
+            public const double PromptTemperature = 1;
             public const double PrompTopP = 1;
         }
 
@@ -80,7 +80,7 @@ namespace AiCoreApi.SemanticKernel.Agents
         private readonly ITaskProcessor _taskProcessor;
         private readonly ISemanticKernelProvider _semanticKernelProvider;
         private readonly IDocumentMetadataProcessor _documentMetadataProcessor;
-        private readonly IBingSearchAgent _bingSearchAgent;
+        private readonly IGoogleSearchApiAgent _googleSearchApiAgent;
         private readonly IEvaluationProcessor _evaluationProcessor;
 
         public KnowledgeBaseAgent(
@@ -96,7 +96,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             ITaskProcessor taskProcessor,
             ISemanticKernelProvider semanticKernelProvider,
             IDocumentMetadataProcessor documentMetadataProcessor,
-            IBingSearchAgent bingSearchAgent,
+            IGoogleSearchApiAgent googleSearchApiAgent,
             IEvaluationProcessor evaluationProcessor,
             ILogger<RagPromptAgent> logger) : base(baseAgentHelper, logger)
         {
@@ -110,7 +110,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             _extendedConfig = extendedConfig;
             _taskProcessor = taskProcessor;
             _documentMetadataProcessor = documentMetadataProcessor;
-            _bingSearchAgent = bingSearchAgent;
+            _googleSearchApiAgent = googleSearchApiAgent;
             _evaluationProcessor = evaluationProcessor;
             _semanticKernelProvider = semanticKernelProvider;
         }
@@ -125,15 +125,15 @@ namespace AiCoreApi.SemanticKernel.Agents
 
             return action switch
             {
-                Actions.Search => await SearchAsync(agent, parameters),
+                Actions.Search => await SearchAsync(agent),
                 Actions.Sync => await SyncAsync(),
-                Actions.Feedback => await SyncFeedback(agent, parameters),
+                Actions.Feedback => await SyncFeedback(agent),
 
                 _ => await AnswerAsync(agent, parameters)
             };
         }
 
-        private async Task<string> SyncFeedback(AgentModel agent, Dictionary<string, string> parameters)
+        private async Task<string> SyncFeedback(AgentModel agent)
         {
             var answer = await GetParameterValueAsync(AgentContentParameters.Answer);
             var feedback = await GetParameterValueAsync(AgentContentParameters.Feedback);
@@ -150,8 +150,12 @@ namespace AiCoreApi.SemanticKernel.Agents
             var llmConnection = await GetLlmConnection(agent);
 
             var autoSyncOnFeedback = (await GetParameterValueAsync(AgentContentParameters.AutoSyncOnFeedback)).ToLower() == "true";
-            var useBingToEnrichFeedback = (await GetParameterValueAsync(AgentContentParameters.UseBingToEnrichFeedback)).ToLower() == "true";
+            var useGoogleToEnrichFeedback = (await GetParameterValueAsync(AgentContentParameters.UseGoogleToEnrichFeedback)).ToLower() == "true";
             var changePrompt = await GetParameterValueAsync(AgentContentParameters.ChangePrompt);
+            var summarizePrompt = (await GetParameterValueAsync(AgentContentParameters.SummarizePrompt))
+                .Replace(Placeholders.Answer, answer)
+                .Replace(Placeholders.Feedback, feedback);
+            feedback = await _semanticKernelProvider.ExecutePrompt(llmConnection, summarizePrompt, Constants.PromptTemperature, Constants.PrompTopP, "");
             var searchPrompt = (await GetParameterValueAsync(AgentContentParameters.SearchPrompt))
                 .Replace(Placeholders.Answer, answer)
                 .Replace(Placeholders.Feedback, feedback);
@@ -166,13 +170,10 @@ namespace AiCoreApi.SemanticKernel.Agents
                 _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Response", "Nothing to update");
                 return "";
             }
-            var summarizePrompt = (await GetParameterValueAsync(AgentContentParameters.SummarizePrompt))
-                .Replace(Placeholders.Answer, answer)
-                .Replace(Placeholders.Feedback, feedback);
-            feedback = await _semanticKernelProvider.ExecutePrompt(llmConnection, summarizePrompt, Constants.PromptTemperature, Constants.PrompTopP, "");
-            if (useBingToEnrichFeedback)
+
+            if (useGoogleToEnrichFeedback)
             {
-                feedback = await EnrichWithBing(llmConnection, agent, parameters, feedback, searchString);
+                feedback = await EnrichWithGoogle(llmConnection, feedback, searchString);
             }
             var loginId = await _requestAccessor.UserContext.GetLoginIdAsync();
             if (!int.TryParse(limit, out var limitInt))
@@ -209,17 +210,24 @@ namespace AiCoreApi.SemanticKernel.Agents
                 },
                 IsRetriable = true,
             };
+            _requestAccessor.AgentsHelper.AddNotification(
+                _requestAccessor.Login ?? "", 
+                NotificationTypes.Info, 
+                "Feedback Received", 
+                $"Your feedback for Data Source '{ingestion.Name}' has been received and will be processed shortly. <br><br>{feedback}", 
+                false,
+                agent.WorkspaceId ?? 0);
             await _taskProcessor.ScheduleTask(task);
-            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Response", "Feedback task scheduled for ingestion: " + ingestion.Name
+            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Response", "Feedback task scheduled for Data Source: " + ingestion.Name
                 + "\r\n" + $"Documents to update: {string.Join(", ", documentIds)}, LLM Connection: {llmConnection.Name}, AutoSync: {autoSyncOnFeedback}, Feedback: {feedback}");
-            return "Feedback task scheduled successfully for ingestion: " + ingestion.Name;
+            return "Feedback task scheduled successfully for Data Source: " + ingestion.Name;
         }
 
         private async Task<string> SyncAsync()
         {
             var dataSource = await GetParameterValueAsync(AgentContentParameters.DataSource);
             var ingestion = await GetIngestionModel(dataSource);
-            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Request", $"# Syncing ingestion: {ingestion.Name}");
+            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Request", $"# Syncing Data Source: {ingestion.Name}");
             var task = new TaskModel
             {
                 IngestionId = ingestion.IngestionId,
@@ -229,35 +237,36 @@ namespace AiCoreApi.SemanticKernel.Agents
                 IsRetriable = true,
             };
             await _taskProcessor.ScheduleTask(task);
-            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Response", $"Sync task scheduled for ingestion: {ingestion.Name}");
-            return "Sync task scheduled successfully for ingestion: " + ingestion.Name;
+            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Response", $"Sync task scheduled for Data Source: {ingestion.Name}");
+            return "Sync task scheduled successfully for Data Source: " + ingestion.Name;
         }
 
-        private async Task<string> EnrichWithBing(ConnectionModel llmConnection, AgentModel agent, Dictionary<string, string> parameters, string feedback, string searchString)
+        private async Task<string> EnrichWithGoogle(ConnectionModel llmConnection, string feedback, string searchString)
         {
             try
             {
-                var bingConnectionName = await GetParameterValueAsync(AgentContentParameters.BingConnectionName);
-                var bingResultsLimit = await GetParameterValueAsync(AgentContentParameters.BingResultsLimit);
-                var bingAgentModel = new AgentModel
+                var googleConnectionName = await GetParameterValueAsync(AgentContentParameters.GoogleConnectionName);
+                var googleResultsLimit = await GetParameterValueAsync(AgentContentParameters.GoogleResultsLimit);
+                var googleAgentModel = new AgentModel
                 {
-                    Name = "FeedbackEnrichmentBing",
-                    Type = Models.DbModels.AgentType.BingSearch,
+                    Name = "FeedbackEnrichmentGoogle",
+                    Type = Models.DbModels.AgentType.GoogleSearchApi,
                     Content = new Dictionary<string, ConfigurableSetting>
                     {
                         { "queryString", new ConfigurableSetting { Value = searchString } },
-                        { "bingConnection", new ConfigurableSetting { Value = bingConnectionName } },
-                        { "count", new ConfigurableSetting { Value = bingResultsLimit } },
+                        { "googleSearchApiConnection", new ConfigurableSetting { Value = googleConnectionName } },
+                        { "count", new ConfigurableSetting { Value = googleResultsLimit } },
+                        { "offset", new ConfigurableSetting { Value = "0" } },
                         { "outputType", new ConfigurableSetting { Value = "snippetTexts" } }
                     }
                 };
-                var bingResultJson = await _bingSearchAgent.DoCall(bingAgentModel, new Dictionary<string, string>());
-                _responseAccessor.AddDebugMessage(_debugMessageSenderName, "Bing Enrichment Result", bingResultJson);
-                var bingSnippets = JsonSerializer.Deserialize<List<string>>(bingResultJson) ?? new List<string>();
+                var googleResultJson = await _googleSearchApiAgent.DoCallWrapper(googleAgentModel, new Dictionary<string, string>());
+                _responseAccessor.AddDebugMessage(_debugMessageSenderName, "Google Enrichment Result", googleResultJson);
+                var googleSnippets = JsonSerializer.Deserialize<List<string>>(googleResultJson) ?? new List<string>();
                 var web = "";
-                if (bingSnippets.Count > 0)
+                if (googleSnippets.Count > 0)
                 {
-                    web += "\n\nAdditional context from web:\n" + string.Join("\n", bingSnippets.Take(Convert.ToInt32(bingResultsLimit)));
+                    web += "\n\nAdditional context from web:\n" + string.Join("\n", googleSnippets.Take(Convert.ToInt32(googleResultsLimit)));
                 }
                 var summarizeWebPrompt = "Enrich the feedback with additional context from the web:\n\n" +
                                          "Feedback: " + feedback + "\n\n" +
@@ -269,8 +278,8 @@ namespace AiCoreApi.SemanticKernel.Agents
             }
             catch (Exception ex)
             {
-                _responseAccessor.AddDebugMessage(_debugMessageSenderName, "Bing Enrichment Error", ex.Message);
-                return feedback; // return original feedback if Bing enrichment fails
+                _responseAccessor.AddDebugMessage(_debugMessageSenderName, "Google Enrichment Error", ex.Message);
+                return feedback; // return original feedback if Google enrichment fails
             }
         }
         private async Task<IngestionModel> GetIngestionModel(string ingestionName)
@@ -279,8 +288,8 @@ namespace AiCoreApi.SemanticKernel.Agents
             var ingestion = ingestions.FirstOrDefault(i => i.Name.Equals(ingestionName, StringComparison.OrdinalIgnoreCase));
             if (ingestion == null)
             {
-                _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Response", $"No ingestion found with name: {ingestionName}");
-                throw new AiCoreUiException($"No ingestion found with name: {ingestionName}");
+                _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Response", $"No Data Source found with name: {ingestionName}");
+                throw new AiCoreUiException($"No Data Source found with name: {ingestionName}");
             }
             return ingestion;
         }
@@ -328,7 +337,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             return result;
         }
 
-        private async Task<string> SearchAsync(AgentModel agent, Dictionary<string, string> parameters)
+        private async Task<string> SearchAsync(AgentModel agent)
         {
             var searchResults = await DoSearchAsync(agent);
             var resultText = searchResults.ToJson() ?? "";
@@ -410,7 +419,7 @@ namespace AiCoreApi.SemanticKernel.Agents
 
             var embeddingConnectionId = ingestionModel.Content.ContainsKey("EmbeddingConnection")
                 ? ingestionModel.Content["EmbeddingConnection"]
-                : throw new AiCoreUiException("Embedding connection name is required in the ingestion model.");
+                : throw new AiCoreUiException("Embedding connection name is required in the Data Source model.");
 
             var vectorDbConnectionId = ingestionModel.Content.ContainsKey("VectorDBConnectionName")
                 ? ingestionModel.Content["VectorDBConnectionName"]

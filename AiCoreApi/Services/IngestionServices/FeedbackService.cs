@@ -16,6 +16,7 @@ namespace AiCoreApi.Services.IngestionServices
         private readonly IConnectionProcessor _connectionProcessor;
         private readonly ITaskProcessor _taskProcessor;
         private readonly ILoginProcessor _loginProcessor;
+        private readonly INotificationsProcessor _notificationsProcessor;
 
         private static class Constants
         {
@@ -41,7 +42,8 @@ namespace AiCoreApi.Services.IngestionServices
             IServiceProvider serviceProvider,
             IConnectionProcessor connectionProcessor,
             ITaskProcessor taskProcessor,
-            ILoginProcessor loginProcessor)
+            ILoginProcessor loginProcessor,
+            INotificationsProcessor notificationsProcessor)
         {
             _ingestionProcessor = ingestionProcessor;
             _semanticKernelProvider = semanticKernelProvider;
@@ -50,6 +52,7 @@ namespace AiCoreApi.Services.IngestionServices
             _connectionProcessor = connectionProcessor;
             _taskProcessor = taskProcessor;
             _loginProcessor = loginProcessor;
+            _notificationsProcessor = notificationsProcessor;
         }
 
         public async Task Process(int ingestionId, int taskId, string payload)
@@ -110,6 +113,18 @@ namespace AiCoreApi.Services.IngestionServices
 
             var changedFiles = new Dictionary<string, object>();
             var i = 0;
+            var notification = await _notificationsProcessor.Add(new NotificationModel
+            {
+                CreatedAt = DateTime.UtcNow,
+                IsRead = false,
+                Message = $"Feedback processing for Data Source: '{ingestion.Name}'.",
+                Title = "Feedback Processing",
+                Type = NotificationTypes.Info,
+                InProgress = true,
+                User = runAsUser.Login,
+                WorkspaceId = workspaceId
+            });
+
             foreach (var documentId in documentIds)
             {
                 i++;
@@ -117,6 +132,18 @@ namespace AiCoreApi.Services.IngestionServices
                 {
                     var file = await service.GetFile(ingestion, documentId);
                     await _taskProcessor.SetMessage(taskId, $"Processing file '{documentId}' [{i}/{documentIds.Length}]");
+                    await _notificationsProcessor.Update(new NotificationModel
+                    {
+                        NotificationId = notification.NotificationId,
+                        CreatedAt = DateTime.UtcNow,
+                        IsRead = false,
+                        Message = $"Feedback processing for Data Source: '{ingestion.Name}'. Processing file '{documentId}' [{i}/{documentIds.Length}]",
+                        Title = "Feedback Processing",
+                        Type = NotificationTypes.Info,
+                        InProgress = true,
+                        User = runAsUser.Login,
+                        WorkspaceId = workspaceId
+                    });
                     if (evaluationId > 0)
                     {
                         changedFiles.Add(documentId, file);
@@ -172,6 +199,19 @@ namespace AiCoreApi.Services.IngestionServices
                 };
                 await _taskProcessor.ScheduleTask(task);
             }
+
+            await _notificationsProcessor.Update(new NotificationModel
+            {
+                NotificationId = notification.NotificationId,
+                CreatedAt = DateTime.UtcNow,
+                IsRead = false,
+                Message = $"Feedback processed for Data Source: '{ingestion.Name}'. Affected files: {documentIds.Length}.",
+                Title = "Feedback Processed",
+                Type = NotificationTypes.Info,
+                User = runAsUser.Login,
+                InProgress = false,
+                WorkspaceId = workspaceId
+            });
             await _taskProcessor.SetMessage(taskId, $"Completed.");
         }
     }

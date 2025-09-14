@@ -98,7 +98,7 @@ public class EvaluationService : IEvaluationService
         return updatedEvaluationViewModel;
     }
 
-    public async Task<int> Run(int evaluationId)
+    public async Task<int> Run(int evaluationId, bool useRevert)
     {
         var evaluation = await _evaluationProcessor.Get(evaluationId);
         if (evaluation == null) 
@@ -163,11 +163,19 @@ public class EvaluationService : IEvaluationService
             await _evaluationHistoryProcessor.Update(evaluationHistory);
         }
         overallScore /= evaluation.Questions.Count;
-        evaluation.LastScore = Convert.ToInt32(overallScore);
+        var overallScoreInt = Convert.ToInt32(overallScore);
+        if (useRevert && evaluation.LastScore > overallScoreInt)
+        {
+            evaluationHistory.Status = $"Completed [{evaluationHistory.Questions.Count}/{evaluation.Questions.Count}], Score: {overallScoreInt}. Reverted.";
+        }
+        else
+        {
+            evaluation.LastScore = overallScoreInt;
+            evaluationHistory.Status = $"Completed [{evaluationHistory.Questions.Count}/{evaluation.Questions.Count}], Score: {overallScoreInt}";
+        }
         await _evaluationProcessor.Update(evaluation);
-        evaluationHistory.Status = $"Completed [{evaluationHistory.Questions.Count}/{evaluation.Questions.Count}], Score: {evaluation.LastScore}";
         await _evaluationHistoryProcessor.Update(evaluationHistory);
-        return evaluation.LastScore;
+        return overallScoreInt;
     }
 
     private async Task<ConnectionModel?> GetConnection(EvaluationModel evaluation)
@@ -262,7 +270,7 @@ public interface IEvaluationService
     Task<EvaluationHistoryViewModel> GetHistoryItem(int evaluationHistoryId);
     Task<List<EvaluationViewModel>> List();
     Task Delete(int evaluationId);
-    Task<int> Run(int evaluationId); 
+    Task<int> Run(int evaluationId, bool useRevert); 
     Task<EvaluationViewModel> Add(EvaluationViewModel evaluationViewModel);
     Task<EvaluationViewModel> Update(EvaluationViewModel evaluationViewModel);
     Task<List<DebugMessageViewModel>> GetDebugMessages(int evaluationHistoryId, int logId);
