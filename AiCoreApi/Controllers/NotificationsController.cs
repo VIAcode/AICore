@@ -1,4 +1,4 @@
-﻿using AiCoreApi.Common.Extensions;
+﻿using AiCoreApi.Common;
 using AiCoreApi.Services.ControllersServices;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -11,16 +11,23 @@ namespace AiCoreApi.Controllers;
 public class NotificationsController : ControllerBase
 {
     private readonly INotificationsService _notificationsService;
-    public NotificationsController(INotificationsService notificationsService)
+    private readonly RequestAccessor _requestAccessor;
+
+    public NotificationsController(
+        INotificationsService notificationsService,
+        RequestAccessor requestAccessor)
     {
         _notificationsService = notificationsService;
+        _requestAccessor = requestAccessor;
     }
 
     [Authorize]
     [HttpGet]
     public async Task<IActionResult> List()
     {
-        var notifications = await _notificationsService.List();
+        if(_requestAccessor.Login == null) 
+            return Unauthorized();
+        var notifications = await _notificationsService.List(_requestAccessor.Login);
         return Ok(notifications);
     }
 
