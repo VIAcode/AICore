@@ -13,11 +13,11 @@ namespace AiCoreApi.Data.Processors
             _dbFactory = dbFactory;
         }
 
-        public async Task<List<NotificationModel>> ListUnread(int workspaceId)
+        public async Task<List<NotificationModel>> ListUnread(int workspaceId, string login)
         {
             await using var db = await _dbFactory.CreateDbContextAsync();
             var qry = db.Notification.OrderByDescending(item => item.NotificationId).AsNoTracking();
-            qry = qry.Where(e => e.WorkspaceId == workspaceId && e.IsRead == false);
+            qry = qry.Where(e => e.WorkspaceId == workspaceId && e.IsRead == false && login == e.User);
             var data = await qry.ToListAsync();
             return data;
         }
@@ -61,7 +61,7 @@ namespace AiCoreApi.Data.Processors
 
     public interface INotificationsProcessor
     {
-        Task<List<NotificationModel>> ListUnread(int workspaceId);
+        Task<List<NotificationModel>> ListUnread(int workspaceId, string login);
         Task<NotificationModel> Add(NotificationModel notification);
         Task<NotificationModel> Update(NotificationModel notification);
         Task MarkAsRead(int notificationId);
