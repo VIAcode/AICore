@@ -67,8 +67,8 @@ public class AgentsController : ControllerBase
         return Ok(true);
     }
 
-    [CombinedAuthorize]
     [HttpDelete("{agentId}")]
+    [CombinedAuthorize]
     [RoleAuthorize(Role.Admin, Role.Developer)]
     public async Task<IActionResult> Delete(int agentId)
     {
