@@ -21,9 +21,9 @@ public class NotificationsService : INotificationsService
         _mapper = mapper;
     }
 
-    public async Task<List<NotificationViewModel>> List()
+    public async Task<List<NotificationViewModel>> List(string login)
     {
-        var notificationsList = await _notificationsProcessor.ListUnread(_requestAccessor.WorkspaceId ?? 0);
+        var notificationsList = await _notificationsProcessor.ListUnread(_requestAccessor.WorkspaceId ?? 0, login);
         var notificationsViewModelList = _mapper.Map<List<NotificationViewModel>>(notificationsList);
         return notificationsViewModelList;
     }
@@ -37,6 +37,6 @@ public class NotificationsService : INotificationsService
 
 public interface INotificationsService
 {
-    Task<List<NotificationViewModel>> List();
+    Task<List<NotificationViewModel>> List(string login);
     Task MarkAsRead(int notificationId);
 }

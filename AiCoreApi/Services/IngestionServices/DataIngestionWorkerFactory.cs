@@ -9,6 +9,7 @@ namespace AiCoreApi.Services.IngestionServices
         private readonly IAzDoWikiIngestionService _azDoWikiIngestionService;
         private readonly IConfluenceIngestionService _confluenceIngestionService;
         private readonly IAzureBlobStorageIngestionService _blobStorageIngestionService;
+        private readonly IWikiJsIngestionService _wikiJsIngestionService;
 
         public DataIngestionWorkerFactory(
             ISharePointIngestionService sharePointIngestionService,
@@ -16,7 +17,8 @@ namespace AiCoreApi.Services.IngestionServices
             IWebUrlIngestionService webUrlIngestionService,
             IAzDoWikiIngestionService azDoWikiIngestionService,
             IConfluenceIngestionService confluenceIngestionService,
-            IAzureBlobStorageIngestionService blobStorageIngestionService)
+            IAzureBlobStorageIngestionService blobStorageIngestionService,
+            IWikiJsIngestionService wikiJsIngestionService)
         {
             _sharePointIngestionService = sharePointIngestionService;
             _fileUploadIngestionService = fileUploadIngestionService;
@@ -24,6 +26,7 @@ namespace AiCoreApi.Services.IngestionServices
             _azDoWikiIngestionService = azDoWikiIngestionService;
             _confluenceIngestionService = confluenceIngestionService;
             _blobStorageIngestionService = blobStorageIngestionService;
+            _wikiJsIngestionService = wikiJsIngestionService;
         }
 
         public IDataIngestionWorker GetService(IngestionModel ingestion) => GetService(ingestion.Type);
@@ -43,6 +46,8 @@ namespace AiCoreApi.Services.IngestionServices
                     return _confluenceIngestionService;
                 case IngestionType.AzureBlobStorage:
                     return _blobStorageIngestionService;
+                case IngestionType.WikiJs:
+                    return _wikiJsIngestionService;
                 default:
                     throw new InvalidOperationException($"Unsupported data source '{ingestionType}'.");
             }
