@@ -80,7 +80,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             string result;
             if (outputType == "snippetJson")
             {
-                var jsonList = results.Select(r => new { url = r.Url, text = r.Snippet }).ToList();
+                var jsonList = results.Select(r => new { url = r.Url, name = r.Name, text = r.Snippet }).ToList();
                 result = JsonSerializer.Serialize(jsonList);
             }
             else if (outputType == "pagesJson")
@@ -92,7 +92,7 @@ namespace AiCoreApi.SemanticKernel.Agents
                     if (text.Length > int.Parse(maxContentLength))
                         text = text.Substring(0, int.Parse(maxContentLength));
 
-                    pages.Add(new Dictionary<string, string> { { "url", page.Url }, { "text", text } });
+                    pages.Add(new Dictionary<string, string> { { "url", page.Url }, { "name", page.Name }, { "text", text } });
                 }
                 result = JsonSerializer.Serialize(pages, new JsonSerializerOptions { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping });
             }
