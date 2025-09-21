@@ -48,5 +48,7 @@
         MemZero = 33,
         Confluence = 34,
         GeminiLlm = 35,
+        WikiJs = 36,
+        Mcp = 37,
     }
 }

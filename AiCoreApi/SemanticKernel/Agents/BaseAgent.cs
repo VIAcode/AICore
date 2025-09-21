@@ -102,7 +102,9 @@ namespace AiCoreApi.SemanticKernel.Agents
             if (_parameters == null || _parameters.Count == 0)
                 return text;
 
-            return await ApplyParametersAsync(text, null);
+            var result = await ApplyParametersAsync(text, null);
+            result = await ApplySecret(result);
+            return result;
         }
 
         protected async Task<string> ApplyParametersAsync(string text, Dictionary<string, string>? additionalParameters = null)
@@ -354,27 +356,31 @@ namespace AiCoreApi.SemanticKernel.Agents
             throw new Exception("No any LLM connections found.");
         }
 
-        private async Task<ConnectionModel> ApplySecrets(ConnectionModel connectionModel)
+        protected async Task<ConnectionModel> ApplySecrets(ConnectionModel connectionModel)
         {
-            var regex = new Regex(@"\{\{secret:(?<name>[^}]+)\}\}", RegexOptions.Compiled);
             var keys = connectionModel.Content.Keys.ToList();
             foreach (var key in keys)
             {
-                var value = connectionModel.Content[key];
-                if (string.IsNullOrEmpty(value)) 
-                    continue;
-                var matches = regex.Matches(value);
-                if (matches.Count == 0) 
-                    continue;
-                foreach (Match match in matches)
-                {
-                    var secretName = match.Groups["name"].Value.Trim();
-                    var secretValue = await _entraTokenProvider.GetSecretFromKeyVaultAsync(secretName) ?? string.Empty;
-                    value = value.Replace(match.Value, secretValue);
-                }
-                connectionModel.Content[key] = value;
+                connectionModel.Content[key] = await ApplySecret(connectionModel.Content[key]);
             }
             return connectionModel;
+        }
+
+        protected async Task<string> ApplySecret(string value)
+        {
+            var regex = new Regex(@"\{\{secret:(?<name>[^}]+)\}\}", RegexOptions.Compiled);
+            if (string.IsNullOrEmpty(value))
+                return value;
+            var matches = regex.Matches(value);
+            if (matches.Count == 0)
+                return value;
+            foreach (Match match in matches)
+            {
+                var secretName = match.Groups["name"].Value.Trim();
+                var secretValue = await _entraTokenProvider.GetSecretFromKeyVaultAsync(secretName);
+                value = value.Replace(match.Value, secretValue);
+            }
+            return value;
         }
     }
 }
