@@ -10,6 +10,8 @@ namespace AiCoreApi.Models.Mapping
         {
             CreateMap<ConnectionViewModel, ConnectionModel>();
             CreateMap<ConnectionModel, ConnectionViewModel>();
+            CreateMap<ConnectionModel, ConnectionExportModel>();
+            CreateMap<ConnectionExportModel, ConnectionModel>();
         }
     }
 }
