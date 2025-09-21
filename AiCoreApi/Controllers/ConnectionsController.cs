@@ -81,7 +81,7 @@ public class ConnectionsController : ControllerBase
     {
         var connectionIdsList = connectionIds.Split(',').Select(int.Parse).ToList();
         var result = await _connectionService.ExportConnections(connectionIdsList);
-        return File(result, "application/zip", $"connections-{DateTime.UtcNow:yyyy-MM-dd-hh-mm}.zip");
+        return File(result, "application/zip", $"connections-{DateTime.UtcNow:yyyy-MM-dd-HH-mm}.zip");
     }
 
     [HttpPost("import")]
