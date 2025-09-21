@@ -73,4 +73,32 @@ public class ConnectionsController : ControllerBase
         var connection = await _connectionService.GetConnectionById(connectionId);
         return Ok(connection);
     }
+
+    [HttpGet("export")]
+    [AllowAnonymous]
+    [RoleAuthorize(Role.Admin, Role.Developer)]
+    public async Task<IActionResult> Export([FromQuery] string connectionIds, [FromQuery] string token)
+    {
+        var connectionIdsList = connectionIds.Split(',').Select(int.Parse).ToList();
+        var result = await _connectionService.ExportConnections(connectionIdsList);
+        return File(result, "application/zip", $"connections-{DateTime.UtcNow:yyyy-MM-dd-HH-mm}.zip");
+    }
+
+    [HttpPost("import")]
+    [CombinedAuthorize]
+    [RoleAuthorize(Role.Admin, Role.Developer)]
+    public async Task<IActionResult> Import(IFormFile file, [FromQuery(Name = "workspace_id")] int workspaceId = 0)
+    {
+        var result = await _connectionService.ImportConnections(file, workspaceId);
+        return Ok(result);
+    }
+
+    [HttpPut("import/{confirmationId}")]
+    [CombinedAuthorize]
+    [RoleAuthorize(Role.Admin, Role.Developer)]
+    public async Task<IActionResult> ImportConfirm(string confirmationId, [FromQuery(Name = "workspace_id")] int workspaceId = 0)
+    {
+        await _connectionService.ConfirmImportConnections(confirmationId, workspaceId);
+        return Ok();
+    }
 }
