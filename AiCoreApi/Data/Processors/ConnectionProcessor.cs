@@ -90,6 +90,12 @@ namespace AiCoreApi.Data.Processors
             }
             return await qry.FirstOrDefaultAsync();
         }
+
+        public async Task<List<ConnectionModel?>> ListAll()
+        {
+            await using var db = await _dbFactory.CreateDbContextAsync();
+            return await db.Connections.OrderBy(item => item.ConnectionId).AsNoTracking().ToListAsync();
+        }
     }
 
     public interface IConnectionProcessor
@@ -99,5 +105,6 @@ namespace AiCoreApi.Data.Processors
         Task Remove(int connectionId);
         Task<ConnectionModel?> GetById(int connectionId);
         Task<ConnectionModel?> GetByName(string connectionName, int? workspaceId);
+        Task<List<ConnectionModel?>> ListAll();
     }
 }

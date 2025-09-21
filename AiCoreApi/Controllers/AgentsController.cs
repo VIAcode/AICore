@@ -123,7 +123,7 @@ public class AgentsController : ControllerBase
     {
         var agentIdsList = agentIds.Split(',').Select(int.Parse).ToList();
         var result = await _agentsService.ExportAgents(agentIdsList);
-        return File(result, "application/zip", $"agents-{DateTime.UtcNow:yyyy-MM-dd-hh-mm}.zip");
+        return File(result, "application/zip", $"agents-{DateTime.UtcNow:yyyy-MM-dd-HH-mm}.zip");
     }
 
     [HttpPost("import")]
