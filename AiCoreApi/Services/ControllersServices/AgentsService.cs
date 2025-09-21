@@ -24,6 +24,7 @@ public class AgentsService : IAgentsService
     private readonly ITagsProcessor _tagsProcessor;
     private readonly RequestAccessor _requestAccessor;
     private readonly IPlannerHelpers _plannerHelpers;
+    private readonly IAgentsFlowDescriber _agentsFlowDescriber;
 
     private const int MaxCallsLimit = 1000;
 
@@ -38,7 +39,8 @@ public class AgentsService : IAgentsService
         IConnectionProcessor connectionProcessor,
         ITagsProcessor tagsProcessor,
         RequestAccessor requestAccessor,
-        IPlannerHelpers plannerHelpers)
+        IPlannerHelpers plannerHelpers,
+        IAgentsFlowDescriber agentsFlowDescriber)
     {
         _mcpClient = mcpClient;
         _extendedConfig = extendedConfig;
@@ -51,6 +53,7 @@ public class AgentsService : IAgentsService
         _tagsProcessor = tagsProcessor;
         _requestAccessor = requestAccessor;
         _plannerHelpers = plannerHelpers;
+        _agentsFlowDescriber = agentsFlowDescriber;
     }
 
     private static readonly SemaphoreSlim GitRepoLock = new(1, 1);
@@ -612,6 +615,70 @@ public class AgentsService : IAgentsService
         var result = await _mcpClient.GetActions(serverUrl, customHeader);
         return result;
     }
+
+    public async Task<string> GetCard(int agentId)
+    {
+        var agent = await _agentsProcessor.GetById(agentId);
+        if (agent == null)
+            return "<div>Agent not found</div>";
+        var agentsDescription = await _agentsFlowDescriber.GetAgentsDescription(agent.WorkspaceId ?? 0, agentId);
+
+        var parameters = await GetParameters(agentId);
+        var parametersHtml = parameters != null && parameters.Any() 
+            ? string.Join("", parameters.Select(p => $"<li>{p.Description}</li>"))
+            : "<li>No parameters defined</li>";
+
+        var outputDescription = agent.Content.ContainsKey("outputDescription") 
+            ? agent.Content["outputDescription"].Value 
+            : "No output description available";
+
+        var html = $@"
+<div>
+    <h2>{agent.Name}</h2>
+    
+    <div>
+        <h3>Description</h3>
+        <p>{agent.Description}</p>
+    </div>
+    
+    <div>
+        <h3>Parameters</h3>
+        <ul>
+            {parametersHtml}
+        </ul>
+    </div>
+    <div>
+        <h3>Agent Overview</h3>
+        <p>{agentsDescription.Description}</p>
+    </div>
+    {(
+        agentsDescription.CalledByAgents.Count > 0 
+        ? $@"<div>
+                <h3>Called By</h3>
+                <ul>
+                    {string.Join("", agentsDescription.CalledByAgents.Select(a => $"<li>{a}</li>"))}
+                </ul>
+            </div>"
+        : ""
+    )}
+    {(
+        agentsDescription.CallingAgents.Count > 0
+        ? $@"<div>
+                <h3>Calls</h3>
+                <ul>
+                    {string.Join("", agentsDescription.CallingAgents.Select(a => $"<li>{a}</li>"))}
+                </ul>
+            </div>"
+        : ""
+    )}    
+    <div>
+        <h3>Output</h3>
+        <p>{outputDescription}</p>
+    </div>
+</div>";
+
+        return html;
+    }
 }
 
 public interface IAgentsService
@@ -629,5 +696,6 @@ public interface IAgentsService
     Task ConfirmImportAgents(string confirmationId, int workspaceId);
     Task<List<string>> GetHistory(int agentId, string? parameterCode);
     Task<string> GetHistoryCode(int agentId, string gitTitle, string? parameterCode);
-    Task<List<McpActionViewModel>> GetMcpActions(string connectionName); 
+    Task<List<McpActionViewModel>> GetMcpActions(string connectionName);
+    Task<string> GetCard(int agentId);
 }
