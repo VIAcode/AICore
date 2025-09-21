@@ -41,13 +41,13 @@ namespace AiCoreApi.Models.ViewModels
         Contains = 5,
         Composite = 6,
         PythonCode = 7,
-        CsharpCode = 8, 
+        CsharpCode = 8,
         BingSearch = 9,
         History = 10,
         RagPrompt = 11,
         Ocr = 12,
         BackgroundWorker = 13,
-        ContentSafety = 14, 
+        ContentSafety = 14,
         ImageToText = 15,
         Whisper = 16,
         VectorSearch = 17,
@@ -88,5 +88,7 @@ namespace AiCoreApi.Models.ViewModels
         MemZero = 52,
         KnowledgeBase = 53,
         Confluence = 54,
+        GraphMailNotification = 55,
+        McpClient = 56
     }
 }

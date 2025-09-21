@@ -25,6 +25,11 @@ namespace AiCoreApi.Models.ViewModels
                 Files ??= new List<UploadFile>();
                 Files.Add(new UploadFile { Name = name, Size = size ?? Convert.FromBase64String(base64Data).Length, Base64Data = base64Data });
             }
+            public void AddSource(string name, string url)
+            {
+                Sources ??= new List<MessageSource>();
+                Sources.Add(new MessageSource { Name = name, Url = url });
+            }
             [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
             public List<DebugMessage>? DebugMessages { get; set; }
             [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]

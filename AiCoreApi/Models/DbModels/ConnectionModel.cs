@@ -56,6 +56,7 @@ namespace AiCoreApi.Models.DbModels
         Confluence = 34,
         GeminiLlm = 35,
         WikiJs = 36,
+        Mcp = 37,
     }
 
     public static class ConnectionTypeExtensions

@@ -68,6 +68,7 @@ namespace AiCoreApi.SemanticKernel
         private readonly IOpenSearchAgent _openSearchAgent;
         private readonly IGitAgent _gitAgent;
         private readonly IMemZeroAgent _memZeroAgent;
+        private readonly IMcpClientAgent _mcpClientAgent;
 
         public PlannerHelpers(
             RequestAccessor requestAccessor,
@@ -113,7 +114,8 @@ namespace AiCoreApi.SemanticKernel
             IEmbeddingAgent embeddingAgent,
             IOpenSearchAgent openSearchAgent,
             IGitAgent gitAgent,
-            IMemZeroAgent memZeroAgent)
+            IMemZeroAgent memZeroAgent,
+            IMcpClientAgent mcpClientAgent)
         {
             _requestAccessor = requestAccessor;
             _extendedConfig = extendedConfig;
@@ -159,6 +161,7 @@ namespace AiCoreApi.SemanticKernel
             _openSearchAgent = openSearchAgent;
             _gitAgent = gitAgent;
             _memZeroAgent = memZeroAgent;
+            _mcpClientAgent = mcpClientAgent;
         }
 
         private List<AgentModel>? _agentsList;
@@ -392,7 +395,8 @@ namespace AiCoreApi.SemanticKernel
                 { AgentType.Git, _gitAgent },
                 { AgentType.Flow, FlowAgent }, 
                 { AgentType.MemZero, _memZeroAgent },
-                { AgentType.KnowledgeBase, _knowledgeBaseAgent }
+                { AgentType.KnowledgeBase, _knowledgeBaseAgent },
+                { AgentType.McpClient, _mcpClientAgent }
             };
             return agentMapping;
         }

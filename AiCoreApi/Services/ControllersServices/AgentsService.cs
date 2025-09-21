@@ -15,6 +15,7 @@ public class AgentsService : IAgentsService
 {
     private readonly IMapper _mapper;
     private readonly ILogger<AgentsService> _logger;
+    private readonly IMcpClient _mcpClient;
     private readonly ExtendedConfig _extendedConfig;
     private readonly IAgentsProcessor _agentsProcessor;
     private readonly IDistributedCache _distributedCache;
@@ -27,6 +28,7 @@ public class AgentsService : IAgentsService
     private const int MaxCallsLimit = 1000;
 
     public AgentsService(
+        IMcpClient mcpClient,
         ExtendedConfig extendedConfig,
         IAgentsProcessor agentsProcessor, 
         IMapper mapper,
@@ -38,6 +40,7 @@ public class AgentsService : IAgentsService
         RequestAccessor requestAccessor,
         IPlannerHelpers plannerHelpers)
     {
+        _mcpClient = mcpClient;
         _extendedConfig = extendedConfig;
         _agentsProcessor = agentsProcessor;
         _mapper = mapper;
@@ -594,6 +597,21 @@ public class AgentsService : IAgentsService
         Commands.Checkout(repo, localBranch);
         return localBranch;
     }
+
+    public async Task<List<McpActionViewModel>> GetMcpActions(string connectionName)
+    {
+        var connection = string.IsNullOrEmpty(connectionName) 
+            ? null 
+            : (await _connectionProcessor.List(_requestAccessor.WorkspaceId)).FirstOrDefault(c => c.Name == connectionName);
+        if (connection == null)
+            return new List<McpActionViewModel>();
+
+        var serverUrl = connection.Content["serverUrl"].TrimEnd('/');
+        var customHeader = connection.Content.ContainsKey("customHeader") ? connection.Content["customHeader"] : "";
+
+        var result = await _mcpClient.GetActions(serverUrl, customHeader);
+        return result;
+    }
 }
 
 public interface IAgentsService
@@ -611,4 +629,5 @@ public interface IAgentsService
     Task ConfirmImportAgents(string confirmationId, int workspaceId);
     Task<List<string>> GetHistory(int agentId, string? parameterCode);
     Task<string> GetHistoryCode(int agentId, string gitTitle, string? parameterCode);
+    Task<List<McpActionViewModel>> GetMcpActions(string connectionName); 
 }

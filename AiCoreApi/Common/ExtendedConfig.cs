@@ -395,6 +395,12 @@ public class ExtendedConfig
     [Tooltip("MCP Server calls will be executed in a context of this user.")]
     public string McpServerUser => GetValue<string>("McpServerUser", "");
 
+    [Category(CategoryAttribute.ConfigCategoryEnum.McpServer)]
+    [DataType(DataTypeAttribute.ConfigDataTypeEnum.String)]
+    [Description("MCP Auth Header name")]
+    [Tooltip("MCP Auth Header name is used to specify the name of the header that will be used to authenticate the MCP Server calls.")]
+    public string McpAuthHeaderName => GetValue<string>("McpAuthHeaderName", "");
+
     [Category(CategoryAttribute.ConfigCategoryEnum.PublicCalls)]
     [DataType(DataTypeAttribute.ConfigDataTypeEnum.Boolean)]
     [Description("Enable Public calls")]
