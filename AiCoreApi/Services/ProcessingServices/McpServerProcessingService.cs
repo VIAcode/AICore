@@ -102,7 +102,7 @@ namespace AiCoreApi.Services.ProcessingServices
                          !agent.Content[AgentTypeCalls.AgentCallTypeFieldName].Value.Contains(AgentTypeCalls.McpCall))
                 {
                     isError = true;
-                    result = $"Agent {agentName} can not ba called via MCP.";
+                    result = $"Agent {agentName} can not be called via MCP.";
                 }
                 else
                 {
