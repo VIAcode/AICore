@@ -82,6 +82,7 @@ namespace AiCoreApi.Common
             WorkspaceId = request.WorkspaceId;
         }
 
+        public string McpAuthHeader { get; set; }
         public bool IsMcpCall { get; set; }
         public bool IsWebHookCall { get; set; }
         public bool IsPublicCall { get; set; }

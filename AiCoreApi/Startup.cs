@@ -123,7 +123,7 @@ public class Startup
             .AddJwtBearer(options => { options.TokenValidationParameters = tokenValidationParameters; })
             .AddBasic<BasicUserValidationService>(options => { options.SuppressWWWAuthenticateHeader = true; });
 
-        services.AddAutoMapper(typeof(Startup));
+        services.AddAutoMapper(config => {}, Assembly.GetExecutingAssembly());
         services.AddHealthChecks();
         services.AddControllers().AddNewtonsoftJson(options => options.SerializerSettings.ReferenceLoopHandling = Newtonsoft.Json.ReferenceLoopHandling.Ignore);
         services.AddEndpointsApiExplorer();

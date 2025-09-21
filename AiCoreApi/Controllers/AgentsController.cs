@@ -165,4 +165,13 @@ public class AgentsController : ControllerBase
         return Ok(agentCode);
     }
 
+    [HttpGet]
+    [Route("mcp/{connectionName}")]
+    [RoleAuthorize(Role.Admin, Role.Developer)]
+    public async Task<IActionResult> GetMcpActions(string connectionName)
+    {
+        var mcpActions = await _agentsService.GetMcpActions(connectionName);
+        return Ok(mcpActions);
+    }
+
 }

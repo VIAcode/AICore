@@ -88,5 +88,6 @@ namespace AiCoreApi.Models.DbModels
         KnowledgeBase = 53,
         Confluence = 54,
         GraphMailNotification = 55,
+        McpClient = 56
     }
 }
