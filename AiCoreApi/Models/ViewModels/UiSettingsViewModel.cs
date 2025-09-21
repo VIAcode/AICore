@@ -25,6 +25,7 @@
         public bool UseWebHooks { get; set; } = false;
         public bool UsePublicCalls { get; set; } = false;
         public string DefaultMessageViewer { get; set; } = string.Empty;
+        public bool UseAgentsDescription { get; set; } = false;
         public Dictionary<string, bool> FeatureFlags { get; set; } = new ();
     }
 }
