@@ -431,6 +431,18 @@ public class ExtendedConfig
     [Description("WebHooks user calls act as Login")]
     [Tooltip("Agents and Tools will be executed in a context of this user.")]
     public string WebHooksCallsUser => GetValue<string>("WebHooksCallsUser", "");
+
+    [Category(CategoryAttribute.ConfigCategoryEnum.AgentsDescription)]
+    [DataType(DataTypeAttribute.ConfigDataTypeEnum.Boolean)]
+    [Description("Enable Agents Description")]
+    [Tooltip("Specifies if the system should allow to use Agents Description feature that provides detailed information about each Agent and Tool, including their purpose, capabilities, and usage instructions. This description is displayed in the UI when selecting an Agent or Tool for a task.")]
+    public bool UseAgentsDescription => GetValue<bool>("UseAgentsDescription", false);
+
+    [Category(CategoryAttribute.ConfigCategoryEnum.AgentsDescription)]
+    [DataType(DataTypeAttribute.ConfigDataTypeEnum.String)]
+    [Description("LLM Connection Name")]
+    [Tooltip("Specifies which LLM Connection to use for generating Agents and Tools descriptions. The connection must be configured in the LLM Connections settings and should point to a capable AI model that can generate detailed and accurate descriptions based on the Agent's or Tool's functionality.")]
+    public string AgentsDescriptionLlmConnectionName => GetValue<string>("AgentsDescriptionLlmConnectionName", "");
 }
 
 [AttributeUsage(AttributeTargets.Property)]
@@ -527,5 +539,7 @@ public class CategoryAttribute : Attribute, IAttributeHandler
         PublicCalls,
         [System.ComponentModel.Description("WebHooks")]
         WebHooksCalls,
+        [System.ComponentModel.Description("Agents and Tool Description")]
+        AgentsDescription,
     }
 }

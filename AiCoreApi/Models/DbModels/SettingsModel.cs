@@ -25,5 +25,6 @@ namespace AiCoreApi.Models.DbModels
         LogLevel = 5,
         Logging = 6,
         SecretValue = 7,
+        AgentsFlow = 8,
     }
 }

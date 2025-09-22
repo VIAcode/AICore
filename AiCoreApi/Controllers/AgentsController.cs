@@ -174,4 +174,13 @@ public class AgentsController : ControllerBase
         return Ok(mcpActions);
     }
 
+    [HttpGet]
+    [Route("{agentId}/card")]
+    [RoleAuthorize(Role.Admin, Role.Developer)]
+    public async Task<IActionResult> GetCard(int agentId)
+    {
+        var cardHtml = await _agentsService.GetCard(agentId);
+        return Content(cardHtml, "text/html");
+    }
+
 }

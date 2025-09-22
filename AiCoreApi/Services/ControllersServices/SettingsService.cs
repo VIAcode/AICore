@@ -90,7 +90,8 @@ namespace AiCoreApi.Services.ControllersServices
                 UseMcpServer = _extendedConfig.UseMcpServer,
                 UseWebHooks = _extendedConfig.UseWebHooks,
                 UsePublicCalls = _extendedConfig.UsePublicCalls,
-                DefaultMessageViewer = _extendedConfig.DefaultMessageViewer,    
+                DefaultMessageViewer = _extendedConfig.DefaultMessageViewer,
+                UseAgentsDescription = _extendedConfig.UseAgentsDescription,
                 FeatureFlags = _featureFlags.GetValues()
             };
         }
