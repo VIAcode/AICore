@@ -28,9 +28,9 @@ namespace AiCoreApi.Controllers
         [SwaggerResponse(200, "Successfully retrieved dependency graph", typeof(DependencyGraph))]
         [SwaggerResponse(401, "Unauthorized")]
         [SwaggerResponse(403, "Forbidden")]
-        public async Task<ActionResult<DependencyGraph>> GetDependencyGraph()
+        public async Task<ActionResult<DependencyGraph>> GetDependencyGraph([FromQuery(Name = "workspace_id")] int workspaceId = 0)
         {
-            var agents = await agentsProcessor.ListAll();
+            var agents = await agentsProcessor.List(workspaceId);
             var dependencyGraph = BuildDependencyGraph(agents);
             return Ok(dependencyGraph);
         }
