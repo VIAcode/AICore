@@ -1,8 +1,11 @@
+using AiCoreApi.Common.Extensions;
 using AiCoreApi.Data.Processors;
 using AiCoreApi.Models.DbModels;
 using AiCoreApi.Models.ViewModels;
+using AiCoreApi.SemanticKernel.Agents;
 using AutoMapper;
 using System.Text.RegularExpressions;
+using AgentTypeEnum = AiCoreApi.Models.DbModels.AgentType;
 
 namespace AiCoreApi.Services.ControllersServices;
 
@@ -28,10 +31,6 @@ public class AgentsGraphService : IAgentsGraphService
         var nodes = new List<GraphNodeViewModel>();
         var edges = new List<GraphEdgeViewModel>();
         var agentMap = agents.ToDictionary(a => a.Name, a => a);
-        var flowGroups = agents
-            .Where(x => !string.IsNullOrEmpty(x.FlowName))
-            .GroupBy(x => x.FlowName ?? string.Empty)
-            .ToDictionary(x => x.Key, v => v);
 
         foreach (var agent in agents)
         {
@@ -48,17 +47,58 @@ public class AgentsGraphService : IAgentsGraphService
             };
             nodes.Add(nodeViewModel);
 
-            if (agent.Type == Models.DbModels.AgentType.Flow && flowGroups.TryGetValue(agent.Name, out var flowAgents))
+            if (agent.Type == AgentTypeEnum.Composite ||
+                agent.Type == AgentTypeEnum.CompositeCSharp ||
+                agent.Type == AgentTypeEnum.CompositeLoop ||
+                agent.Type == AgentTypeEnum.CompositePython)
             {
-                edges.AddRange(flowAgents
-                    .Select(x => new GraphEdgeViewModel
+                var enabledAgents = agent.Content[BaseEnabledAgentsAgent.GetParameterName(agent)].Value.JsonGet<Dictionary<string, bool>>() ?? [];
+                foreach (var enabledAgent in enabledAgents.Where(x => x.Value))
+                {
+                    var internalAgent = agents.FirstOrDefault(x => x.AgentId.ToString() == enabledAgent.Key);
+                    if (internalAgent != null)
+                    {
+                        edges.Add(new GraphEdgeViewModel
+                        {
+                            From = agent.AgentId,
+                            To = internalAgent.AgentId,
+                            FromLabel = agent.Name,
+                            ToLabel = internalAgent.Name
+                        });
+                    }
+                }
+                ;
+            }
+
+            if (agent.Type == AgentTypeEnum.Scheduler)
+            {
+                var compositeAgentName = agent.Content[BackgroundWorkerAgent.AgentContentParameters.CompositeAgentName].Value;
+                var compositeAgent = agents.FirstOrDefault(x => x.Name == compositeAgentName);
+                if (compositeAgent != null)
+                {
+                    edges.Add(new GraphEdgeViewModel
                     {
                         From = agent.AgentId,
-                        To = x.AgentId,
+                        To = compositeAgent.AgentId,
                         FromLabel = agent.Name,
-                        ToLabel = x.Name
-                    })
-                    .ToList());
+                        ToLabel = compositeAgent.Name
+                    });
+                }
+            }
+
+            if (agent.Type == AgentTypeEnum.Flow)
+            {
+                var agentToCall = agents.FirstOrDefault(x => x.Name == agent.Content["agentToCall"].Value);
+                if (agentToCall != null)
+                {
+                    edges.Add(new GraphEdgeViewModel
+                    {
+                        From = agent.AgentId,
+                        To = agentToCall.AgentId,
+                        FromLabel = agent.Name,
+                        ToLabel = agentToCall.Name
+                    });
+                }
             }
 
             var dependencies = ExtractAgentDependencies(agent, agentMap);

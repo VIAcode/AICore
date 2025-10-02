@@ -24,7 +24,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             _requestAccessor = baseAgentHelper.RequestAccessor;
         }
 
-        private string GetParameterName(AgentModel agentModel)
+        public static string GetParameterName(AgentModel agentModel)
         {
             if (agentModel.Content.ContainsKey(EnabledAgents))
                 return EnabledAgents;
