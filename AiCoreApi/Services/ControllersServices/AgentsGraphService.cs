@@ -164,3 +164,8 @@ public class AgentsGraphService : IAgentsGraphService
         return dependencies;
     }
 }
+
+public interface IAgentsGraphService
+{
+    Task<DependencyGraphViewModel> GetDependencyGraph(int workspaceId);
+}
