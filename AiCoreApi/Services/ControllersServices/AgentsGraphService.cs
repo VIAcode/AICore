@@ -13,11 +13,17 @@ public class AgentsGraphService : IAgentsGraphService
 {
     private readonly IAgentsProcessor _agentsProcessor;
     private readonly IMapper _mapper;
+    private readonly Regex[] _executeAgentRegexes;
 
     public AgentsGraphService(IAgentsProcessor agentsProcessor, IMapper mapper)
     {
         _agentsProcessor = agentsProcessor;
         _mapper = mapper;
+
+        // ExecuteAgent("AgentName"), ExecuteAgent('AgentName')
+        _executeAgentRegexes = new[] { @"ExecuteAgent\(\s*""([^""]+)""", @"ExecuteAgent\('([^']+)'" }  
+            .Select(p => new Regex(p, RegexOptions.Compiled | RegexOptions.IgnoreCase))
+            .ToArray();
     }
 
     public async Task<DependencyGraphViewModel> GetDependencyGraph(int workspaceId)
@@ -67,7 +73,6 @@ public class AgentsGraphService : IAgentsGraphService
                         });
                     }
                 }
-                ;
             }
 
             if (agent.Type == AgentTypeEnum.Scheduler)
@@ -138,21 +143,12 @@ public class AgentsGraphService : IAgentsGraphService
 
         if (agent.Content == null) return dependencies;
 
-        // Patterns for agent execution methods (based on actual data analysis)
-        var patterns = new[]
-        {
-            // ExecuteAgent patterns used in both Python and C# code
-            @"ExecuteAgent\(\s*""([^""]+)""",  // ExecuteAgent("AgentName")
-            @"ExecuteAgent\('([^']+)'",       // ExecuteAgent('AgentName')
-        };
-
         foreach (var field in agent.Content.Values)
         {
             if (string.IsNullOrEmpty(field?.Value)) continue;
 
-            foreach (var pattern in patterns)
+            foreach (var regex in _executeAgentRegexes)
             {
-                var regex = new Regex(pattern, RegexOptions.Compiled | RegexOptions.IgnoreCase);
                 var matches = regex.Matches(field.Value);
                 foreach (Match match in matches)
                 {
