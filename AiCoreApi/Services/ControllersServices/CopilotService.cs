@@ -72,26 +72,29 @@ namespace AiCoreApi.Services.ControllersServices
             {
                 messageDialog.Messages!.Add(new MessageDialogViewModel.Message
                 {
-                    Sender = PlannerHelpers.AssistantName, 
+                    Sender = PlannerHelpers.AssistantName,
                     Text = _extendedConfig.DailyTokenLimitReachedText,
                     DebugMessages = _responseAccessor.CurrentMessage.DebugMessages
                 });
             }
-            messageDialog.ClearFilesContent();
-            _logger.LogDebug("Chat response generated for: {Login}, Tokens spent: {Spent}, Request: {Request}, Response: {Response}", 
-                _requestAccessor.Login, 
-                _responseAccessor.CurrentMessage.SpentTokens.ToJson(),
-                requestMessage?.Text, 
-                _responseAccessor.CurrentMessage.Text);
-            var message = requestMessage?.Text ?? "";
-            if (requestMessage?.Options != null &&
-                requestMessage.Options.Any(x => x.Type == MessageDialogViewModel.CallOptions.CallOptionsType.AgentCall))
+            finally
             {
-                var messageItem = requestMessage.Options.First(x => x.Type == MessageDialogViewModel.CallOptions.CallOptionsType.AgentCall);
-                var parametersString = string.Join(Environment.NewLine, messageItem.Parameters.Select(x => $" - {x.Key}: {x.Value}"));
-                message = $"Agent: {messageItem.Name}{Environment.NewLine}Parameters:{Environment.NewLine}{parametersString}";
+                messageDialog.ClearFilesContent();
+                _logger.LogDebug("Chat response generated for: {Login}, Tokens spent: {Spent}, Request: {Request}, Response: {Response}",
+                    _requestAccessor.Login,
+                    _responseAccessor.CurrentMessage.SpentTokens.ToJson(),
+                    requestMessage?.Text,
+                    _responseAccessor.CurrentMessage.Text);
+                var message = requestMessage?.Text ?? "";
+                if (requestMessage?.Options != null &&
+                    requestMessage.Options.Any(x => x.Type == MessageDialogViewModel.CallOptions.CallOptionsType.AgentCall))
+                {
+                    var messageItem = requestMessage.Options.First(x => x.Type == MessageDialogViewModel.CallOptions.CallOptionsType.AgentCall);
+                    var parametersString = string.Join(Environment.NewLine, messageItem.Parameters.Select(x => $" - {x.Key}: {x.Value}"));
+                    message = $"Agent: {messageItem.Name}{Environment.NewLine}Parameters:{Environment.NewLine}{parametersString}";
+                }
+                await _debugLogProcessor.Add(_requestAccessor.Login, message, messageDialog, _requestAccessor.WorkspaceId ?? 0);
             }
-            await _debugLogProcessor.Add(_requestAccessor.Login, message, messageDialog, _requestAccessor.WorkspaceId ?? 0);
             return messageDialog;
         }
 

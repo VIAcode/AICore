@@ -281,6 +281,12 @@ public class ExtendedConfig
     [Tooltip("When enabled, the system stores debug messages for a specified number of days.")]
     public bool DebugMessagesStorageEnabled => GetValue<bool>("DebugMessagesStorageEnabled", false);
 
+    [Category(CategoryAttribute.ConfigCategoryEnum.Debug)]
+    [DataType(DataTypeAttribute.ConfigDataTypeEnum.Boolean)]
+    [Description("Use Debug Log For Each Call")]
+    [Tooltip("Specifies if Debug Log should be used for each call. When enabled, the system logs detailed debug information for each call, which can be useful for troubleshooting and analysis.")]
+    public bool UseDebugLogForEachCall => GetValue<bool>("UseDebugLogForEachCall", false);
+
     [Category(CategoryAttribute.ConfigCategoryEnum.Nuget)]
     [DataType(DataTypeAttribute.ConfigDataTypeEnum.Boolean)]
     [Description("Use Custom Nuget Feed")]
@@ -523,8 +529,6 @@ public class CategoryAttribute : Attribute, IAttributeHandler
         Ingestion,
         [System.ComponentModel.Description("Authentication")]
         Authentication,
-        [System.ComponentModel.Description("JIRA Connector")]
-        Jira,
         [System.ComponentModel.Description("Debug")]
         Debug,
         [System.ComponentModel.Description("Nuget")]

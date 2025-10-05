@@ -40,25 +40,32 @@ namespace AiCoreApi.Services.ControllersServices
                 throw new ExceptionHandlingMiddleware.AiCoreUiException($"No agent found for action: {action}");
             if (!agent.Content.ContainsKey(AgentTypeCalls.AgentCallTypeFieldName) || !agent.Content[AgentTypeCalls.AgentCallTypeFieldName].Value.Contains(AgentTypeCalls.WebHook))
                 throw new ExceptionHandlingMiddleware.AiCoreUiException($"Agent {agent.Name} cannot be called via WebHook.");
-            var result = await RunAgent(agent.Name, new List<string> { method, query, body});
-            if (_extendedConfig.AllowDebugMode && _extendedConfig.UseDebugModeForWebHooks)
+            var result = string.Empty;
+            try
             {
-                var parametersString = $"Method: {method}{Environment.NewLine}Action: {action}{Environment.NewLine}Query: {query}{Environment.NewLine}Body: {body}";
-                await _debugLogProcessor.Add(
-                    "WebHook",
-                    $"Agent: {agent.Name}{Environment.NewLine}{Environment.NewLine}{parametersString}",
-                    new MessageDialogViewModel
-                    {
-                        Messages = new List<MessageDialogViewModel.Message>
+                result = await RunAgent(agent.Name, new List<string> { method, query, body });
+            }
+            finally
+            {
+                if (_extendedConfig.AllowDebugMode && _extendedConfig.UseDebugModeForWebHooks)
+                {
+                    var parametersString = $"Method: {method}{Environment.NewLine}Action: {action}{Environment.NewLine}Query: {query}{Environment.NewLine}Body: {body}";
+                    await _debugLogProcessor.Add(
+                        "WebHook",
+                        $"Agent: {agent.Name}{Environment.NewLine}{Environment.NewLine}{parametersString}",
+                        new MessageDialogViewModel
                         {
-                            new()
+                            Messages = new List<MessageDialogViewModel.Message>
                             {
-                                Text = result,
-                                SpentTokens = _responseAccessor.CurrentMessage.SpentTokens,
-                                DebugMessages = _responseAccessor.CurrentMessage.DebugMessages
+                                new()
+                                {
+                                    Text = result,
+                                    SpentTokens = _responseAccessor.CurrentMessage.SpentTokens,
+                                    DebugMessages = _responseAccessor.CurrentMessage.DebugMessages
+                                }
                             }
-                        }
-                    }, agent.WorkspaceId ?? 0);
+                        }, agent.WorkspaceId ?? 0);
+                }
             }
             return result;
         }

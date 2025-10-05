@@ -44,6 +44,9 @@ namespace AiCoreApi.Services.ProcessingServices.AgentsHandlers
 
         public async Task<string> RunAgent(string sender, AgentModel agentToCallModel, int runAs, Dictionary<string, string> parametersValues)
         {
+            var result = "";
+            var login = "";
+            var currentMessage = new MessageDialogViewModel.Message();
             try
             {
                 var runAsUser = await _loginProcessor.GetById(runAs);
@@ -73,49 +76,65 @@ namespace AiCoreApi.Services.ProcessingServices.AgentsHandlers
                     {
                         requestAccessor.UseDebug = true;
                     }
+
                     userContextAccessor.SetLoginId(runAs);
                     UserContextAccessor.AsyncScheduledLoginId.Value = runAs;
-                    var result = agentToCallModel.Type switch
+                    result = agentToCallModel.Type switch
                     {
-                        AgentType.Composite => await scope.ServiceProvider.GetRequiredService<ICompositeAgent>().DoCallWrapper(agentToCallModel, parametersValues),
-                        AgentType.CsharpCode => await scope.ServiceProvider.GetRequiredService<ICsharpCodeAgent>().DoCallWrapper(agentToCallModel, parametersValues),
-                        AgentType.PythonCode => await scope.ServiceProvider.GetRequiredService<IPythonCodeAgent>().DoCallWrapper(agentToCallModel, parametersValues),
-                        AgentType.NodeJsCode => await scope.ServiceProvider.GetRequiredService<INodeJsCodeAgent>().DoCallWrapper(agentToCallModel, parametersValues),
-                        AgentType.CompositeCSharp => await scope.ServiceProvider.GetRequiredService<ICompositeCSharpAgent>().DoCallWrapper(agentToCallModel, parametersValues),
-                        AgentType.CompositePython => await scope.ServiceProvider.GetRequiredService<ICompositePythonAgent>().DoCallWrapper(agentToCallModel, parametersValues),
-                        AgentType.CompositeLoop => await scope.ServiceProvider.GetRequiredService<ICompositeLoopAgent>().DoCallWrapper(agentToCallModel, parametersValues),
-                        AgentType.Flow => await scope.ServiceProvider.GetRequiredService<IFlowAgent>().DoCallWrapper(agentToCallModel, parametersValues),
+                        AgentType.Composite => await scope.ServiceProvider.GetRequiredService<ICompositeAgent>()
+                            .DoCallWrapper(agentToCallModel, parametersValues),
+                        AgentType.CsharpCode => await scope.ServiceProvider.GetRequiredService<ICsharpCodeAgent>()
+                            .DoCallWrapper(agentToCallModel, parametersValues),
+                        AgentType.PythonCode => await scope.ServiceProvider.GetRequiredService<IPythonCodeAgent>()
+                            .DoCallWrapper(agentToCallModel, parametersValues),
+                        AgentType.NodeJsCode => await scope.ServiceProvider.GetRequiredService<INodeJsCodeAgent>()
+                            .DoCallWrapper(agentToCallModel, parametersValues),
+                        AgentType.CompositeCSharp => await scope.ServiceProvider
+                            .GetRequiredService<ICompositeCSharpAgent>()
+                            .DoCallWrapper(agentToCallModel, parametersValues),
+                        AgentType.CompositePython => await scope.ServiceProvider
+                            .GetRequiredService<ICompositePythonAgent>()
+                            .DoCallWrapper(agentToCallModel, parametersValues),
+                        AgentType.CompositeLoop => await scope.ServiceProvider.GetRequiredService<ICompositeLoopAgent>()
+                            .DoCallWrapper(agentToCallModel, parametersValues),
+                        AgentType.Flow => await scope.ServiceProvider.GetRequiredService<IFlowAgent>()
+                            .DoCallWrapper(agentToCallModel, parametersValues),
                         _ => throw new NotSupportedException($"Unsupported agent type: {agentToCallModel.Type}")
                     };
-
-
-                    if (_extendedConfig.AllowDebugMode && _extendedConfig.DebugMessagesStorageEnabled)
-                    {
-                        var parametersString = string.Join(Environment.NewLine, parametersValues.Select(x => $" - {x.Key}: {x.Value}"));
-                        var responseAccessor = scope.ServiceProvider.GetRequiredService<ResponseAccessor>();
-                        await _debugLogProcessor.Add(
-                            runAsUser.Login,
-                            $"Agent ({sender}): {agentToCallModel.Name}{Environment.NewLine}Parameters:{Environment.NewLine}{parametersString}",
-                            new MessageDialogViewModel
-                            {
-                                Messages = new List<MessageDialogViewModel.Message>
-                                {
-                                    new()
-                                    {
-                                        Text = result,
-                                        SpentTokens = responseAccessor.CurrentMessage.SpentTokens,
-                                        DebugMessages = responseAccessor.CurrentMessage.DebugMessages
-                                    }
-                                }
-                            }, agentToCallModel.WorkspaceId ?? 0);
-                    }
-                    return result;
+                    var responseAccessor = scope.ServiceProvider.GetRequiredService<ResponseAccessor>();
+                    login = runAsUser.Login;
+                    currentMessage = responseAccessor.CurrentMessage;
                 }
             }
             catch (Exception e)
             {
                 return $"Error: {e.Message}";
             }
+            finally
+            {
+                if (_extendedConfig.AllowDebugMode && _extendedConfig.DebugMessagesStorageEnabled)
+                {
+                    var parametersString = string.Join(Environment.NewLine,
+                        parametersValues.Select(x => $" - {x.Key}: {x.Value}"));
+                    await _debugLogProcessor.Add(
+                        login,
+                        $"Agent ({sender}): {agentToCallModel.Name}{Environment.NewLine}Parameters:{Environment.NewLine}{parametersString}",
+                        new MessageDialogViewModel
+                        {
+                            Messages = new List<MessageDialogViewModel.Message>
+                            {
+                                new()
+                                {
+                                    Text = result,
+                                    SpentTokens = currentMessage.SpentTokens,
+                                    DebugMessages = currentMessage.DebugMessages
+                                }
+                            }
+                        }, agentToCallModel.WorkspaceId ?? 0);
+                }
+
+            }
+            return result;
         }
     }
 }

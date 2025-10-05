@@ -6,16 +6,19 @@ namespace AiCoreApi.Common
 {
     public class ResponseAccessor
     {
+        private readonly ExtendedConfig _extendedConfig;
         private readonly ILogger<ResponseAccessor> _logger;
         private readonly RequestAccessor _requestAccessor;
         private readonly ICacheAccessor _cacheAccessor;
         private const string ReasoningCachePrefix = "Reasoning_";
         private const int ReasoningCacheTimeout = 600;
         public ResponseAccessor(
+            ExtendedConfig extendedConfig,
             ILogger<ResponseAccessor> logger,
             RequestAccessor requestAccessor,
             ICacheAccessor cacheAccessor)
         {
+            _extendedConfig = extendedConfig;
             _logger = logger;
             _requestAccessor = requestAccessor;
             _cacheAccessor = cacheAccessor;
@@ -30,7 +33,7 @@ namespace AiCoreApi.Common
         public MessageDialogViewModel.Message CurrentMessage { get; set; } = new() { Sender = PlannerHelpers.AssistantName };
         public void AddDebugMessage(string sender, string title, string details)
         {
-            if (_requestAccessor.UseDebug)
+            if (_requestAccessor.UseDebug || _extendedConfig.UseDebugLogForEachCall)
             {
                 CurrentMessage.DebugMessages ??= new List<MessageDialogViewModel.DebugMessage>();
                 CurrentMessage.DebugMessages.Add(new MessageDialogViewModel.DebugMessage
