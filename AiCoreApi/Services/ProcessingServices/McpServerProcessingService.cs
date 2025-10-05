@@ -130,10 +130,15 @@ namespace AiCoreApi.Services.ProcessingServices
                         isError = true;
                         result = ex.Message;
                     }
+                    finally
+                    {
+                        if (_extendedConfig.AllowDebugMode && _extendedConfig.UseDebugLogForEachCall)
+                        {
+                            var message = $"MCP Server call, Agent: {agentName}, Parameters: {string.Join(", ", parameters)}.";
+                            await _debugLogProcessor.Add(requestAccessor.Login, message, requestAccessor.MessageDialog, agent.WorkspaceId ?? 0);
+                        }
+                    }
                 }
-                var message = $"MCP Server call, Agent: {agentName}, Parameters: {string.Join(", ", parameters)}.";
-                await _debugLogProcessor.Add(requestAccessor.Login, message, requestAccessor.MessageDialog, agent.WorkspaceId ?? 0);
-
                 return ValueTask.FromResult(new CallToolResult
                 {
                     IsError = isError,
@@ -164,6 +169,7 @@ namespace AiCoreApi.Services.ProcessingServices
             {
                 requestAccessor.McpAuthHeader = headerDictionary[_extendedConfig.McpAuthHeaderName];
             }
+            requestAccessor.UseDebug = _extendedConfig.AllowDebugMode && _extendedConfig.UseDebugLogForEachCall;
             requestAccessor.IsMcpCall = true;
             requestAccessor.Login = login.Login;
             requestAccessor.LoginTypeString = LoginTypeEnum.Password.ToString();
