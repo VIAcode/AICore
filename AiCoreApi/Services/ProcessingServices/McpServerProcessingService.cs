@@ -132,8 +132,11 @@ namespace AiCoreApi.Services.ProcessingServices
                     }
                     finally
                     {
-                        var message = $"MCP Server call, Agent: {agentName}, Parameters: {string.Join(", ", parameters)}.";
-                        await _debugLogProcessor.Add(requestAccessor.Login, message, requestAccessor.MessageDialog, agent.WorkspaceId ?? 0);
+                        if (_extendedConfig.AllowDebugMode && _extendedConfig.UseDebugLogForEachCall)
+                        {
+                            var message = $"MCP Server call, Agent: {agentName}, Parameters: {string.Join(", ", parameters)}.";
+                            await _debugLogProcessor.Add(requestAccessor.Login, message, requestAccessor.MessageDialog, agent.WorkspaceId ?? 0);
+                        }
                     }
                 }
                 return ValueTask.FromResult(new CallToolResult
