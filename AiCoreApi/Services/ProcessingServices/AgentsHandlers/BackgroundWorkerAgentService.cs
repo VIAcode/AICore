@@ -42,16 +42,21 @@ namespace AiCoreApi.Services.ProcessingServices.AgentsHandlers
             {
                 await using (var scope = _serviceProvider.CreateAsyncScope())
                 {
+                    var requestAccessor = scope.ServiceProvider.GetRequiredService<RequestAccessor>();
+                    var responseAccessor = scope.ServiceProvider.GetRequiredService<ResponseAccessor>();
+                    var workspaceId = 0;
+                    var result = "";
+                    Dictionary<string, string> parametersValues = new();
                     try
                     {
                         var userContextAccessor = scope.ServiceProvider.GetRequiredService<UserContextAccessor>();
-                        var requestAccessor = scope.ServiceProvider.GetRequiredService<RequestAccessor>();
-                        var responseAccessor = scope.ServiceProvider.GetRequiredService<ResponseAccessor>();
                         requestAccessor.SetRequestAccessor(schedulerAgentTaskModel.RequestAccessor);
-                        if (_extendedConfig.AllowDebugMode && _extendedConfig.DebugMessagesStorageEnabled)
+                        if (_extendedConfig.AllowDebugMode && _extendedConfig.DebugMessagesStorageEnabled &&
+                            _extendedConfig.UseDebugLogForEachCall)
                         {
                             requestAccessor.UseDebug = true;
                         }
+
                         userContextAccessor.SetLoginId(schedulerAgentTaskModel.LoginId);
                         UserContextAccessor.AsyncScheduledLoginId.Value = schedulerAgentTaskModel.LoginId;
                         schedulerAgentTaskModel.SchedulerAgentTaskState = SchedulerAgentTaskState.InProgress;
@@ -64,22 +69,44 @@ namespace AiCoreApi.Services.ProcessingServices.AgentsHandlers
                             await _schedulerAgentTaskProcessor.Update(schedulerAgentTaskModel);
                             return;
                         }
-                        var parametersValues = schedulerAgentTaskModel.Parameters.JsonGet<Dictionary<string, string>>() ?? new Dictionary<string, string>();
-                        var result = agentToCallModel.Type switch
+                        parametersValues = schedulerAgentTaskModel.Parameters.JsonGet<Dictionary<string, string>>() ?? new Dictionary<string, string>();
+                        workspaceId = agentToCallModel.WorkspaceId ?? 0;
+                        result = agentToCallModel.Type switch
                         {
-                            AgentType.Composite => await scope.ServiceProvider.GetRequiredService<ICompositeAgent>().DoCallWrapper(agentToCallModel, parametersValues),
-                            AgentType.CsharpCode => await scope.ServiceProvider.GetRequiredService<ICsharpCodeAgent>().DoCallWrapper(agentToCallModel, parametersValues),
-                            AgentType.PythonCode => await scope.ServiceProvider.GetRequiredService<IPythonCodeAgent>().DoCallWrapper(agentToCallModel, parametersValues),
-                            AgentType.NodeJsCode => await scope.ServiceProvider.GetRequiredService<INodeJsCodeAgent>().DoCallWrapper(agentToCallModel, parametersValues),
-                            AgentType.CompositeCSharp => await scope.ServiceProvider.GetRequiredService<ICompositeCSharpAgent>().DoCallWrapper(agentToCallModel, parametersValues),
-                            AgentType.CompositePython => await scope.ServiceProvider.GetRequiredService<ICompositePythonAgent>().DoCallWrapper(agentToCallModel, parametersValues),
-                            AgentType.CompositeLoop => await scope.ServiceProvider.GetRequiredService<ICompositeLoopAgent>().DoCallWrapper(agentToCallModel, parametersValues),
-                            AgentType.Flow => await scope.ServiceProvider.GetRequiredService<IFlowAgent>().DoCallWrapper(agentToCallModel, parametersValues),
+                            AgentType.Composite => await scope.ServiceProvider.GetRequiredService<ICompositeAgent>()
+                                .DoCallWrapper(agentToCallModel, parametersValues),
+                            AgentType.CsharpCode => await scope.ServiceProvider.GetRequiredService<ICsharpCodeAgent>()
+                                .DoCallWrapper(agentToCallModel, parametersValues),
+                            AgentType.PythonCode => await scope.ServiceProvider.GetRequiredService<IPythonCodeAgent>()
+                                .DoCallWrapper(agentToCallModel, parametersValues),
+                            AgentType.NodeJsCode => await scope.ServiceProvider.GetRequiredService<INodeJsCodeAgent>()
+                                .DoCallWrapper(agentToCallModel, parametersValues),
+                            AgentType.CompositeCSharp => await scope.ServiceProvider
+                                .GetRequiredService<ICompositeCSharpAgent>()
+                                .DoCallWrapper(agentToCallModel, parametersValues),
+                            AgentType.CompositePython => await scope.ServiceProvider
+                                .GetRequiredService<ICompositePythonAgent>()
+                                .DoCallWrapper(agentToCallModel, parametersValues),
+                            AgentType.CompositeLoop => await scope.ServiceProvider
+                                .GetRequiredService<ICompositeLoopAgent>()
+                                .DoCallWrapper(agentToCallModel, parametersValues),
+                            AgentType.Flow => await scope.ServiceProvider.GetRequiredService<IFlowAgent>()
+                                .DoCallWrapper(agentToCallModel, parametersValues),
                             _ => throw new NotSupportedException($"Unsupported agent type: {agentToCallModel.Type}")
                         };
                         schedulerAgentTaskModel.Result = HttpUtility.HtmlDecode(result);
                         schedulerAgentTaskModel.SchedulerAgentTaskState = SchedulerAgentTaskState.Completed;
                         await _schedulerAgentTaskProcessor.Update(schedulerAgentTaskModel);
+
+                    }
+                    catch (Exception e)
+                    {
+                        schedulerAgentTaskModel.Result = e.Message;
+                        schedulerAgentTaskModel.SchedulerAgentTaskState = SchedulerAgentTaskState.Failed;
+                        await _schedulerAgentTaskProcessor.Update(schedulerAgentTaskModel);
+                    }
+                    finally
+                    {
                         var login = await _loginProcessor.GetById(schedulerAgentTaskModel.LoginId);
                         if (_extendedConfig.AllowDebugMode && _extendedConfig.DebugMessagesStorageEnabled)
                         {
@@ -98,14 +125,8 @@ namespace AiCoreApi.Services.ProcessingServices.AgentsHandlers
                                             DebugMessages = responseAccessor.CurrentMessage.DebugMessages
                                         }
                                     }
-                                }, agentToCallModel.WorkspaceId ?? 0);
+                                }, workspaceId);
                         }
-                    }
-                    catch (Exception e)
-                    {
-                        schedulerAgentTaskModel.Result = e.Message;
-                        schedulerAgentTaskModel.SchedulerAgentTaskState = SchedulerAgentTaskState.Failed;
-                        await _schedulerAgentTaskProcessor.Update(schedulerAgentTaskModel);
                     }
                 }
                 schedulerAgentTaskModel = await _schedulerAgentTaskProcessor.GetNext();
