@@ -13,16 +13,21 @@ using Microsoft.OpenApi.Models;
 using AiCoreApi.Services.ProcessingServices;
 using AiCoreApi.Common.Monitoring;
 using AiCoreApi.Data.Processors;
+using AiCoreApi.SemanticKernel;
 
 namespace AiCoreApi;
 
 public class Startup
 {
     private readonly Config _config;
-    private static ILogger<Startup> _logger;
+    private readonly ExtendedConfig _extendedConfig;
+    private readonly MonitoringConfig _monitoringConfig;
+
     public Startup(IConfiguration configuration)
     {
         _config = new Config();
+        _extendedConfig = new ExtendedConfig();
+        _monitoringConfig = new MonitoringConfig();
     }
 
     public void ConfigureServices(IServiceCollection services)
@@ -57,6 +62,9 @@ public class Startup
         services.ForInterfacesMatching("^I(?!.*Processor$).*")
             .OfAssemblies(Assembly.GetExecutingAssembly())
             .AddTransients();
+        services.AddScoped<IPlannerHelpers, PlannerHelpers>();
+        services.AddScoped<IAgentRegistry, AgentRegistry>();
+        services.AddScoped<IAgentExecutor, AgentExecutor>();
 
         services.AddStackExchangeRedisCache(options =>
         {
@@ -70,19 +78,29 @@ public class Startup
         services.AddScoped<Db>();
         services.AddDbContextFactory<Db>();
         services.AddHttpContextAccessor();
-        //services.AddSingleton(sp => sp);
         services.AddSingleton<IMetricsAccessor, MetricsAccessor>();
         services.AddScoped<RequestAccessor>();
         services.AddScoped<UserContextAccessor>();
         services.AddScoped<ResponseAccessor>();
-        services.AddSingleton<ExtendedConfig>();
-        services.AddSingleton<MonitoringConfig>();
+        services.AddSingleton(sp =>
+        {
+            var settingsProcessor = sp.GetRequiredService<ISettingsProcessor>();
+            _extendedConfig.Reset(settingsProcessor);
+            return _extendedConfig;
+        });
+        services.AddSingleton(sp =>
+        {
+            var settingsProcessor = sp.GetRequiredService<ISettingsProcessor>();
+            _monitoringConfig.Reset(settingsProcessor);
+            return _monitoringConfig;
+        });
+
+        services.AddConfiguredHttpClients(
+            _extendedConfig,
+            services.BuildServiceProvider().GetRequiredService<ILoggerFactory>()
+        );
+
         // TODO: avoid mixing IoC strategies https://learn.microsoft.com/en-us/dotnet/core/extensions/dependency-injection-guidelines#recommendations
-        var serviceProvider = services.BuildServiceProvider();
-        _logger = serviceProvider.GetRequiredService<ILogger<Startup>>();
-        var extendedConfig = serviceProvider.GetRequiredService<ExtendedConfig>();
-        var settingsProcessor = serviceProvider.GetRequiredService<ISettingsProcessor>();
-        extendedConfig.Reset(settingsProcessor);
         services.AddSingleton<IFileIngestionClient>(sp => new FileIngestionClient(sp));
 
         var tokenValidationParameters = new TokenValidationParameters
@@ -92,16 +110,15 @@ public class Startup
             ValidateLifetime = true,
             LifetimeValidator = (notBefore, expires, _, _) => notBefore <= DateTime.UtcNow && expires > DateTime.UtcNow,
             ValidateIssuerSigningKey = true,
-            ValidAudience = extendedConfig.AuthAudience,
-            ValidIssuer = extendedConfig.AuthIssuer,
-            IssuerSigningKey = extendedConfig.AuthSecurityKey.GetSymmetricSecurityKey(),
+            ValidAudience = _extendedConfig.AuthAudience,
+            ValidIssuer = _extendedConfig.AuthIssuer,
+            IssuerSigningKey = _extendedConfig.AuthSecurityKey.GetSymmetricSecurityKey(),
             ClockSkew = TimeSpan.Zero,
         };
         services.AddSingleton(tokenValidationParameters);
         services.AddHttpContextAccessor();
         services.AddScoped<LlmHttpCallHandler>();
-        services.AddHttpClients(extendedConfig, _logger);
-        
+
         var combinedAuthenticationScheme = "Combined";
         services.AddAuthentication(options =>
         {
@@ -171,8 +188,7 @@ public class Startup
             });
         });
 
-        var monitoringConfig = serviceProvider.GetRequiredService<MonitoringConfig>();
-        services.AddMonitoring(monitoringConfig);
+        services.AddMonitoring(_monitoringConfig);
 
         services.AddMcpServer()
             .WithHttpTransport()

@@ -31,7 +31,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             public const string PythonCode = "pythonCode";
         }
 
-        private readonly IPlannerHelpers _plannerHelpers;
+        private readonly IAgentExecutor _agentExecutor;
         private readonly RequestAccessor _requestAccessor;
         private readonly ResponseAccessor _responseAccessor;
         private readonly ICacheAccessor _cacheAccessor;
@@ -39,13 +39,13 @@ namespace AiCoreApi.SemanticKernel.Agents
 
         public PythonCodeAgent(
             IBaseAgentHelper baseAgentHelper,
-            IPlannerHelpers plannerHelpers,
+            IAgentExecutor agentExecutor,
             RequestAccessor requestAccessor,
             ResponseAccessor responseAccessor,
             ICacheAccessor cacheAccessor,
             ILogger<PythonCodeAgent> logger) : base(baseAgentHelper, logger)
         {
-            _plannerHelpers = plannerHelpers;
+            _agentExecutor = agentExecutor;
             _requestAccessor = requestAccessor;
             _responseAccessor = responseAccessor;
             _cacheAccessor = cacheAccessor;
@@ -217,10 +217,9 @@ except Exception as e:
 
         private string ExecuteAgent(string agentName, string[] parameters = null)
         {
-            _plannerHelpers.PythonCodeAgent = this;
             try
             {
-                return _plannerHelpers.ExecuteAgent(agentName, parameters.ToList()).GetAwaiter().GetResult();
+                return _agentExecutor.ExecuteAsync(agentName, parameters.ToList()).GetAwaiter().GetResult();
             }
             catch (Exception e)
             {

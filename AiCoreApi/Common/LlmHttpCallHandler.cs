@@ -29,11 +29,11 @@ namespace AiCoreApi.Common
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
-            var metricsService = _serviceProvider.GetService<ICommonMetricsService>();  
-            var httpContext = _serviceProvider.GetService<IHttpContextAccessor>()?.HttpContext;
+            var metricsService = _serviceProvider.GetRequiredService<ICommonMetricsService>();  
+            var httpContext = _serviceProvider.GetRequiredService<IHttpContextAccessor>()?.HttpContext;
             var serviceProvider = httpContext?.RequestServices ?? _serviceProvider;
 
-            var connectionProcessor = serviceProvider.GetService<IConnectionProcessor>();
+            var connectionProcessor = serviceProvider.GetRequiredService<IConnectionProcessor>();
             var connectionType = GetConnectionType(request);
             if (connectionType == null)
                 return await base.SendAsync(request, cancellationToken);
@@ -42,7 +42,7 @@ namespace AiCoreApi.Common
 
             if (string.IsNullOrEmpty(modelDeploymentName))
                 return await base.SendAsync(request, cancellationToken);
-            var requestAccessor = serviceProvider.GetService<RequestAccessor>();
+            var requestAccessor = serviceProvider.GetRequiredService<RequestAccessor>();
             var connections = await connectionProcessor.List(requestAccessor.WorkspaceId);
 
             var connection = connections.FirstOrDefault(conn => conn.Type == connectionType.Value &&
@@ -55,10 +55,10 @@ namespace AiCoreApi.Common
             if (connection == null)
                 throw new TokensLimitException($"Model Deployment was not found in LLM connections: {modelDeploymentName}");
             var tokenLimitPerDay = Convert.ToInt64(connection.Content["tokenLimitPerDay"]);
-            var userContextAccessor = serviceProvider.GetService<UserContextAccessor>();
-            var spentProcessor = serviceProvider.GetService<ISpentProcessor>();
-            var loginProcessor = serviceProvider.GetService<ILoginProcessor>();
-            var logger = serviceProvider.GetService<ILogger<LlmHttpCallHandler>>();
+            var userContextAccessor = serviceProvider.GetRequiredService<UserContextAccessor>();
+            var spentProcessor = serviceProvider.GetRequiredService<ISpentProcessor>();
+            var loginProcessor = serviceProvider.GetRequiredService<ILoginProcessor>();
+            var logger = serviceProvider.GetRequiredService<ILogger<LlmHttpCallHandler>>();
 
             var loginId = (await userContextAccessor?.GetLoginIdAsync()) ?? UserContextAccessor.AsyncScheduledLoginId.Value;
             if (loginId == null)
@@ -95,7 +95,7 @@ namespace AiCoreApi.Common
             // update spent tokens in response accessor
             if (httpContext != null)
             {
-                var responseAccessor = serviceProvider.GetService<ResponseAccessor>();
+                var responseAccessor = serviceProvider.GetRequiredService<ResponseAccessor>();
                 if (responseAccessor != null)
                     responseAccessor.AddSpentTokens(connection.Name, currentRequestSpent.TokensOutgoing, currentRequestSpent.TokensIncoming);
             }
@@ -106,7 +106,7 @@ namespace AiCoreApi.Common
         {
             if (requestAccessor.WorkspaceId.HasValue)
             {
-                var workspaceProcessor = serviceProvider.GetService<IWorkspaceProcessor>();
+                var workspaceProcessor = serviceProvider.GetRequiredService<IWorkspaceProcessor>();
                 if (workspaceProcessor != null)
                 {
                     return await workspaceProcessor.Get(requestAccessor.WorkspaceId.Value);
@@ -119,7 +119,7 @@ namespace AiCoreApi.Common
         {
             if (requestAccessor.AgentId.HasValue)
             {
-                var agentsProcessor = serviceProvider.GetService<IAgentsProcessor>();
+                var agentsProcessor = serviceProvider.GetRequiredService<IAgentsProcessor>();
                 if (agentsProcessor != null)
                 {
                     return await agentsProcessor.GetById(requestAccessor.AgentId.Value);
@@ -154,7 +154,7 @@ namespace AiCoreApi.Common
                         request.Headers.Add("api-key", connection.Content["azureOpenAiKey"]);
                     else
                     {
-                        var entraTokenProvider = serviceProvider.GetService<IEntraTokenProvider>();
+                        var entraTokenProvider = serviceProvider.GetRequiredService<IEntraTokenProvider>();
                         var accessToken = await entraTokenProvider.GetAccessTokenObjectAsync(accessType, "https://cognitiveservices.azure.com/.default");
                         request.Headers.Remove("Authorization");
                         request.Headers.Add("Authorization", $"Bearer {accessToken.Token}");

@@ -35,7 +35,7 @@ namespace AiCoreApi.Common.KernelMemory
             {
                 EmptyAnswer = _extendedConfig.NoInformationFoundText,
                 AnswerTokens = Convert.ToInt32(llmConnection.Content.ContainsKey("maxAnswersTokens") ? llmConnection.Content["maxAnswersTokens"] : "4096"),
-                Temperature = Convert.ToDouble(llmConnection.Content.ContainsKey("temperature") ? llmConnection.Content["temperature"] : "0.5"),
+                Temperature = Convert.ToDouble(llmConnection.Content.ContainsKey("temperature") ? llmConnection.Content["temperature"] : "1"),
             };
 
             var memoryBuilder = new KernelMemoryBuilder()

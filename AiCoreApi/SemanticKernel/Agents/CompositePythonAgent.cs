@@ -165,7 +165,6 @@ You are an expert Python developer. Fix the code based on the Error Text below.
             if (enabledAgents == null || !enabledAgents.Any())
                 return string.Empty;
             var agentsList = await _plannerHelpers.GetAgentsList();
-            _plannerHelpers.CompositePythonAgent = this;
             var result = @"
 # Agents
 Use `ExecuteAgent('AgentName', ['param1', 'param2'])` to call.
@@ -193,7 +192,7 @@ Use `ExecuteAgent('AgentName', ['param1', 'param2'])` to call.
             {
                 return agentTemperature;
             }
-            return llmConnection.Content.TryGetValue("temperature", out var val) ? Convert.ToDouble(val) : 0;
+            return llmConnection.Content.TryGetValue(AgentContentParameters.Temperature, out var val) ? Convert.ToDouble(val) : 0;
         }
 
         private double GetTopP(AgentModel agent)

@@ -14,27 +14,21 @@ public class MonitoringConfig
     private ConcurrentDictionary<string, string> _logLevelConfigValues = new();
     private ConcurrentDictionary<string, string> _openTelemetryConfigValues = new();
     private ConcurrentDictionary<string, string> _loggingConfigValues = new();
-    private readonly ISettingsProcessor _settingsProcessor;
-    private const int RefreshTimeSec = 15;
+    public const int RefreshTimeSec = 15;
     private readonly object _lock = new();
     private readonly string _appSettings = File.ReadAllText("appsettings.json");
     private static string MONITORING_SETTINGS_PREFIX = "Monitoring";
 
 
-    public MonitoringConfig(ISettingsProcessor settingsProcessor)
-    {
-        _settingsProcessor = settingsProcessor;
-    }
-
-    public void Reset()
+    public void Reset(ISettingsProcessor settingsProcessor)
     {
         lock (_lock)
         {
             if (DateTime.Now > _nextRefresh)
             {
-                _openTelemetryConfigValues = new ConcurrentDictionary<string, string>(_settingsProcessor.Get(SettingType.OpenTelemetry));
-                _logLevelConfigValues = new ConcurrentDictionary<string, string>(_settingsProcessor.Get(SettingType.LogLevel));
-                _loggingConfigValues = new ConcurrentDictionary<string, string>(_settingsProcessor.Get(SettingType.Logging));
+                _openTelemetryConfigValues = new ConcurrentDictionary<string, string>(settingsProcessor.Get(SettingType.OpenTelemetry));
+                _logLevelConfigValues = new ConcurrentDictionary<string, string>(settingsProcessor.Get(SettingType.LogLevel));
+                _loggingConfigValues = new ConcurrentDictionary<string, string>(settingsProcessor.Get(SettingType.Logging));
 
                 _nextRefresh = DateTime.Now.AddSeconds(RefreshTimeSec);
             }
@@ -45,9 +39,6 @@ public class MonitoringConfig
     private T GetOtelValue<T>(string key) => GetOtelValue(key, default(T));
     private T GetOtelValue<T>(string key, T defaultValue)
     {
-        if (DateTime.Now > _nextRefresh)
-            Reset();
-
         if (!_openTelemetryConfigValues.TryGetValue(key, out var value))
         {
             value = Environment.GetEnvironmentVariable($"{MONITORING_SETTINGS_PREFIX}_{key}".ToUpper());
@@ -67,9 +58,6 @@ public class MonitoringConfig
     private T GetLoggingValue<T>(string key) => GetLoggingValue(key, default(T));
     private T GetLoggingValue<T>(string key, T defaultValue)
     {
-        if (DateTime.Now > _nextRefresh)
-            Reset();
-
         if (!_loggingConfigValues.TryGetValue(key, out var value))
         {
             value = Environment.GetEnvironmentVariable($"{MONITORING_SETTINGS_PREFIX}_{key}".ToUpper());
@@ -87,9 +75,6 @@ public class MonitoringConfig
 
     private Dictionary<string, LogLevel> GetLogLevelsValue()
     {
-        if (DateTime.Now > _nextRefresh)
-            Reset();
-
         return _logLevelConfigValues.ToDictionary(kv => kv.Key,
             kv => Enum.TryParse<LogLevel>(kv.Value, out var result) ? result : Microsoft.Extensions.Logging.LogLevel.None);
     }

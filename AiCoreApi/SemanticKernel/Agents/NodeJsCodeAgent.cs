@@ -12,7 +12,7 @@ namespace AiCoreApi.SemanticKernel.Agents
         private static readonly object Lock = new();
         private static readonly List<string> ExecutedCommands = new();
 
-        private readonly IPlannerHelpers _plannerHelpers;
+        private readonly IAgentExecutor _agentExecutor;
         private readonly RequestAccessor _requestAccessor;
         private readonly ResponseAccessor _responseAccessor;
         private readonly ICacheAccessor _cacheAccessor;
@@ -28,14 +28,14 @@ namespace AiCoreApi.SemanticKernel.Agents
 
         public NodeJsCodeAgent(
             IBaseAgentHelper baseAgentHelper,
-            IPlannerHelpers plannerHelpers,
+            IAgentExecutor agentExecutor,
             RequestAccessor requestAccessor,
             ResponseAccessor responseAccessor,
             ICacheAccessor cacheAccessor,
             ILogger<NodeJsCodeAgent> logger)
             : base(baseAgentHelper, logger)
         {
-            _plannerHelpers = plannerHelpers;
+            _agentExecutor = agentExecutor;
             _requestAccessor = requestAccessor;
             _responseAccessor = responseAccessor;
             _cacheAccessor = cacheAccessor;
@@ -228,8 +228,7 @@ globalThis.executeAgent=(name,args=[])=>{{
 
         private string ExecuteAgent(string agentName, string[] parameters)
         {
-            _plannerHelpers.NodeJsCodeAgent = this;
-            return _plannerHelpers.ExecuteAgent(agentName, parameters.ToList()).GetAwaiter().GetResult();
+            return _agentExecutor.ExecuteAsync(agentName, parameters.ToList()).GetAwaiter().GetResult();
         }
 
         private class AgentCall

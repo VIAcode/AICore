@@ -15,6 +15,7 @@ namespace AiCoreApi.Services.ProcessingServices
         private readonly IDebugLogProcessor _debugLogProcessor;
         private readonly ILoginProcessor _loginProcessor; 
         private readonly ExtendedConfig _extendedConfig;
+        private readonly IAgentExecutor _agentExecutor;
         private readonly IPlannerHelpers _plannerHelpers;
         public const string ParameterDescription = "parameterDescription";
 
@@ -22,11 +23,13 @@ namespace AiCoreApi.Services.ProcessingServices
             IDebugLogProcessor debugLogProcessor,
             ILoginProcessor loginProcessor,
             ExtendedConfig extendedConfig,
+            IAgentExecutor agentExecutor,
             IPlannerHelpers plannerHelpers)
         {
             _debugLogProcessor = debugLogProcessor;
             _loginProcessor = loginProcessor;
             _extendedConfig = extendedConfig;
+            _agentExecutor = agentExecutor;
             _plannerHelpers = plannerHelpers;
         }
 
@@ -123,7 +126,7 @@ namespace AiCoreApi.Services.ProcessingServices
                     requestAccessor.WorkspaceId = agent.WorkspaceId;
                     try
                     {
-                        result = await plannerHelpers.ExecuteAgent(agent.Name, parameters);
+                        result = await _agentExecutor.ExecuteAsync(agent.Name, parameters);
                     }
                     catch (Exception ex)
                     {

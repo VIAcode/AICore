@@ -1,5 +1,6 @@
 using System.Runtime;
 using AiCoreApi.Common;
+using AiCoreApi.Common.Monitoring;
 using AiCoreApi.Data.Processors;
 using AiCoreApi.Services.ProcessingServices.AgentsHandlers;
 
@@ -36,6 +37,7 @@ namespace AiCoreApi.Services.ProcessingServices
                 {
                     using var scope = _scopeFactory.CreateScope();
 
+                    var monitoringConfig = scope.ServiceProvider.GetRequiredService<MonitoringConfig>();
                     var extendedConfig = scope.ServiceProvider.GetRequiredService<ExtendedConfig>();
                     var settingsProcessor = scope.ServiceProvider.GetRequiredService<ISettingsProcessor>();
                     var agentsProcessor = scope.ServiceProvider.GetRequiredService<IAgentsProcessor>();
@@ -73,6 +75,7 @@ namespace AiCoreApi.Services.ProcessingServices
                     if ((DateTime.UtcNow - _lastSettingsResetTime).TotalSeconds > SettingsResetIntervalSeconds)
                     {
                         extendedConfig.Reset(settingsProcessor);
+                        monitoringConfig.Reset(settingsProcessor);
                         _lastSettingsResetTime = DateTime.UtcNow;
                     }
                 }

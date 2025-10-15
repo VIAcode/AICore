@@ -1,13 +1,8 @@
-using AiCoreApi.Common;
+﻿using AiCoreApi.Common;
 using AiCoreApi.Common.Extensions;
-using Microsoft.SemanticKernel;
 using AiCoreApi.Data.Processors;
 using AiCoreApi.Models.DbModels;
-using AiCoreApi.SemanticKernel.Agents;
-using AgentType = AiCoreApi.Models.DbModels.AgentType;
-using static AiCoreApi.Common.ExceptionHandlingMiddleware;
-using AiCoreApi.Authorization;
-using AiCoreApi.Models.ViewModels;
+using Microsoft.SemanticKernel;
 
 namespace AiCoreApi.SemanticKernel
 {
@@ -25,425 +20,66 @@ namespace AiCoreApi.SemanticKernel
         }
 
         private readonly RequestAccessor _requestAccessor;
-        private readonly ExtendedConfig _extendedConfig;
         private readonly IAgentsProcessor _agentsProcessor;
-        private readonly IServiceProvider _serviceProvider;
-        private readonly IPromptAgent _promptAgent;
-        private readonly IApiCallAgent _apiCallAgent;
-        private readonly IJsonTransformAgent _jsonTransformAgent;
-        private readonly IContainsAgent _containsAgent;
-        private readonly IBingSearchAgent _bingSearchAgent;
-        private readonly IHistoryAgent _historyAgent;
-        private readonly IRagPromptAgent _ragPromptAgent;
-        private readonly IKnowledgeBaseAgent _knowledgeBaseAgent;
-        private readonly IOcrAgent _ocrAgent;
-        private readonly IOcrClassifyDocumentAgent _ocrClassifyDocumentAgent;
-        private readonly IBackgroundWorkerAgent _backgroundWorkerAgent;
-        private readonly IContentSafetyAgent _contentSafetyAgent;
-        private readonly IImageToTextAgent _imageToTextAgent;
-        private readonly IWhisperAgent _whisperAgent;
-        private readonly IVectorSearchAgent _vectorSearchAgent;
-        private readonly IStorageAccountAgent _storageAccountAgent;
-        private readonly IPostgreSqlAgent _postgreSqlAgent;
-        private readonly ISqlServerAgent _sqlServerAgent;
-        private readonly IRedisAgent _redisAgent;
-        private readonly IAzureAiTranslatorAgent _azureAiTranslatorAgent;
-        private readonly IAzureAiSpeechCreateSpeechAgent _azureAiSpeechCreateSpeechAgent;
-        private readonly IAzureAiSearchAgent _azureAiSearchAgent;
-        private readonly IAzureServiceBusNotificationAgent _azureServiceBusNotificationAgent;
-        private readonly IRabbitMqNotificationAgent _rabbitMqNotificationAgent;
-        private readonly IAudioPromptAgent _audioPromptAgent;
-        private readonly IWebCrawlerAgent _webCrawlerAgent;
-        private readonly IStabilityAiImagesAgent _stabilityAiImagesAgent;
-        private readonly IOcrBuildClassifierAgent _ocrBuildClassifierAgent;
-        private readonly IAzureLogAnalyticsAgent _azureLogAnalyticsAgent;
-        private readonly IGoogleSearchApiAgent _googleSearchApiAgent;
-        private readonly ISmtpNotificationAgent _smtpNotificationAgent;
-        private readonly IGraphTeamsNotificationAgent _teamsNotificationAgent;
-        private readonly IGraphMailNotificationAgent _graphMailNotificationAgent;
-        private readonly IAzDoWikiAgent _azDoWikiAgent;
-        private readonly IConfluenceAgent _confluenceAgent;
-        private readonly IQdrantAgent _qdrantAgent;
-        private readonly IEmbeddingAgent _embeddingAgent;
-        private readonly IOpenSearchAgent _openSearchAgent;
-        private readonly IGitAgent _gitAgent;
-        private readonly IMemZeroAgent _memZeroAgent;
-        private readonly IMcpClientAgent _mcpClientAgent;
+        private readonly ILogger<PlannerHelpers> _logger;
 
         public PlannerHelpers(
             RequestAccessor requestAccessor,
-            ExtendedConfig extendedConfig,
             IAgentsProcessor agentsProcessor,
-            IServiceProvider serviceProvider,
-            IPromptAgent promptAgent,
-            IApiCallAgent apiCallAgent,
-            IJsonTransformAgent jsonTransformAgent,
-            IContainsAgent containsAgent,
-            IBingSearchAgent bingSearchAgent,
-            IHistoryAgent historyAgent,
-            IRagPromptAgent ragPromptAgent,
-            IKnowledgeBaseAgent knowledgeBaseAgent,
-            IOcrAgent ocrAgent,
-            IOcrClassifyDocumentAgent ocrClassifyDocumentAgent,
-            IBackgroundWorkerAgent backgroundWorkerAgent,
-            IContentSafetyAgent contentSafetyAgent,
-            IImageToTextAgent imageToTextAgent,
-            IWhisperAgent whisperAgent,
-            IVectorSearchAgent vectorSearchAgent,
-            IStorageAccountAgent storageAccountAgent,
-            IPostgreSqlAgent postgreSqlAgent,
-            ISqlServerAgent sqlServerAgent,
-            IRedisAgent redisAgent,
-            IAzureAiTranslatorAgent azureAiTranslatorAgent,
-            IAzureAiSpeechCreateSpeechAgent azureAiSpeechCreateSpeechAgent,
-            IAzureAiSearchAgent azureAiSearchAgent,
-            IAzureServiceBusNotificationAgent azureServiceBusNotificationAgent,
-            IRabbitMqNotificationAgent rabbitMqNotificationAgent,
-            IAudioPromptAgent audioPromptAgent,
-            IWebCrawlerAgent webCrawlerAgent,
-            IStabilityAiImagesAgent stabilityAiImagesAgent,
-            IOcrBuildClassifierAgent ocrBuildClassifierAgent,
-            IAzureLogAnalyticsAgent azureLogAnalyticsAgent,
-            IGoogleSearchApiAgent googleSearchApiAgent,
-            ISmtpNotificationAgent smtpNotificationAgent,
-            IGraphTeamsNotificationAgent teamsNotificationAgent,
-            IGraphMailNotificationAgent graphMailNotificationAgent,
-            IAzDoWikiAgent azDoWikiAgent,
-            IConfluenceAgent confluenceAgent,
-            IQdrantAgent qdrantAgent,
-            IEmbeddingAgent embeddingAgent,
-            IOpenSearchAgent openSearchAgent,
-            IGitAgent gitAgent,
-            IMemZeroAgent memZeroAgent,
-            IMcpClientAgent mcpClientAgent)
+            ILogger<PlannerHelpers> logger)
         {
             _requestAccessor = requestAccessor;
-            _extendedConfig = extendedConfig;
             _agentsProcessor = agentsProcessor;
-            _serviceProvider = serviceProvider;
-            _promptAgent = promptAgent;
-            _apiCallAgent = apiCallAgent;
-            _jsonTransformAgent = jsonTransformAgent;
-            _containsAgent = containsAgent;
-            _bingSearchAgent = bingSearchAgent;
-            _historyAgent = historyAgent;
-            _ragPromptAgent = ragPromptAgent;
-            _knowledgeBaseAgent = knowledgeBaseAgent;
-            _ocrAgent = ocrAgent;
-            _ocrClassifyDocumentAgent = ocrClassifyDocumentAgent;
-            _backgroundWorkerAgent = backgroundWorkerAgent;
-            _contentSafetyAgent = contentSafetyAgent;
-            _imageToTextAgent = imageToTextAgent;
-            _whisperAgent = whisperAgent;
-            _vectorSearchAgent = vectorSearchAgent;
-            _storageAccountAgent = storageAccountAgent;
-            _postgreSqlAgent = postgreSqlAgent;
-            _sqlServerAgent = sqlServerAgent;
-            _redisAgent = redisAgent;
-            _azureAiTranslatorAgent = azureAiTranslatorAgent;
-            _azureAiSpeechCreateSpeechAgent = azureAiSpeechCreateSpeechAgent;
-            _azureAiSearchAgent = azureAiSearchAgent;
-            _azureServiceBusNotificationAgent = azureServiceBusNotificationAgent;
-            _rabbitMqNotificationAgent = rabbitMqNotificationAgent;
-            _audioPromptAgent = audioPromptAgent;
-            _webCrawlerAgent = webCrawlerAgent;
-            _stabilityAiImagesAgent = stabilityAiImagesAgent;
-            _ocrBuildClassifierAgent = ocrBuildClassifierAgent;
-            _azureLogAnalyticsAgent = azureLogAnalyticsAgent;
-            _googleSearchApiAgent = googleSearchApiAgent;
-            _smtpNotificationAgent = smtpNotificationAgent;
-            _teamsNotificationAgent = teamsNotificationAgent;
-            _graphMailNotificationAgent = graphMailNotificationAgent;
-            _azDoWikiAgent = azDoWikiAgent;
-            _confluenceAgent = confluenceAgent;
-            _qdrantAgent = qdrantAgent;
-            _embeddingAgent = embeddingAgent;
-            _openSearchAgent = openSearchAgent;
-            _gitAgent = gitAgent;
-            _memZeroAgent = memZeroAgent;
-            _mcpClientAgent = mcpClientAgent;
+            _logger = logger;
+        }
+
+        public string ApplyPlaceholders(string plannerPrompt)
+        {
+            try
+            {
+                var lastMessage = _requestAccessor.MessageDialog?.Messages?.LastOrDefault();
+                if (lastMessage == null)
+                {
+                    _logger.LogWarning("PlannerHelpers.ApplyPlaceholders: No last message found in RequestAccessor.MessageDialog");
+                    return plannerPrompt;
+                }
+
+                var replaced = plannerPrompt
+                    .Replace(PlannerPromptPlaceholders.CurrentQuestionPlaceholder,
+                        _requestAccessor.MessageDialog!.GetQuestion())
+                    .Replace(PlannerPromptPlaceholders.HasFilesPlaceholder,
+                        lastMessage.HasFiles().ToString())
+                    .Replace(PlannerPromptPlaceholders.FilesNamesPlaceholder,
+                        lastMessage.GetFileNames())
+                    .Replace(PlannerPromptPlaceholders.FilesDataPlaceholder,
+                        lastMessage.GetFileContents());
+
+                return replaced;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "PlannerHelpers.ApplyPlaceholders failed.");
+                return plannerPrompt;
+            }
+        }
+
+        public string GetPlannerCacheKey(string plannerPrompt, Kernel kernel)
+        {
+            var pluginNames = string.Join(",", kernel.Plugins.Select(p => p.Name));
+            var key = $"planner_{plannerPrompt.GetHash()}_{pluginNames.GetHash()}";
+            _logger.LogTrace("Planner cache key generated: {Key}", key);
+            return key;
         }
 
         private List<AgentModel>? _agentsList;
         public async Task<List<AgentModel>> GetAgentsList() => _agentsList ??= await _agentsProcessor.List(_requestAccessor.WorkspaceId);
 
-        public async Task<string> ExecuteAgent(string agentName, List<string>? parameters = null, bool checkAgentCallType = false)
-        {
-            var dbAgents = await _agentsProcessor.List(_requestAccessor.WorkspaceId);
-            var agent = dbAgents.FirstOrDefault(item => item.Name.ToLower() == agentName.ToLower());
-            if (agent == null)
-                throw new AiCoreUiException($"Agent not found: {agentName}");
-            _requestAccessor.AgentId = agent.AgentId;
-            if (checkAgentCallType)
-            {
-                var callType = agent.Content.ContainsKey(AgentTypeCalls.AgentCallTypeFieldName)
-                    ? agent.Content[AgentTypeCalls.AgentCallTypeFieldName].Value
-                    : AgentTypeCalls.PrivateCall;
-                var agentCallTypePublic = callType.Contains(AgentTypeCalls.PublicCall) && _extendedConfig.UsePublicCalls;
-                var agentCallTypePrivate = callType.Contains(AgentTypeCalls.PrivateCall);
-                var agentCallTypeWebHook = callType.Contains(AgentTypeCalls.WebHook) && _extendedConfig.UseWebHooks;
-
-                if (agentCallTypeWebHook && _requestAccessor.IsWebHookCall)
-                {
-                    // webhook call
-                }
-                else if (agentCallTypePublic && _requestAccessor.IsPublicCall)
-                {
-                    // public call
-                }
-                else if (agentCallTypePrivate && !_requestAccessor.IsPublicCall)
-                {
-                    // private call
-                }
-                else
-                    throw new AiCoreAuthException($"Agent {agentName} cannot be called according to its call type ({callType}).");
-            }
-            var parametersDictionary = parameters
-                .Select((value, i) => new KeyValuePair<string, string>("parameter" + (i + 1), value))
-                .ToDictionary(
-                    key => key.Key,
-                    value => value.Value);
-
-            var agentTypes = GetAgentTypes();
-            if (!agentTypes.TryGetValue(agent.Type, out var agentType))
-                throw new AiCoreUiException($"Agent type not found: {agent.Type}");
-            var agentInstance = ((BaseAgent)agentType);
-            var result = await agentInstance.DoCallWrapper(agent, parametersDictionary);
-            return result;
-        }
-
-        public async Task OnAddUpdate(AgentModel agentModel)
-        {
-            if (IsListenerAgentType(agentModel.Type))
-                return;
-            var agentTypes = GetAgentTypes();
-            if (!agentTypes.TryGetValue(agentModel.Type, out var agentType))
-                throw new AiCoreUiException($"Agent type not found: {agentModel.Type}");
-            var agentInstance = (BaseAgent)agentType;
-            await agentInstance.OnAddUpdate(agentModel);
-        }
-
-        public async Task OnDelete(int agentId)
-        {
-            var dbAgents = await _agentsProcessor.List(_requestAccessor.WorkspaceId);
-            var agentModel = dbAgents.FirstOrDefault(item => item.AgentId == agentId);
-            if (agentModel == null)
-                throw new AiCoreUiException($"Agent not found with ID: {agentId}");
-            if (IsListenerAgentType(agentModel.Type))
-                return;
-
-            var agentTypes = GetAgentTypes();
-            if (!agentTypes.TryGetValue(agentModel.Type, out var agentType))
-                throw new AiCoreUiException($"Agent type not found: {agentModel.Type}");
-            var agentInstance = ((BaseAgent)agentType);
-            await agentInstance.OnDelete(agentModel);
-        }
-
-        public async Task OnExport(AgentModel agentModel, Dictionary<int, AgentModelProcessed> agentsToExport)
-        {
-            if (IsListenerAgentType(agentModel.Type))
-            {
-                agentsToExport[agentModel.AgentId].Processed = true;
-                return;
-            }
-            var agentTypes = GetAgentTypes();
-            if (!agentTypes.TryGetValue(agentModel.Type, out var agentType))
-                throw new Exception($"Agent type not found: {agentModel.Type}");
-            var agentInstance = (BaseAgent)agentType;
-            await agentInstance.OnExport(agentModel, agentsToExport);
-        }
-
-        public async Task OnImport(AgentModel agentModel, Dictionary<string, AgentModelProcessed> agentsToImport)
-        {
-            if (IsListenerAgentType(agentModel.Type))
-            {
-                agentsToImport[agentModel.Name].Processed = true;
-                return;
-            }
-            var agentTypes = GetAgentTypes();
-            if (!agentTypes.TryGetValue(agentModel.Type, out var agentType))
-                throw new Exception($"Agent type not found: {agentModel.Type}");
-            var agentInstance = (BaseAgent)agentType;
-            await agentInstance.OnImport(agentModel, agentsToImport);
-        }
-
-        private T ResolveAgent<T>(ref T? field) where T : class
-        {
-            return field ??= _serviceProvider.GetService(typeof(T)) as T
-                ?? throw new InvalidOperationException($"Unable to resolve {typeof(T).Name}");
-        }
-
-        private ICompositeAgent? _compositeAgent;
-        public ICompositeAgent CompositeAgent
-        {
-            get => ResolveAgent(ref _compositeAgent);
-            set => _compositeAgent = value;
-        }
-
-        private ICsharpCodeAgent? _csharpCodeAgent;
-        public ICsharpCodeAgent CsharpCodeAgent
-        {
-            get => ResolveAgent(ref _csharpCodeAgent);
-            set => _csharpCodeAgent = value;
-        }
-
-        private ICompositeCSharpAgent? _compositeCSharpAgent;
-        public ICompositeCSharpAgent CompositeCSharpAgent
-        {
-            get => ResolveAgent(ref _compositeCSharpAgent);
-            set => _compositeCSharpAgent = value;
-        }
-
-        private ICompositePythonAgent? _compositePythonAgent;
-        public ICompositePythonAgent CompositePythonAgent
-        {
-            get => ResolveAgent(ref _compositePythonAgent);
-            set => _compositePythonAgent = value;
-        }
-
-        private ICompositeLoopAgent? _compositeLoopAgent;
-        public ICompositeLoopAgent CompositeLoopAgent
-        {
-            get => ResolveAgent(ref _compositeLoopAgent);
-            set => _compositeLoopAgent = value;
-        }
-
-        private IPythonCodeAgent? _pythonCodeAgent;
-        public IPythonCodeAgent PythonCodeAgent
-        {
-            get => ResolveAgent(ref _pythonCodeAgent);
-            set => _pythonCodeAgent = value;
-        }
-
-        private INodeJsCodeAgent? _nodeJsCodeAgent;
-        public INodeJsCodeAgent NodeJsCodeAgent
-        {
-            get => ResolveAgent(ref _nodeJsCodeAgent);
-            set => _nodeJsCodeAgent = value;
-        }
-
-        private IFlowAgent? _flowAgent;
-        public IFlowAgent FlowAgent
-        {
-            get => ResolveAgent(ref _flowAgent);
-            set => _flowAgent = value;
-        }
-
-        public async Task AddPlugin(AgentModel agent, Kernel kernel, List<string> pluginsInstructions)
-        {
-            var agentTypes = GetAgentTypes();
-            var agentMapping = new Dictionary<AgentType, Func<Task>>();
-            foreach (var agentType in agentTypes)
-            {
-                agentMapping.Add(agentType.Key, () => ((BaseAgent)agentType.Value).AddAgent(agent, kernel, pluginsInstructions));
-            }
-
-            if (agentMapping.TryGetValue(agent.Type, out var addAgentTask))
-            {
-                await addAgentTask();
-            }
-        }
-
-        public Dictionary<AgentType, object> GetAgentTypes()
-        {
-            var agentMapping = new Dictionary<AgentType, object>
-            {
-                { AgentType.Prompt, _promptAgent },
-                { AgentType.ApiCall, _apiCallAgent },
-                { AgentType.JsonTransform, _jsonTransformAgent },
-                { AgentType.Contains, _containsAgent },
-                { AgentType.Composite, CompositeAgent},
-                { AgentType.PythonCode, PythonCodeAgent },
-                { AgentType.CsharpCode, CsharpCodeAgent },
-                { AgentType.NodeJsCode, NodeJsCodeAgent },
-                { AgentType.CompositeCSharp, CompositeCSharpAgent },
-                { AgentType.CompositePython, CompositePythonAgent },
-                { AgentType.CompositeLoop, CompositeLoopAgent },
-                { AgentType.BingSearch, _bingSearchAgent },
-                { AgentType.History, _historyAgent },
-                { AgentType.RagPrompt, _ragPromptAgent },
-                { AgentType.Ocr, _ocrAgent },
-                { AgentType.OcrClassifyDocument, _ocrClassifyDocumentAgent },
-                { AgentType.BackgroundWorker, _backgroundWorkerAgent },
-                { AgentType.ContentSafety, _contentSafetyAgent },
-                { AgentType.ImageToText, _imageToTextAgent },
-                { AgentType.Whisper, _whisperAgent },
-                { AgentType.VectorSearch, _vectorSearchAgent },
-                { AgentType.StorageAccount, _storageAccountAgent },
-                { AgentType.PostgreSql, _postgreSqlAgent },
-                { AgentType.SqlServer, _sqlServerAgent },
-                { AgentType.Redis, _redisAgent },
-                { AgentType.AzureAiTranslator, _azureAiTranslatorAgent },
-                { AgentType.AzureAiSpeechCreateSpeech, _azureAiSpeechCreateSpeechAgent },
-                { AgentType.AzureAiSearch, _azureAiSearchAgent },
-                { AgentType.AzureServiceBusNotification, _azureServiceBusNotificationAgent },
-                { AgentType.RabbitMqNotification, _rabbitMqNotificationAgent },
-                { AgentType.AudioPromptAgent, _audioPromptAgent },
-                { AgentType.WebCrawler, _webCrawlerAgent },
-                { AgentType.StabilityAiImages, _stabilityAiImagesAgent },
-                { AgentType.OcrBuildClassifierAgent, _ocrBuildClassifierAgent },
-                { AgentType.AzureLogAnalytics, _azureLogAnalyticsAgent },
-                { AgentType.GoogleSearchApi, _googleSearchApiAgent },
-                { AgentType.Smtp, _smtpNotificationAgent },
-                { AgentType.GraphTeamsNotification, _teamsNotificationAgent },
-                { AgentType.GraphMailNotification, _graphMailNotificationAgent },
-                { AgentType.AzDoWiki, _azDoWikiAgent },
-                { AgentType.Confluence, _confluenceAgent },
-                { AgentType.Embedding, _embeddingAgent },
-                { AgentType.Qdrant, _qdrantAgent },
-                { AgentType.OpenSearch, _openSearchAgent },
-                { AgentType.Git, _gitAgent },
-                { AgentType.Flow, FlowAgent }, 
-                { AgentType.MemZero, _memZeroAgent },
-                { AgentType.KnowledgeBase, _knowledgeBaseAgent },
-                { AgentType.McpClient, _mcpClientAgent }
-            };
-            return agentMapping;
-        }
-
-        private static readonly HashSet<AgentType> ListenerAgentTypes = new()
-        {
-            AgentType.AzureServiceBusListener,
-            AgentType.RabbitMqListener,
-            AgentType.Imap,
-            AgentType.GraphMail,
-            AgentType.GraphTeamsListener,
-            AgentType.Scheduler
-        };
-
-        public bool IsListenerAgentType(AgentType agentType) => ListenerAgentTypes.Contains(agentType);
-
-        public string ApplyPlaceholders(string plannerPrompt) => plannerPrompt
-            .Replace(PlannerPromptPlaceholders.CurrentQuestionPlaceholder, _requestAccessor.MessageDialog!.GetQuestion())
-            .Replace(PlannerPromptPlaceholders.HasFilesPlaceholder, _requestAccessor.MessageDialog.Messages!.Last().HasFiles().ToString())
-            .Replace(PlannerPromptPlaceholders.FilesNamesPlaceholder, _requestAccessor.MessageDialog.Messages!.Last().GetFileNames())
-            .Replace(PlannerPromptPlaceholders.FilesDataPlaceholder, _requestAccessor.MessageDialog.Messages!.Last().GetFileContents());
-
-        public string GetPlannerCacheKey(string plannerPrompt, Kernel kernel)
-        {
-            var pluginNames = string.Join(",", kernel.Plugins.Select(p => p.Name));
-            return $"planner_{plannerPrompt.GetHash()}_{pluginNames.GetHash()}";
-        }
     }
 
     public interface IPlannerHelpers
     {
-        Task<List<AgentModel>> GetAgentsList();
-        Task<string> ExecuteAgent(string agentName, List<string>? parameters = null, bool checkAgentCallType = false);
-        Task OnDelete(int agentId);
-        Task OnAddUpdate(AgentModel agentModel);
-        Task OnExport(AgentModel agentModel, Dictionary<int, AgentModelProcessed> agentsToExport);
-        Task OnImport(AgentModel agentModel, Dictionary<string, AgentModelProcessed> agentsTImport);
-        Task AddPlugin(AgentModel agent, Kernel kernel, List<string> pluginsInstructions);
         string ApplyPlaceholders(string plannerPrompt);
         string GetPlannerCacheKey(string plannerPrompt, Kernel kernel);
-        ICompositeAgent CompositeAgent { get; set; }
-        ICsharpCodeAgent CsharpCodeAgent { get; set; }
-        IPythonCodeAgent PythonCodeAgent { get; set; }
-        INodeJsCodeAgent NodeJsCodeAgent { get; set; }
-        ICompositeCSharpAgent CompositeCSharpAgent { get; set; }
-        ICompositePythonAgent CompositePythonAgent { get; set; }
-        ICompositeLoopAgent CompositeLoopAgent { get; set; }
-        IFlowAgent FlowAgent { get; set; }
+        Task<List<AgentModel>> GetAgentsList();
     }
 }
