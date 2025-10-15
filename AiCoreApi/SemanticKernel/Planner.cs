@@ -5,7 +5,6 @@ using Microsoft.Extensions.Caching.Distributed;
 using AiCoreApi.Common;
 using AiCoreApi.Data.Processors;
 using AiCoreApi.Models.ViewModels;
-using AiCoreApi.SemanticKernel.Agents;
 
 namespace AiCoreApi.SemanticKernel
 {
@@ -75,9 +74,10 @@ namespace AiCoreApi.SemanticKernel
             if (string.IsNullOrEmpty(plan))
             {
                 // Shortcut: if only one enabled agent (no flow)
-                var singleAgent = agentsList.FirstOrDefault(a => a.IsEnabled && string.IsNullOrEmpty(a.FlowName));
-                if (singleAgent != null)
+                var enabledNoFlowAgents = agentsList.Where(a => a.IsEnabled && string.IsNullOrEmpty(a.FlowName)).ToList();
+                if (enabledNoFlowAgents.Count == 1)
                 {
+                    var singleAgent = enabledNoFlowAgents[0];
                     _responseAccessor.CurrentMessage.Text =
                         await _agentExecutor.ExecuteAsync(singleAgent.Name,
                             new List<string> { _requestAccessor.MessageDialog?.Messages?.Last().Text ?? "" },

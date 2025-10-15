@@ -133,10 +133,9 @@ class Agent
             _responseAccessor.AddDebugMessage(_debugMessageSenderName, "Prompt", promptTemplate);
 
             var cacheKey = promptTemplate.GetHash();
-            if (!CodeCache.TryGetValue(cacheKey, out var code) || !_requestAccessor.UseCachedPlan)
+            if (!_requestAccessor.UseCachedPlan || !CodeCache.TryGetValue(cacheKey, out var code))
             {
-                code = await _semanticKernelProvider.ExecutePrompt(
-                    llmConnection, promptTemplate, temperature, topP, SystemMessage);
+                code = await _semanticKernelProvider.ExecutePrompt(llmConnection, promptTemplate, temperature, topP, SystemMessage);
                 CodeCache[cacheKey] = code;
             }
 

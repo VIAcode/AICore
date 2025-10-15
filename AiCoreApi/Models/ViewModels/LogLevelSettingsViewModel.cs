@@ -2,6 +2,6 @@
 
 public class LogLevelSettingsViewModel
 {
-    public required string Category { get; set; }
-    public required string LogLevel { get; set; }
+    public string Category { get; set; } = string.Empty;
+    public string LogLevel { get; set; } = string.Empty;
 }
