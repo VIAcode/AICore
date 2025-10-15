@@ -41,7 +41,7 @@ You are an expert C# developer. Complete the code based on the given task.
 - Ensure the code is fully compilable and free of undefined variables.
 - Use existing Agents where applicable. Do not re-implement Agent functionality.
 - Import only required NuGet packages in the format: #r ""nuget: PackageName, Version""
-- Do NOT import AiCoreApi.Common — it is already available.
+- Do NOT import AiCoreApi.Common â€” it is already available.
 
 {{{{agentsDescription}}}}
 # Code to finish
@@ -133,10 +133,9 @@ class Agent
             _responseAccessor.AddDebugMessage(_debugMessageSenderName, "Prompt", promptTemplate);
 
             var cacheKey = promptTemplate.GetHash();
-            if (!CodeCache.TryGetValue(cacheKey, out var code) || !_requestAccessor.UseCachedPlan)
+            if (!_requestAccessor.UseCachedPlan || !CodeCache.TryGetValue(cacheKey, out var code))
             {
-                code = await _semanticKernelProvider.ExecutePrompt(
-                    llmConnection, promptTemplate, temperature, topP, SystemMessage);
+                code = await _semanticKernelProvider.ExecutePrompt(llmConnection, promptTemplate, temperature, topP, SystemMessage);
                 CodeCache[cacheKey] = code;
             }
 

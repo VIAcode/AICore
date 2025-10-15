@@ -25,9 +25,7 @@ namespace AiCoreApi.SemanticKernel
 
         public async Task OnAddUpdateAsync(AgentModel agentModel)
         {
-            var agent = _registry.Resolve(agentModel.Type);
-            if (agent is not BaseAgent baseAgent)
-                throw new InvalidOperationException($"Agent type {agentModel.Type} is not BaseAgent");
+            var baseAgent = _registry.Resolve(agentModel.Type);
             await baseAgent.OnAddUpdate(agentModel);
         }
 
