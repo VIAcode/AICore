@@ -5,6 +5,7 @@ using Microsoft.Extensions.Caching.Distributed;
 using AiCoreApi.Common;
 using AiCoreApi.Data.Processors;
 using AiCoreApi.Models.ViewModels;
+using AiCoreApi.SemanticKernel.Agents;
 
 namespace AiCoreApi.SemanticKernel
 {

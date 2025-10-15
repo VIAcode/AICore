@@ -41,7 +41,7 @@ You are an expert C# developer. Complete the code based on the given task.
 - Ensure the code is fully compilable and free of undefined variables.
 - Use existing Agents where applicable. Do not re-implement Agent functionality.
 - Import only required NuGet packages in the format: #r ""nuget: PackageName, Version""
-- Do NOT import AiCoreApi.Common — it is already available.
+- Do NOT import AiCoreApi.Common â€” it is already available.
 
 {{{{agentsDescription}}}}
 # Code to finish

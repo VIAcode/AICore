@@ -2,6 +2,7 @@ using AiCoreApi.Common;
 using AiCoreApi.Data.Processors;
 using AiCoreApi.Models.DbModels;
 using AiCoreApi.Models.ViewModels;
+using AiCoreApi.SemanticKernel.Agents;
 using static AiCoreApi.Common.ExceptionHandlingMiddleware;
 
 namespace AiCoreApi.SemanticKernel
