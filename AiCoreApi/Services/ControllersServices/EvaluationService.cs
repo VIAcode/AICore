@@ -19,7 +19,7 @@ public class EvaluationService : IEvaluationService
     private readonly ISemanticKernelProvider _semanticKernelProvider;
     private readonly IConnectionProcessor _connectionProcessor;
     private readonly IAgentsProcessor _agentsProcessor;
-    private readonly IPlannerHelpers _plannerHelpers;
+    private readonly IAgentExecutor _agentExecutor;
     public const string ParameterDescription = "parameterDescription";
 
     public EvaluationService(
@@ -31,7 +31,7 @@ public class EvaluationService : IEvaluationService
         ISemanticKernelProvider semanticKernelProvider,
         IConnectionProcessor connectionProcessor,
         IAgentsProcessor agentsProcessor,
-        IPlannerHelpers plannerHelpers)
+        IAgentExecutor agentExecutor)
     {
         _mapper = mapper;
         _requestAccessor = requestAccessor;
@@ -41,7 +41,7 @@ public class EvaluationService : IEvaluationService
         _semanticKernelProvider = semanticKernelProvider;
         _connectionProcessor = connectionProcessor;
         _agentsProcessor = agentsProcessor;
-        _plannerHelpers = plannerHelpers;
+        _agentExecutor = agentExecutor;
     }
 
     public async Task<EvaluationViewModel?> GetById(int evaluationId)
@@ -239,7 +239,7 @@ public class EvaluationService : IEvaluationService
                 }
             }
         };
-        var result = await _plannerHelpers.ExecuteAgent(evaluation.AgentName, question.Parameters);
+        var result = await _agentExecutor.ExecuteAsync(evaluation.AgentName, question.Parameters);
         return result;
     }
 

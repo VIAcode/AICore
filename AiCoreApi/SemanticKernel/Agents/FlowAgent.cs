@@ -10,7 +10,7 @@ namespace AiCoreApi.SemanticKernel.Agents
     {
         private string _debugMessageSenderName = "FlowAgent";
         private readonly ResponseAccessor _responseAccessor;
-        private readonly IPlannerHelpers _plannerHelpers;
+        private readonly IAgentExecutor _agentExecutor;
         private readonly IAgentsProcessor _agentsProcessor;
 
         private static class AgentContentParameters
@@ -21,13 +21,13 @@ namespace AiCoreApi.SemanticKernel.Agents
         public FlowAgent(
             IBaseAgentHelper baseAgentHelper,
             IAgentsProcessor agentsProcessor,
-            IPlannerHelpers plannerHelpers,
+            IAgentExecutor agentExecutor,
             ResponseAccessor responseAccessor,
             ILogger<FlowAgent> logger)
             : base(baseAgentHelper, logger)
         {
             _responseAccessor = responseAccessor;
-            _plannerHelpers = plannerHelpers;
+            _agentExecutor = agentExecutor;
             _agentsProcessor = agentsProcessor;
         }
 
@@ -65,10 +65,9 @@ namespace AiCoreApi.SemanticKernel.Agents
 
         private async Task<string> ExecuteAgent(string agentName, List<string>? parameters = null)
         {
-            _plannerHelpers.FlowAgent = this;
             try
             {
-                return await _plannerHelpers.ExecuteAgent(agentName, parameters);
+                return await _agentExecutor.ExecuteAsync(agentName, parameters);
             }
             catch (Exception e)
             {

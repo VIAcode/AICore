@@ -57,6 +57,20 @@ namespace AiCoreApi.Data.Processors
                 await db.SaveChangesAsync();
             }
         }
+
+        public async Task MarkAllAsRead(int workspaceId, string login)
+        {
+            await using var db = await _dbFactory.CreateDbContextAsync();
+            var notifications = await db.Notification
+                .Where(e => e.WorkspaceId == workspaceId && e.IsRead == false && login == e.User)
+                .ToListAsync();
+            foreach (var notification in notifications)
+            {
+                notification.IsRead = true;
+            }
+            db.Notification.UpdateRange(notifications);
+            await db.SaveChangesAsync();
+        }
     }
 
     public interface INotificationsProcessor
@@ -65,5 +79,6 @@ namespace AiCoreApi.Data.Processors
         Task<NotificationModel> Add(NotificationModel notification);
         Task<NotificationModel> Update(NotificationModel notification);
         Task MarkAsRead(int notificationId);
+        Task MarkAllAsRead(int workspaceId, string login);
     }
 }

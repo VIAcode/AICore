@@ -36,7 +36,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             public const string CsharpCode = "csharpCode";
         }
 
-        private readonly IPlannerHelpers _plannerHelpers;
+        private readonly IAgentExecutor _agentExecutor;
         private readonly RequestAccessor _requestAccessor;
         private readonly ResponseAccessor _responseAccessor;
         private readonly ExtendedConfig _extendedConfig;
@@ -47,7 +47,7 @@ namespace AiCoreApi.SemanticKernel.Agents
 
         public CsharpCodeAgent(
             IBaseAgentHelper baseAgentHelper,
-            IPlannerHelpers plannerHelpers,
+            IAgentExecutor agentExecutor,
             RequestAccessor requestAccessor,
             ResponseAccessor responseAccessor,
             ExtendedConfig extendedConfig,
@@ -55,7 +55,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             ILogger<CsharpCodeAgent> logger,
             IMetricsAccessor metricsAccessor) : base(baseAgentHelper, logger)
         {
-            _plannerHelpers = plannerHelpers;
+            _agentExecutor = agentExecutor;
             _requestAccessor = requestAccessor;
             _responseAccessor = responseAccessor;
             _extendedConfig = extendedConfig;
@@ -278,10 +278,9 @@ namespace AiCoreApi.SemanticKernel.Agents
         // Helper for chaining an agent call from within the code
         private string ExecuteAgent(string agentName, List<string>? parameters = null)
         {
-            _plannerHelpers.CsharpCodeAgent = this;
             try
             {
-                return _plannerHelpers.ExecuteAgent(agentName, parameters).GetAwaiter().GetResult();
+                return _agentExecutor.ExecuteAsync(agentName, parameters).GetAwaiter().GetResult();
             }
             catch (Exception e)
             {

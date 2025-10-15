@@ -1,11 +1,11 @@
+using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.Connectors.OpenAI;
 using Microsoft.SemanticKernel.Planning.Handlebars;
-using AiCoreApi.Common;
-using AiCoreApi.Models.ViewModels;
 using Microsoft.Extensions.Caching.Distributed;
+using AiCoreApi.Common;
 using AiCoreApi.Data.Processors;
+using AiCoreApi.Models.ViewModels;
 using AiCoreApi.SemanticKernel.Agents;
-using Microsoft.SemanticKernel;
 
 namespace AiCoreApi.SemanticKernel
 {
@@ -16,99 +16,86 @@ namespace AiCoreApi.SemanticKernel
         private readonly ISemanticKernelProvider _semanticKernelProvider;
         private readonly RequestAccessor _requestAccessor;
         private readonly ResponseAccessor _responseAccessor;
-        private readonly IDistributedCache _distributedCache;
+        private readonly IDistributedCache _cache;
         private readonly ILoginProcessor _loginProcessor;
-        private readonly ExtendedConfig _extendedConfig;
+        private readonly ExtendedConfig _config;
         private readonly IPlannerCallOptions _plannerCallOptions;
         private readonly ILogger<Planner> _logger;
         private readonly IPlannerHelpers _plannerHelpers;
-        private readonly ICompositeAgent _compositeAgent;
-        private readonly ICsharpCodeAgent _csharpCodeAgent;
-        private readonly IPythonCodeAgent _pythonCodeAgent;
-        private readonly INodeJsCodeAgent _nodeJsCodeAgent;
-        private readonly ICompositeCSharpAgent _compositeCSharpAgent;
-        private readonly ICompositePythonAgent _compositePythonAgent;
-        private readonly ICompositeLoopAgent _compositeLoopAgent;
-        private readonly IFlowAgent _flowAgent;
+        private readonly IAgentExecutor _agentExecutor;
+        private readonly IAgentRegistry _registry;
 
         public Planner(
             ISemanticKernelProvider semanticKernelProvider,
             RequestAccessor requestAccessor,
             ResponseAccessor responseAccessor,
-            IDistributedCache distributedCache,
+            IDistributedCache cache,
             ILoginProcessor loginProcessor,
-            ExtendedConfig extendedConfig,
+            ExtendedConfig config,
             IPlannerCallOptions plannerCallOptions,
             ILogger<Planner> logger,
             IPlannerHelpers plannerHelpers,
-            ICompositeAgent compositeAgent,
-            ICsharpCodeAgent csharpCodeAgent,
-            IPythonCodeAgent pythonCodeAgent,
-            INodeJsCodeAgent nodeJsCodeAgent,
-            ICompositeCSharpAgent compositeCSharpAgent,
-            ICompositePythonAgent compositePythonAgent,
-            ICompositeLoopAgent compositeLoopAgent,
-            IFlowAgent flowAgent)
+            IAgentExecutor agentExecutor,
+            IAgentRegistry registry)
         {
             _semanticKernelProvider = semanticKernelProvider;
             _requestAccessor = requestAccessor;
             _responseAccessor = responseAccessor;
-            _distributedCache = distributedCache;
+            _cache = cache;
             _loginProcessor = loginProcessor;
-            _extendedConfig = extendedConfig;
+            _config = config;
             _plannerCallOptions = plannerCallOptions;
             _logger = logger;
             _plannerHelpers = plannerHelpers;
-            _compositeAgent = compositeAgent;
-            _csharpCodeAgent = csharpCodeAgent;
-            _pythonCodeAgent = pythonCodeAgent;
-            _nodeJsCodeAgent = nodeJsCodeAgent;
-            _compositeCSharpAgent = compositeCSharpAgent;
-            _compositePythonAgent = compositePythonAgent;
-            _compositeLoopAgent = compositeLoopAgent;
-            _flowAgent = flowAgent;
+            _agentExecutor = agentExecutor;
+            _registry = registry;
         }
 
         public async Task<MessageDialogViewModel.Message> GetChatResponse()
         {
             var agentsList = await _plannerHelpers.GetAgentsList();
-            var agentCallResponse = await GetAgentCallResponse();
+            var agentCallResponse = await TryExecuteAgentCall();
+
             if (agentCallResponse != null)
                 return agentCallResponse;
-            
-            var applyCallOptionsResult = await _plannerCallOptions.Apply(agentsList);
-            if (!applyCallOptionsResult.Success)
+
+            var applyResult = await _plannerCallOptions.Apply(agentsList);
+            if (!applyResult.Success)
             {
-                _responseAccessor.CurrentMessage.Text = applyCallOptionsResult.ErrorMessage ?? _extendedConfig.NoInformationFoundText;
+                _responseAccessor.CurrentMessage.Text =
+                    applyResult.ErrorMessage ?? _config.NoInformationFoundText;
                 return _responseAccessor.CurrentMessage;
             }
+
             var kernel = await _semanticKernelProvider.GetKernel();
-            var useAllPlugins = !string.IsNullOrEmpty(applyCallOptionsResult.Plan);
-            var plan = applyCallOptionsResult.Plan;
-            var plannerPrompt = await AddPlugins(_extendedConfig.PlannerPrompt, useAllPlugins, kernel);
+            var useAllPlugins = !string.IsNullOrEmpty(applyResult.Plan);
+            var plannerPrompt = await AddPlugins(_config.PlannerPrompt, useAllPlugins, kernel);
+            var plan = applyResult.Plan;
+
             if (string.IsNullOrEmpty(plan))
             {
-                if (agentsList.Count(agent => string.IsNullOrEmpty(agent.FlowName) && agent.IsEnabled) == 1)
+                // Shortcut: if only one enabled agent (no flow)
+                var singleAgent = agentsList.FirstOrDefault(a => a.IsEnabled && string.IsNullOrEmpty(a.FlowName));
+                if (singleAgent != null)
                 {
-                    var agent = agentsList.First(agent => string.IsNullOrEmpty(agent.FlowName) && agent.IsEnabled);
-                    _responseAccessor.CurrentMessage.Text = await _plannerHelpers.ExecuteAgent(agent.Name, 
-                        new List<string> { _requestAccessor.MessageDialog?.Messages?.Last().Text ?? "" },
-                        true);
+                    _responseAccessor.CurrentMessage.Text =
+                        await _agentExecutor.ExecuteAsync(singleAgent.Name,
+                            new List<string> { _requestAccessor.MessageDialog?.Messages?.Last().Text ?? "" },
+                            checkAgentCallType: true);
                     return _responseAccessor.CurrentMessage;
                 }
+
                 plannerPrompt = _plannerHelpers.ApplyPlaceholders(plannerPrompt);
                 _responseAccessor.AddDebugMessage(DebugMessageSenderName, "Planner Prompt", plannerPrompt);
-                plan = await GetPlan(plannerPrompt, kernel);
+                plan = await GetOrCreatePlan(plannerPrompt, kernel);
             }
+
             try
             {
                 var result = await new HandlebarsPlan(plan).InvokeAsync(kernel);
-                if (string.IsNullOrEmpty(_responseAccessor.CurrentMessage.Text))
-                {
-                    _responseAccessor.CurrentMessage.Text = string.IsNullOrEmpty(result) || result == "null" 
-                        ? _extendedConfig.NoInformationFoundText 
-                        : result;
-                }
+                _responseAccessor.CurrentMessage.Text = string.IsNullOrWhiteSpace(result) || result == "null"
+                    ? _config.NoInformationFoundText
+                    : result;
             }
             catch (TokensLimitException)
             {
@@ -117,94 +104,90 @@ namespace AiCoreApi.SemanticKernel
             catch (Exception ex)
             {
                 _responseAccessor.AddDebugMessage(DebugMessageSenderName, "Planner Execution Error", ex.Message);
-                _responseAccessor.CurrentMessage.Text = _extendedConfig.NoInformationFoundText;
-                _logger.LogError(ex, "Error in planner");
-                // probably plan is not valid, so we need to remove it from cache
-                _distributedCache.Remove(_plannerHelpers.GetPlannerCacheKey(plannerPrompt, kernel));
+                _responseAccessor.CurrentMessage.Text = _config.NoInformationFoundText;
+                _logger.LogError(ex, "Planner execution failed. Removing cached plan...");
+                await _cache.RemoveAsync(_plannerHelpers.GetPlannerCacheKey(plannerPrompt, kernel));
             }
+
             return _responseAccessor.CurrentMessage;
         }
 
-        private async Task<MessageDialogViewModel.Message?> GetAgentCallResponse()
+        private async Task<MessageDialogViewModel.Message?> TryExecuteAgentCall()
         {
-            var currentMessage = _requestAccessor.MessageDialog?.Messages?.Last();
-            if (currentMessage?.Options != null && currentMessage.Options.Length > 0 && currentMessage.Options[0].Type == MessageDialogViewModel.CallOptions.CallOptionsType.AgentCall)
+            var currentMessage = _requestAccessor.MessageDialog?.Messages?.LastOrDefault();
+            var option = currentMessage?.Options?.FirstOrDefault();
+
+            if (option == null || option.Type != MessageDialogViewModel.CallOptions.CallOptionsType.AgentCall)
+                return null;
+
+            try
             {
-                try
-                {
-                    var agentName = currentMessage.Options[0].Name;
-                    var parameters = currentMessage.Options[0].Parameters.Select(item => item.Value).ToList();
-                    _responseAccessor.AddDebugMessage(DebugMessageSenderName, "Agent Execution",
-                        $"Agent {agentName}, Parameters: {string.Join(",", parameters)}");
-                    var result = await _plannerHelpers.ExecuteAgent(agentName, parameters, true);
-                    if (!string.IsNullOrEmpty(result))
-                    {
-                        _responseAccessor.CurrentMessage.Text = result;
-                    }
-                    else if (string.IsNullOrEmpty(_responseAccessor.CurrentMessage.Text))
-                    {
-                        _responseAccessor.CurrentMessage.Text = _extendedConfig.NoInformationFoundText;
-                    }
+                var agentName = option.Name;
+                var parameters = option.Parameters.Select(p => p.Value).ToList();
 
-                    _responseAccessor.AddDebugMessage(DebugMessageSenderName, "Agent Execution Result",
-                        _responseAccessor.CurrentMessage.Text);
-                    return _responseAccessor.CurrentMessage;
-                }
-                catch (ExceptionHandlingMiddleware.AiCoreAuthException ex)
-                {
-                    throw;
-                }
-                catch (TokensLimitException ex)
-                {
-                    throw;
-                }
-                catch (Exception ex)
-                {
-                    _responseAccessor.AddDebugMessage(DebugMessageSenderName, "Agent Execution Error", ex.Message);
-                    _responseAccessor.CurrentMessage.Text = _extendedConfig.NoInformationFoundText;
-                    _logger.LogError(ex, "Error in agent execution");
-                }
+                _responseAccessor.AddDebugMessage(DebugMessageSenderName, "Agent Execution",
+                    $"Agent {agentName}, Parameters: {string.Join(",", parameters)}");
 
-                return _responseAccessor.CurrentMessage;
+                var result = await _agentExecutor.ExecuteAsync(agentName, parameters, checkAgentCallType: true);
+
+                _responseAccessor.CurrentMessage.Text =
+                    string.IsNullOrWhiteSpace(result)
+                        ? _config.NoInformationFoundText
+                        : result;
+
+                _responseAccessor.AddDebugMessage(DebugMessageSenderName, "Agent Execution Result",
+                    _responseAccessor.CurrentMessage.Text);
             }
-            return null;
+            catch (TokensLimitException) { throw; }
+            catch (Exception ex)
+            {
+                _responseAccessor.AddDebugMessage(DebugMessageSenderName, "Agent Execution Error", ex.Message);
+                _responseAccessor.CurrentMessage.Text = _config.NoInformationFoundText;
+                _logger.LogError(ex, "Error executing agent.");
+            }
+
+            return _responseAccessor.CurrentMessage;
         }
 
         private async Task<string> AddPlugins(string plannerPrompt, bool useAllPlugins, Kernel kernel)
         {
             var pluginsInstructions = new List<string>();
-            var agentsList = await _plannerHelpers.GetAgentsList();
-            _plannerHelpers.CompositeAgent = _compositeAgent;
-            _plannerHelpers.CsharpCodeAgent = _csharpCodeAgent;
-            _plannerHelpers.PythonCodeAgent = _pythonCodeAgent;
-            _plannerHelpers.NodeJsCodeAgent = _nodeJsCodeAgent;
-            _plannerHelpers.CompositeCSharpAgent = _compositeCSharpAgent;
-            _plannerHelpers.CompositePythonAgent = _compositePythonAgent;
-            _plannerHelpers.CompositeLoopAgent = _compositeLoopAgent;
-            _plannerHelpers.FlowAgent = _flowAgent;
+            var agents = await _plannerHelpers.GetAgentsList();
             var allUserTags = await _loginProcessor.GetTagsByLogin(_requestAccessor.Login, _requestAccessor.LoginType);
-            foreach (var agent in agentsList)
+
+            foreach (var agent in agents)
             {
-                if (useAllPlugins ||
-                    (agent.IsEnabled && (agent.Tags.Count == 0 || agent.Tags.Select(x => x.TagId).Any(allUserTags.Select(x => x.TagId).Contains))))
-                {
-                    await _plannerHelpers.AddPlugin(agent, kernel, pluginsInstructions);
-                }
+                if (!agent.IsEnabled)
+                    continue;
+
+                var accessible = useAllPlugins ||
+                                 agent.Tags.Count == 0 ||
+                                 agent.Tags.Select(t => t.TagId)
+                                     .Any(allUserTags.Select(t => t.TagId).Contains);
+
+                if (!accessible)
+                    continue;
+
+                var agentInstance = _registry.Resolve(agent.Type);
+                await agentInstance.AddAgent(agent, kernel, pluginsInstructions);
             }
-            return plannerPrompt.Replace( PlannerHelpers.PlannerPromptPlaceholders.PluginsInstructionsPlaceholder, string.Join(" ", pluginsInstructions));
+
+            return plannerPrompt.Replace(
+                PlannerHelpers.PlannerPromptPlaceholders.PluginsInstructionsPlaceholder,
+                string.Join(" ", pluginsInstructions));
         }
 
-        private async Task<string> GetPlan(string plannerPrompt, Kernel kernel)
+        private async Task<string> GetOrCreatePlan(string plannerPrompt, Kernel kernel)
         {
-            // Cache plan for 1 hour. Plan should be cached per prompt and per enabled plugins.
             var cacheKey = _plannerHelpers.GetPlannerCacheKey(plannerPrompt, kernel);
+
             if (_requestAccessor.UseCachedPlan)
             {
-                var cachedContent = await _distributedCache.GetStringAsync(cacheKey);
-                if (cachedContent != null)
+                var cached = await _cache.GetStringAsync(cacheKey);
+                if (cached != null)
                 {
-                    _responseAccessor.AddDebugMessage(DebugMessageSenderName, "Execution Plan (cached)", cachedContent);
-                    return cachedContent;
+                    _responseAccessor.AddDebugMessage(DebugMessageSenderName, "Execution Plan (cached)", cached);
+                    return cached;
                 }
             }
 
@@ -214,11 +197,16 @@ namespace AiCoreApi.SemanticKernel
                 ExecutionSettings = new OpenAIPromptExecutionSettings
                 {
                     Temperature = 0.0,
-                    TopP = 0.0,
+                    TopP = 0.0
                 }
             });
+
             var plan = (await planner.CreatePlanAsync(kernel, plannerPrompt)).ToString();
-            await _distributedCache.SetStringAsync(cacheKey, plan, new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(60) });
+            await _cache.SetStringAsync(cacheKey, plan, new DistributedCacheEntryOptions
+            {
+                AbsoluteExpirationRelativeToNow = TimeSpan.FromHours(1)
+            });
+
             _responseAccessor.AddDebugMessage(DebugMessageSenderName, "Execution Plan", plan);
             return plan;
         }

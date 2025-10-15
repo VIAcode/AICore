@@ -1,16 +1,17 @@
-using AiCoreApi.Common.Extensions;
-using Microsoft.SemanticKernel;
-using AiCoreApi.Models.DbModels;
 using AiCoreApi.Common;
+using AiCoreApi.Common.Extensions;
 using AiCoreApi.Data.Processors;
-using Microsoft.SemanticKernel.Planning.Handlebars;
+using AiCoreApi.Models.DbModels;
+using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.Connectors.OpenAI;
+using Microsoft.SemanticKernel.Planning.Handlebars;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
-    public class CompositeAgent: BaseEnabledAgentsAgent, ICompositeAgent
+    public class CompositeAgent : BaseEnabledAgentsAgent, ICompositeAgent
     {
         private string _debugMessageSenderName = "CompositeAgent";
+
         public static class AgentContentParameters
         {
             public const string AgentsList = "agentsList";
@@ -24,6 +25,8 @@ namespace AiCoreApi.SemanticKernel.Agents
         private readonly RequestAccessor _requestAccessor;
         private readonly IPlannerHelpers _plannerHelpers;
         private readonly ISemanticKernelProvider _semanticKernelProvider;
+        private readonly IAgentRegistry _agentRegistry;
+        private readonly ILogger<CompositeAgent> _logger;
 
         public CompositeAgent(
             IBaseAgentHelper baseAgentHelper,
@@ -32,8 +35,10 @@ namespace AiCoreApi.SemanticKernel.Agents
             ResponseAccessor responseAccessor,
             RequestAccessor requestAccessor,
             IPlannerHelpers plannerHelpers,
-        ILogger<CompositeAgent> logger,
-            ISemanticKernelProvider semanticKernelProvider) : base(baseAgentHelper, logger)
+            ISemanticKernelProvider semanticKernelProvider,
+            IAgentRegistry agentRegistry,
+            ILogger<CompositeAgent> logger)
+            : base(baseAgentHelper, logger)
         {
             _connectionProcessor = connectionProcessor;
             _extendedConfig = extendedConfig;
@@ -41,32 +46,46 @@ namespace AiCoreApi.SemanticKernel.Agents
             _requestAccessor = requestAccessor;
             _plannerHelpers = plannerHelpers;
             _semanticKernelProvider = semanticKernelProvider;
+            _agentRegistry = agentRegistry;
+            _logger = logger;
         }
 
-        public async Task<string> DoCallWrapper(AgentModel agent, Dictionary<string, string> parameters) => await base.DoCallWrapper(agent, parameters);
+        public async Task<string> DoCallWrapper(AgentModel agent, Dictionary<string, string> parameters) =>
+            await base.DoCallWrapper(agent, parameters);
 
         public override async Task<string> DoCall(AgentModel agent, Dictionary<string, string> parameters)
         {
             _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
             var connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
-            var llmConnection = await GetConnectionAsync(_requestAccessor, _responseAccessor, connections, 
-                new [] { ConnectionType.AzureOpenAiLlm, ConnectionType.OpenAiLlm, ConnectionType.CohereLlm }, _debugMessageSenderName, agent.LlmType);
+            var llmConnection = await GetConnectionAsync(
+                _requestAccessor,
+                _responseAccessor,
+                connections,
+                new[] { ConnectionType.AzureOpenAiLlm, ConnectionType.OpenAiLlm, ConnectionType.CohereLlm },
+                _debugMessageSenderName,
+                agent.LlmType);
+
             var kernel = _semanticKernelProvider.GetKernel(llmConnection);
+
             var agents = agent.Content[AgentContentParameters.AgentsList].Value.JsonGet<Dictionary<string, bool>>();
-            var plan = agent.Content.ContainsKey(AgentContentParameters.ExecutionPlan) 
-                ? agent.Content[AgentContentParameters.ExecutionPlan].Value 
+            var plan = agent.Content.TryGetValue(AgentContentParameters.ExecutionPlan, out var execPlan)
+                ? execPlan.Value
                 : string.Empty;
-            var plannerPrompt = agent.Content.ContainsKey(AgentContentParameters.PlannerPrompt)
-                ? agent.Content[AgentContentParameters.PlannerPrompt].Value
+            var plannerPrompt = agent.Content.TryGetValue(AgentContentParameters.PlannerPrompt, out var plannerPromptValue)
+                ? plannerPromptValue.Value
                 : string.Empty;
-            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Request", $"{agent.Name}:\n\n{parameters.ToJson()}\n\n{plan}\n\n{plannerPrompt}");
+
+            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Request",
+                $"{agent.Name}:\n\n{parameters.ToJson()}\n\n{plan}\n\n{plannerPrompt}");
+
             plannerPrompt = await AddPlugins(kernel, plannerPrompt, agents);
+
             if (string.IsNullOrWhiteSpace(plan))
             {
                 plannerPrompt = await ApplyParametersAsync(plannerPrompt);
                 plan = await GetPlan(kernel, agent, plannerPrompt);
-                _responseAccessor.AddDebugMessage(_debugMessageSenderName, "Generated Plan", $"{plan}");
+                _responseAccessor.AddDebugMessage(_debugMessageSenderName, "Generated Plan", plan);
             }
             else
             {
@@ -76,11 +95,13 @@ namespace AiCoreApi.SemanticKernel.Agents
             {
                 var result = await new HandlebarsPlan(plan).InvokeAsync(kernel);
                 _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Response", result);
+
                 if (string.IsNullOrEmpty(_responseAccessor.CurrentMessage.Text))
                 {
-                    _responseAccessor.CurrentMessage.Text = string.IsNullOrEmpty(result) || result == "null"
-                        ? _extendedConfig.NoInformationFoundText
-                        : result;
+                    _responseAccessor.CurrentMessage.Text =
+                        string.IsNullOrEmpty(result) || result == "null"
+                            ? _extendedConfig.NoInformationFoundText
+                            : result;
                 }
             }
             catch (TokensLimitException)
@@ -89,26 +110,34 @@ namespace AiCoreApi.SemanticKernel.Agents
             }
             catch (Exception ex)
             {
-                _responseAccessor.AddDebugMessage(_debugMessageSenderName, "Planner Execution Error", $"{ex.Message} {ex.InnerException?.Message}");
+                _responseAccessor.AddDebugMessage(
+                    _debugMessageSenderName,
+                    "Planner Execution Error",
+                    $"{ex.Message} {ex.InnerException?.Message}");
                 _responseAccessor.CurrentMessage.Text = _extendedConfig.NoInformationFoundText;
             }
+
             return _responseAccessor.CurrentMessage.Text;
         }
 
-        private async Task<string> AddPlugins(Kernel kernel, string plannerPrompt, Dictionary<string, bool> agents)
+        private async Task<string> AddPlugins(Kernel kernel, string plannerPrompt, Dictionary<string, bool> enabledAgents)
         {
             var pluginsInstructions = new List<string>();
             var agentsList = await _plannerHelpers.GetAgentsList();
-            _plannerHelpers.CompositeAgent = this;
+
             foreach (var agent in agentsList)
             {
                 var agentId = agent.AgentId.ToString();
-                if (agents.ContainsKey(agentId) && agents[agentId])
+                if (enabledAgents.TryGetValue(agentId, out var isEnabled) && isEnabled)
                 {
-                    await _plannerHelpers.AddPlugin(agent, kernel, pluginsInstructions);
+                    var agentInstance = _agentRegistry.Resolve(agent.Type);
+                    await agentInstance.AddAgent(agent, kernel, pluginsInstructions);
                 }
             }
-            return plannerPrompt.Replace(PlannerHelpers.PlannerPromptPlaceholders.PluginsInstructionsPlaceholder, string.Join(" ", pluginsInstructions));
+
+            return plannerPrompt.Replace(
+                PlannerHelpers.PlannerPromptPlaceholders.PluginsInstructionsPlaceholder,
+                string.Join(" ", pluginsInstructions));
         }
 
         private async Task<string> GetPlan(Kernel kernel, AgentModel agent, string plannerPrompt)
@@ -122,6 +151,7 @@ namespace AiCoreApi.SemanticKernel.Agents
                     TopP = 0.0,
                 },
             });
+
             var plan = (await planner.CreatePlanAsync(kernel, plannerPrompt)).ToString();
             return plan;
         }
