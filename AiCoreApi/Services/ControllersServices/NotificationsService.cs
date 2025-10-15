@@ -33,10 +33,16 @@ public class NotificationsService : INotificationsService
         await _notificationsProcessor.MarkAsRead(notificationId);
     }
 
+    public async Task MarkAllAsRead(string login)
+    {
+        await _notificationsProcessor.MarkAllAsRead(_requestAccessor.WorkspaceId ?? 0, login);
+    }
+
 }
 
 public interface INotificationsService
 {
     Task<List<NotificationViewModel>> List(string login);
     Task MarkAsRead(int notificationId);
+    Task MarkAllAsRead(string login);
 }

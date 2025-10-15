@@ -9,6 +9,7 @@ namespace AiCoreApi.Services.ControllersServices
     public class WebhookService : IWebhookService
     {
         private readonly ExtendedConfig _extendedConfig;
+        private readonly IAgentExecutor _agentExecutor;
         private readonly IPlannerHelpers _plannerHelpers;
         private readonly RequestAccessor _requestAccessor;
         private readonly ResponseAccessor _responseAccessor;
@@ -17,12 +18,14 @@ namespace AiCoreApi.Services.ControllersServices
 
         public WebhookService(IPlannerHelpers plannerHelpers,
             ExtendedConfig extendedConfig,
+            IAgentExecutor agentExecutor,
             RequestAccessor requestAccessor,
             ResponseAccessor responseAccessor,
             IDebugLogProcessor debugLogProcessor,
             ILoginProcessor loginProcessor)
         {
             _extendedConfig = extendedConfig;
+            _agentExecutor = agentExecutor;
             _plannerHelpers = plannerHelpers;
             _requestAccessor = requestAccessor;
             _responseAccessor = responseAccessor;
@@ -116,7 +119,7 @@ namespace AiCoreApi.Services.ControllersServices
                     }
                 }
             };
-            var result = await _plannerHelpers.ExecuteAgent(agentName, parameters);
+            var result = await _agentExecutor.ExecuteAsync(agentName, parameters);
             return result;
         }
     }

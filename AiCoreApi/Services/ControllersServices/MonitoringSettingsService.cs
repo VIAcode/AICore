@@ -28,8 +28,6 @@ public class MonitoringSettingsService : IMonitoringSettingsService
 
     public MonitoringSettingsViewModel Get()
     {
-        _monitoringConfig.Reset();
-
         return new MonitoringSettingsViewModel
         {
             OpenTelemetrySettings = GetSettingsViewModel(SettingType.OpenTelemetry, Category.Instrumentation, Category.Exporters, Category.Filters),
@@ -54,7 +52,6 @@ public class MonitoringSettingsService : IMonitoringSettingsService
         var logLevelSettings = settings.LogLevelSettings
             .ToDictionary(x => x.Category, x => x.LogLevel);
         _settingsProcessor.Set(SettingType.LogLevel, logLevelSettings);
-        _monitoringConfig.Reset();
     }
 
     public void Reboot()

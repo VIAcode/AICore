@@ -39,4 +39,14 @@ public class NotificationsController : ControllerBase
         await _notificationsService.MarkAsRead(notificationId);
         return Ok();
     }
+
+    [Authorize]
+    [HttpPut("all/read")]
+    public async Task<IActionResult> MarkAllAsRead()
+    {
+        if (_requestAccessor.Login == null)
+            return Unauthorized();
+        await _notificationsService.MarkAllAsRead(_requestAccessor.Login);
+        return Ok();
+    }
 }

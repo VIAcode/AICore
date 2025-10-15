@@ -25,7 +25,6 @@ namespace AiCoreApi.Common
             UserContext = userContextAccessor;
             _httpContextAccessor = httpContextAccessor;
             UseMarkdown = GetParameter("use_markdown") != "false";
-            UseBing = GetParameter("use_bing") == "true";
             UseCachedPlan = GetParameter("use_cached_plan") != "false";
             UseDebug = GetParameter("use_debug") == "true" && (UserContext.HasRole(nameof(RoleEnum.Developer)) || UserContext.HasRole(nameof(RoleEnum.Admin)));
             DefaultConnectionNames = GetParameter("connection_name")?.Split(',').ToList() ?? new List<string>();
@@ -70,7 +69,6 @@ namespace AiCoreApi.Common
         {
             var request = serializedRequest.JsonGet<RequestAccessor>(); 
             UseMarkdown = request.UseMarkdown;
-            UseBing = request.UseBing;
             UseCachedPlan = request.UseCachedPlan;
             UseDebug = request.UseDebug;
             DefaultConnectionNames = request.DefaultConnectionNames;
@@ -87,7 +85,6 @@ namespace AiCoreApi.Common
         public bool IsWebHookCall { get; set; }
         public bool IsPublicCall { get; set; }
         public bool UseMarkdown { get; set; }
-        public bool UseBing { get; set; }
         public bool UseCachedPlan { get; set; }
         public bool UseDebug { get; set; }
         public List<string> DefaultConnectionNames { get; set; }

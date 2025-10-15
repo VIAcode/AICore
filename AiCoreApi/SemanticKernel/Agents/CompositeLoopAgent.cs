@@ -9,10 +9,10 @@ namespace AiCoreApi.SemanticKernel.Agents
     public class CompositeLoopAgent : BaseEnabledAgentsAgent, ICompositeLoopAgent
     {
         private string _debugMessageSenderName = "CompositeLoopAgent";
-
         private readonly RequestAccessor _requestAccessor;
         private readonly ResponseAccessor _responseAccessor;
         private readonly IPlannerHelpers _plannerHelpers;
+        private readonly IAgentExecutor _agentExecutor;
         private readonly ISemanticKernelProvider _semanticKernelProvider;
         private readonly IConnectionProcessor _connectionProcessor;
         private const string LastStepNoAgentsMessage = "Last step so no agents available. Use 'finish' or 'cannot' action.";
@@ -22,29 +22,15 @@ namespace AiCoreApi.SemanticKernel.Agents
   ""title"": ""PlannerInstruction"",
   ""type"": ""object"",
   ""properties"": {
-    ""action"": {
-      ""type"": ""string""
-    },
-    ""agent"": {
-      ""type"": ""string""
-    },
-    ""params"": {
-      ""type"": ""array"",
-      ""items"": {
-        ""type"": ""string""
-      }
-    },
-    ""result"": {
-      ""type"": ""string""
-    },
-    ""reason"": {
-      ""type"": ""string""
-    }
+    ""action"": { ""type"": ""string"" },
+    ""agent"": { ""type"": ""string"" },
+    ""params"": { ""type"": ""array"", ""items"": { ""type"": ""string"" } },
+    ""result"": { ""type"": ""string"" },
+    ""reason"": { ""type"": ""string"" }
   },
   ""required"": [""action""],
   ""additionalProperties"": false
 }";
-
 
         private static class AgentContentParameters
         {
@@ -62,6 +48,7 @@ namespace AiCoreApi.SemanticKernel.Agents
         public CompositeLoopAgent(
             IBaseAgentHelper baseAgentHelper,
             IPlannerHelpers plannerHelpers,
+            IAgentExecutor agentExecutor,
             ISemanticKernelProvider semanticKernelProvider,
             IConnectionProcessor connectionProcessor,
             RequestAccessor requestAccessor,
@@ -72,6 +59,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             _requestAccessor = requestAccessor;
             _responseAccessor = responseAccessor;
             _plannerHelpers = plannerHelpers;
+            _agentExecutor = agentExecutor;
             _semanticKernelProvider = semanticKernelProvider;
             _connectionProcessor = connectionProcessor;
         }
@@ -82,7 +70,8 @@ namespace AiCoreApi.SemanticKernel.Agents
 
             var connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
             var llmConnection = await GetConnectionAsync(_requestAccessor, _responseAccessor, connections,
-                new[] { ConnectionType.AzureOpenAiLlm, ConnectionType.OpenAiLlm, ConnectionType.CohereLlm, ConnectionType.GeminiLlm, ConnectionType.DeepSeekLlm }, _debugMessageSenderName, agent.LlmType);
+                new[] { ConnectionType.AzureOpenAiLlm, ConnectionType.OpenAiLlm, ConnectionType.CohereLlm, ConnectionType.GeminiLlm, ConnectionType.DeepSeekLlm },
+                _debugMessageSenderName, agent.LlmType);
 
             var userInput = await GetParameterValueAsync(AgentContentParameters.UserInput);
             var systemMessage = await GetParameterValueAsync(AgentContentParameters.SystemMessage);
@@ -93,25 +82,30 @@ namespace AiCoreApi.SemanticKernel.Agents
             var temperature = GetTemperature(llmConnection, agent);
             var topP = GetTopP(agent);
 
-            _responseAccessor.AddDebugMessage(_debugMessageSenderName, $"DoCall Request", userInput);
+            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Request", userInput);
 
             if (!string.IsNullOrEmpty(preprocessPromptTemplate))
             {
-                userInput = await _semanticKernelProvider.ExecutePrompt(llmConnection, preprocessPromptTemplate.Replace("{userInput}", userInput), temperature, topP, string.Empty);
-                _responseAccessor.AddDebugMessage(_debugMessageSenderName, $"Preprocessed Prompt", userInput);
+                userInput = await _semanticKernelProvider.ExecutePrompt(
+                    llmConnection,
+                    preprocessPromptTemplate.Replace("{userInput}", userInput),
+                    temperature,
+                    topP,
+                    string.Empty);
+                _responseAccessor.AddDebugMessage(_debugMessageSenderName, "Preprocessed Prompt", userInput);
             }
 
-            string agentsDescription = await GetAgentsDescriptions(agent);
-
+            var agentsDescription = await GetAgentsDescriptions(agent);
             var history = new List<(string agent, List<string> @params, string result)>();
+
             for (int i = 0; i < maxIterations; i++)
             {
-                var context = string.Join($"{Environment.NewLine}{Environment.NewLine}", history.Select(h => $"Agent: {h.agent}, Params: [{string.Join(", ", h.@params)}], Result: {h.result}"));
+                var context = string.Join(
+                    $"{Environment.NewLine}{Environment.NewLine}",
+                    history.Select(h => $"Agent: {h.agent}, Params: [{string.Join(", ", h.@params)}], Result: {h.result}"));
 
                 if (i == maxIterations - 1)
-                {
                     agentsDescription = LastStepNoAgentsMessage;
-                }
 
                 var plannerPrompt = plannerPromptTemplate
                     .Replace("{agentsList}", agentsDescription)
@@ -120,11 +114,17 @@ namespace AiCoreApi.SemanticKernel.Agents
 
                 _responseAccessor.AddDebugMessage(_debugMessageSenderName, $"Step {i + 1}", plannerPrompt);
 
-                var plannerResponse = await _semanticKernelProvider.ExecutePrompt(llmConnection, plannerPrompt, temperature, topP, systemMessage, PlannerPromptJsonSchema);
+                var plannerResponse = await _semanticKernelProvider.ExecutePrompt(
+                    llmConnection,
+                    plannerPrompt,
+                    temperature,
+                    topP,
+                    systemMessage,
+                    PlannerPromptJsonSchema);
 
                 _responseAccessor.AddDebugMessage(_debugMessageSenderName, $"Step {i + 1} Answer", plannerResponse);
-                var parsed = plannerResponse.JsonGet<PlannerInstruction>();
 
+                var parsed = plannerResponse.JsonGet<PlannerInstruction>();
                 if (parsed == null || string.IsNullOrEmpty(parsed.Action))
                     throw new AiCoreUiException("Planner response invalid or empty");
 
@@ -133,7 +133,7 @@ namespace AiCoreApi.SemanticKernel.Agents
                     case "call":
                         try
                         {
-                            var subAgentResult = await ExecuteAgent(parsed.Agent, parsed.Params);
+                            var subAgentResult = await _agentExecutor.ExecuteAsync(parsed.Agent, parsed.Params);
                             history.Add((parsed.Agent, parsed.Params, subAgentResult));
                         }
                         catch (Exception ex)
@@ -145,8 +145,13 @@ namespace AiCoreApi.SemanticKernel.Agents
                     case "finish":
                         if (!string.IsNullOrEmpty(finalPolishPrompt))
                         {
-                            var result = await _semanticKernelProvider.ExecutePrompt(llmConnection, finalPolishPrompt.Replace("{result}", parsed.Result ?? ""), temperature, topP, string.Empty);
-                            _responseAccessor.AddDebugMessage(_debugMessageSenderName, $"Final Polished Prompt", result);
+                            var result = await _semanticKernelProvider.ExecutePrompt(
+                                llmConnection,
+                                finalPolishPrompt.Replace("{result}", parsed.Result ?? ""),
+                                temperature,
+                                topP,
+                                string.Empty);
+                            _responseAccessor.AddDebugMessage(_debugMessageSenderName, "Final Polished Prompt", result);
                             return result;
                         }
                         return parsed.Result ?? "";
@@ -158,21 +163,8 @@ namespace AiCoreApi.SemanticKernel.Agents
                         throw new AiCoreUiException("Unknown planner action: " + parsed.Action);
                 }
             }
-            throw new AiCoreUiException("Planner did not finish within max iterations");
-        }
 
-        private async Task<string> ExecuteAgent(string agentName, List<string>? parameters = null)
-        {
-            _plannerHelpers.CompositeLoopAgent = this;
-            try
-            {
-                return await _plannerHelpers.ExecuteAgent(agentName, parameters);
-            }
-            catch (Exception e)
-            {
-                _responseAccessor.AddDebugMessage(_debugMessageSenderName, "ExecuteAgent Error", $"Agent: {agentName}\r\n\r\n Exception: {e.Message}\r\n\r\nInner Exception: {e.InnerException?.Message}");
-                throw;
-            }
+            throw new AiCoreUiException("Planner did not finish within max iterations");
         }
 
         private async Task<string> GetAgentsDescriptions(AgentModel agent)
@@ -180,12 +172,14 @@ namespace AiCoreApi.SemanticKernel.Agents
             var enabledAgents = agent.Content[AgentContentParameters.EnabledAgents].Value.JsonGet<Dictionary<string, bool>>();
             if (enabledAgents == null || !enabledAgents.Any())
                 return string.Empty;
+
             var agentsList = await _plannerHelpers.GetAgentsList();
-            var result = $@"# Agents (all parameters are strings, out outputs are strings){Environment.NewLine}";
+            var result = $"# Agents (all parameters are strings, outputs are strings){Environment.NewLine}";
+
             foreach (var agentItem in agentsList)
             {
                 var agentId = agentItem.AgentId.ToString();
-                if (enabledAgents.ContainsKey(agentId) && enabledAgents[agentId])
+                if (enabledAgents.TryGetValue(agentId, out var enabled) && enabled)
                 {
                     result += $@"
 ## AgentName: {agentItem.Name}
@@ -195,30 +189,27 @@ namespace AiCoreApi.SemanticKernel.Agents
 ";
                 }
             }
+
             return result;
         }
 
         private double GetTemperature(ConnectionModel llmConnection, AgentModel agent)
         {
-            if (agent.Content.ContainsKey(AgentContentParameters.Temperature))
-            {
-                var isCorrect = double.TryParse(agent.Content[AgentContentParameters.Temperature].Value, out var agentTemperature);
-                if (isCorrect)
-                    return agentTemperature;
-            }
-            return llmConnection.Content.ContainsKey("temperature")
-                ? Convert.ToDouble(llmConnection.Content["temperature"])
+            if (agent.Content.TryGetValue(AgentContentParameters.Temperature, out var val) &&
+                double.TryParse(val.Value, out var agentTemp))
+                return agentTemp;
+
+            return llmConnection.Content.ContainsKey(AgentContentParameters.Temperature)
+                ? Convert.ToDouble(llmConnection.Content[AgentContentParameters.Temperature])
                 : 0;
         }
 
         private double GetTopP(AgentModel agent)
         {
-            if (agent.Content.ContainsKey(AgentContentParameters.TopP))
-            {
-                var isCorrect = double.TryParse(agent.Content[AgentContentParameters.TopP].Value, out var agentTopP);
-                if (isCorrect)
-                    return agentTopP;
-            }
+            if (agent.Content.TryGetValue(AgentContentParameters.TopP, out var val) &&
+                double.TryParse(val.Value, out var topP))
+                return topP;
+
             return 0;
         }
     }

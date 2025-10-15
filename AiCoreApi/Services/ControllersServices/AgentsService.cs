@@ -23,8 +23,8 @@ public class AgentsService : IAgentsService
     private readonly IConnectionProcessor _connectionProcessor;
     private readonly ITagsProcessor _tagsProcessor;
     private readonly RequestAccessor _requestAccessor;
-    private readonly IPlannerHelpers _plannerHelpers;
     private readonly IAgentsFlowDescriber _agentsFlowDescriber;
+    private readonly IAgentLifecycleService _agentLifecycleService;
 
     private const int MaxCallsLimit = 1000;
 
@@ -39,8 +39,8 @@ public class AgentsService : IAgentsService
         IConnectionProcessor connectionProcessor,
         ITagsProcessor tagsProcessor,
         RequestAccessor requestAccessor,
-        IPlannerHelpers plannerHelpers,
-        IAgentsFlowDescriber agentsFlowDescriber)
+        IAgentsFlowDescriber agentsFlowDescriber,
+        IAgentLifecycleService agentLifecycleService)
     {
         _mcpClient = mcpClient;
         _extendedConfig = extendedConfig;
@@ -52,8 +52,8 @@ public class AgentsService : IAgentsService
         _connectionProcessor = connectionProcessor;
         _tagsProcessor = tagsProcessor;
         _requestAccessor = requestAccessor;
-        _plannerHelpers = plannerHelpers;
         _agentsFlowDescriber = agentsFlowDescriber;
+        _agentLifecycleService = agentLifecycleService;
     }
 
     private static readonly SemaphoreSlim GitRepoLock = new(1, 1);
@@ -65,7 +65,7 @@ public class AgentsService : IAgentsService
             throw new ArgumentException("Value should be 0.", nameof(AgentViewModel.AgentId));
 
         var agentModel = _mapper.Map<AgentModel>(agentViewModel);
-        await _plannerHelpers.OnAddUpdate(agentModel);
+        await _agentLifecycleService.OnAddUpdateAsync(agentModel);
         var savedModel = await _agentsProcessor.Add(agentModel, workspaceId);
         var result = _mapper.Map<AgentViewModel>(savedModel);
         await SaveGit(workspaceId);
@@ -78,7 +78,7 @@ public class AgentsService : IAgentsService
             throw new ArgumentException("Value should be not 0.", nameof(AgentViewModel.AgentId));
 
         var agentModel = _mapper.Map<AgentModel>(agentViewModel);
-        await _plannerHelpers.OnAddUpdate(agentModel);
+        await _agentLifecycleService.OnAddUpdateAsync(agentModel);
         var savedModel = await _agentsProcessor.Update(agentModel);
         var result = _mapper.Map<AgentViewModel>(savedModel);
         await SaveGit(agentModel.WorkspaceId);
@@ -95,7 +95,7 @@ public class AgentsService : IAgentsService
     public async Task DeleteAgent(int agentId)
     {
         var agent = await _agentsProcessor.GetById(agentId);
-        await _plannerHelpers.OnDelete(agentId);
+        await _agentLifecycleService.OnDeleteAsync(agentId);
         await _agentsProcessor.Delete(agentId);
         await SaveGit(agent?.WorkspaceId);
     }
@@ -105,7 +105,7 @@ public class AgentsService : IAgentsService
         var agents = await _agentsProcessor.List(workspaceId);
         foreach (var agent in agents)
         {
-            await _plannerHelpers.OnDelete(agent.AgentId);
+            await _agentLifecycleService.OnDeleteAsync(agent.AgentId);
             await _agentsProcessor.Delete(agent.AgentId);
         }
         await SaveGit(workspaceId);
@@ -195,7 +195,7 @@ public class AgentsService : IAgentsService
                 .ToList();
             foreach (var agentModel in nonProcessedAgents)
             {
-                await _plannerHelpers.OnExport(agentModel, agentsToExportDictionary);
+                await _agentLifecycleService.OnExportAsync(agentModel, agentsToExportDictionary);
             }
         }
 
@@ -353,7 +353,7 @@ public class AgentsService : IAgentsService
                 .ToList();
             foreach (var agentModel in nonProcessedAgents)
             {
-                await _plannerHelpers.OnImport(agentModel, agentsToImportDictionary);
+                await _agentLifecycleService.OnImportAsync(agentModel, agentsToImportDictionary);
                 if (agentsToImportDictionary[agentModel.Name].Processed)
                 {
                     await ImportAgentConfirmed(agentModel, workspaceId);
