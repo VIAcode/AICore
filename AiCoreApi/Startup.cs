@@ -20,14 +20,10 @@ namespace AiCoreApi;
 public class Startup
 {
     private readonly Config _config;
-    private readonly ExtendedConfig _extendedConfig;
-    private readonly MonitoringConfig _monitoringConfig;
 
     public Startup(IConfiguration configuration)
     {
         _config = new Config();
-        _extendedConfig = new ExtendedConfig();
-        _monitoringConfig = new MonitoringConfig();
     }
 
     public void ConfigureServices(IServiceCollection services)
@@ -84,40 +80,37 @@ public class Startup
         services.AddScoped<ResponseAccessor>();
         services.AddSingleton(sp =>
         {
-            var settingsProcessor = sp.GetRequiredService<ISettingsProcessor>();
-            _extendedConfig.Reset(settingsProcessor);
-            return _extendedConfig;
+            var cfg = new ExtendedConfig();
+            var settings = sp.GetRequiredService<ISettingsProcessor>();
+            cfg.Reset(settings);
+            return cfg;
         });
+        services.AddConfiguredHttpClients();
+
+        var monitoringConfig = new MonitoringConfig();
+        services.AddSingleton(monitoringConfig);
+        
+        services.AddSingleton<IFileIngestionClient, FileIngestionClient>();
+
         services.AddSingleton(sp =>
         {
-            var settingsProcessor = sp.GetRequiredService<ISettingsProcessor>();
-            _monitoringConfig.Reset(settingsProcessor);
-            return _monitoringConfig;
+            var ext = sp.GetRequiredService<ExtendedConfig>();
+            return new TokenValidationParameters
+            {
+                ValidateAudience = true,
+                ValidateIssuer = true,
+                ValidateLifetime = true,
+                LifetimeValidator = (notBefore, expires, _, _) =>
+                    notBefore <= DateTime.UtcNow && expires > DateTime.UtcNow,
+                ValidateIssuerSigningKey = true,
+                ValidAudience = ext.AuthAudience,
+                ValidIssuer = ext.AuthIssuer,
+                IssuerSigningKey = ext.AuthSecurityKey.GetSymmetricSecurityKey(),
+                ClockSkew = TimeSpan.Zero,
+            };
         });
 
-        services.AddConfiguredHttpClients(
-            _extendedConfig,
-            services.BuildServiceProvider().GetRequiredService<ILoggerFactory>()
-        );
-
-        // TODO: avoid mixing IoC strategies https://learn.microsoft.com/en-us/dotnet/core/extensions/dependency-injection-guidelines#recommendations
-        services.AddSingleton<IFileIngestionClient>(sp => new FileIngestionClient(sp));
-
-        var tokenValidationParameters = new TokenValidationParameters
-        {
-            ValidateAudience = true,
-            ValidateIssuer = true,
-            ValidateLifetime = true,
-            LifetimeValidator = (notBefore, expires, _, _) => notBefore <= DateTime.UtcNow && expires > DateTime.UtcNow,
-            ValidateIssuerSigningKey = true,
-            ValidAudience = _extendedConfig.AuthAudience,
-            ValidIssuer = _extendedConfig.AuthIssuer,
-            IssuerSigningKey = _extendedConfig.AuthSecurityKey.GetSymmetricSecurityKey(),
-            ClockSkew = TimeSpan.Zero,
-        };
-        services.AddSingleton(tokenValidationParameters);
-        services.AddHttpContextAccessor();
-        services.AddScoped<LlmHttpCallHandler>();
+        services.AddTransient<LlmHttpCallHandler>();
 
         var combinedAuthenticationScheme = "Combined";
         services.AddAuthentication(options =>
@@ -137,8 +130,11 @@ public class Startup
                     return JwtBearerDefaults.AuthenticationScheme;
                 };
             })
-            .AddJwtBearer(options => { options.TokenValidationParameters = tokenValidationParameters; })
+            .AddJwtBearer()
             .AddBasic<BasicUserValidationService>(options => { options.SuppressWWWAuthenticateHeader = true; });
+
+        services.AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme)
+            .Configure<TokenValidationParameters>((o, tvp) => o.TokenValidationParameters = tvp);
 
         services.AddAutoMapper(config => {}, Assembly.GetExecutingAssembly());
         services.AddHealthChecks();
@@ -188,7 +184,7 @@ public class Startup
             });
         });
 
-        services.AddMonitoring(_monitoringConfig);
+        services.AddMonitoring(monitoringConfig);
 
         services.AddMcpServer()
             .WithHttpTransport()
