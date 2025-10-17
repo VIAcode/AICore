@@ -87,9 +87,6 @@ public class Startup
         });
         services.AddConfiguredHttpClients();
 
-        var monitoringConfig = new MonitoringConfig();
-        services.AddSingleton(monitoringConfig);
-        
         services.AddSingleton<IFileIngestionClient, FileIngestionClient>();
 
         services.AddSingleton(sp =>
@@ -110,7 +107,7 @@ public class Startup
             };
         });
 
-        services.AddTransient<LlmHttpCallHandler>();
+        services.AddScoped<LlmHttpCallHandler>();
 
         var combinedAuthenticationScheme = "Combined";
         services.AddAuthentication(options =>
@@ -184,6 +181,8 @@ public class Startup
             });
         });
 
+        var monitoringConfig = new MonitoringConfig();
+        services.AddSingleton(monitoringConfig);
         services.AddMonitoring(monitoringConfig);
 
         services.AddMcpServer()

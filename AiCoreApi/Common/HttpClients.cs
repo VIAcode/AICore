@@ -17,7 +17,7 @@ public static class HttpClients
                 httpClient.Timeout = TimeSpan.FromMinutes(3);
             })
             .SetHandlerLifetime(TimeSpan.FromMinutes(4))
-            .AddPolicyHandler((sp, _)  => GetRetryPolicy(sp.GetRequiredService<ILogger<HttpClient>>()))
+            .AddPolicyHandler((sp, _) => GetRetryPolicy(sp.GetRequiredService<ILogger<HttpClient>>()))
             .ConfigurePrimaryHttpMessageHandler(sp => CreateHandler(sp.GetRequiredService<ExtendedConfig>()))
             .AddHttpMessageHandler<LlmHttpCallHandler>();
 
