@@ -8,13 +8,15 @@ namespace AiCoreApi.Common.KernelMemory
     {
         private static SemaphoreSlim? _semaphore;
         private const string FilesCollection = "files";
-        private readonly IServiceProvider _serviceProvider;
         private readonly ExtendedConfig _config;
+        private readonly IHttpClientFactory _httpClientFactory;
 
-        public FileIngestionClient(IServiceProvider serviceProvider)
+        public FileIngestionClient(
+            ExtendedConfig config,
+            IHttpClientFactory httpClientFactory)
         {
-            _serviceProvider = serviceProvider;
-            _config = _serviceProvider.GetService<ExtendedConfig>();
+            _config = config;
+            _httpClientFactory = httpClientFactory;
             _semaphore ??= new SemaphoreSlim(_config.MaxParallelFileIngestionRequests, _config.MaxParallelFileIngestionRequests);
         }
 
@@ -101,8 +103,7 @@ namespace AiCoreApi.Common.KernelMemory
 
         private HttpClient GetClient()
         {
-            var httpClientFactory = _serviceProvider.GetService<IHttpClientFactory>();
-            var httpClient = httpClientFactory.CreateClient();
+            var httpClient = _httpClientFactory.CreateClient();
             httpClient.BaseAddress = new Uri(_config.FileIngestionUrl.TrimEnd('/') + "/");
             return httpClient;
         }

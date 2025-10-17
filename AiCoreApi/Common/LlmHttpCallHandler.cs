@@ -11,20 +11,15 @@ namespace AiCoreApi.Common
 {
     public class LlmHttpCallHandler : DelegatingHandler
     {
+        private readonly UserContextAccessor _userContextAccessor;
         private readonly IServiceProvider _serviceProvider;
 
         public LlmHttpCallHandler(
-            ExtendedConfig config, 
-            IServiceProvider serviceProvider) : base(
-            string.IsNullOrEmpty(config.Proxy)
-                ? new HttpClientHandler()
-                : new HttpClientHandler
-                {
-                    ServerCertificateCustomValidationCallback = (_, _, _, _) => true,
-                    Proxy = new WebProxy(config.Proxy)
-                })
+            UserContextAccessor userContextAccessor,
+            IServiceProvider serviceProvider)
         {
             _serviceProvider = serviceProvider;
+            _userContextAccessor = userContextAccessor;
         }
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
