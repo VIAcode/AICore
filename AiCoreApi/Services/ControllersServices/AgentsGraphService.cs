@@ -36,7 +36,10 @@ public class AgentsGraphService : IAgentsGraphService
     {
         var nodes = new List<GraphNodeViewModel>();
         var edges = new List<GraphEdgeViewModel>();
-        var agentMap = agents.ToDictionary(a => a.Name, a => a);
+        var agentMap = agents
+            .GroupBy(a => a.Name)
+            .Select(g => g.First())
+            .ToDictionary(a => a.Name, a => a);
 
         foreach (var agent in agents)
         {

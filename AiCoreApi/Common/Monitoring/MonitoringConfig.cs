@@ -1,48 +1,19 @@
-﻿using AiCoreApi.Data.Processors;
-using AiCoreApi.Models.DbModels;
-using Json.Schema.Generation;
+﻿using Json.Schema.Generation;
 using Json.Schema.Generation.Intents;
 using Newtonsoft.Json.Linq;
-using System.Collections.Concurrent;
 
 namespace AiCoreApi.Common.Monitoring;
 
 
 public class MonitoringConfig
 {
-    private DateTime _nextRefresh = DateTime.MinValue;
-    private ConcurrentDictionary<string, string> _logLevelConfigValues = new();
-    private ConcurrentDictionary<string, string> _openTelemetryConfigValues = new();
-    private ConcurrentDictionary<string, string> _loggingConfigValues = new();
-    public const int RefreshTimeSec = 15;
-    private readonly object _lock = new();
     private readonly string _appSettings = File.ReadAllText("appsettings.json");
     private static string MONITORING_SETTINGS_PREFIX = "Monitoring";
-
-
-    public void Reset(ISettingsProcessor settingsProcessor)
-    {
-        lock (_lock)
-        {
-            if (DateTime.Now > _nextRefresh)
-            {
-                _openTelemetryConfigValues = new ConcurrentDictionary<string, string>(settingsProcessor.Get(SettingType.OpenTelemetry));
-                _logLevelConfigValues = new ConcurrentDictionary<string, string>(settingsProcessor.Get(SettingType.LogLevel));
-                _loggingConfigValues = new ConcurrentDictionary<string, string>(settingsProcessor.Get(SettingType.Logging));
-
-                _nextRefresh = DateTime.Now.AddSeconds(RefreshTimeSec);
-            }
-        }
-    }
-
 
     private T GetOtelValue<T>(string key) => GetOtelValue(key, default(T));
     private T GetOtelValue<T>(string key, T defaultValue)
     {
-        if (!_openTelemetryConfigValues.TryGetValue(key, out var value))
-        {
-            value = Environment.GetEnvironmentVariable($"{MONITORING_SETTINGS_PREFIX}_{key}".ToUpper());
-        }
+        var value = Environment.GetEnvironmentVariable($"{MONITORING_SETTINGS_PREFIX}_{key}".ToUpper());
         if (value != null)
             return (T)Convert.ChangeType(value, typeof(T));
 
@@ -54,14 +25,9 @@ public class MonitoringConfig
         return default;
     }
 
-
-    private T GetLoggingValue<T>(string key) => GetLoggingValue(key, default(T));
     private T GetLoggingValue<T>(string key, T defaultValue)
     {
-        if (!_loggingConfigValues.TryGetValue(key, out var value))
-        {
-            value = Environment.GetEnvironmentVariable($"{MONITORING_SETTINGS_PREFIX}_{key}".ToUpper());
-        }
+        var value = Environment.GetEnvironmentVariable($"{MONITORING_SETTINGS_PREFIX}_{key}".ToUpper());
         if (value != null)
             return (T)Convert.ChangeType(value, typeof(T));
 
@@ -75,8 +41,45 @@ public class MonitoringConfig
 
     private Dictionary<string, LogLevel> GetLogLevelsValue()
     {
-        return _logLevelConfigValues.ToDictionary(kv => kv.Key,
-            kv => Enum.TryParse<LogLevel>(kv.Value, out var result) ? result : Microsoft.Extensions.Logging.LogLevel.None);
+        var envVar = Environment.GetEnvironmentVariable($"{MONITORING_SETTINGS_PREFIX}_LOGLEVELS".ToUpper());
+        if (!string.IsNullOrWhiteSpace(envVar))
+        {
+            try
+            {
+                // Format:
+                // 1) JSON: {"Microsoft":"Warning","Default":"Information"}
+                // 2) CSV: Microsoft=Warning,Default=Information
+                if (envVar.TrimStart().StartsWith("{"))
+                {
+                    var jObj = JObject.Parse(envVar);
+                    return jObj.Properties()
+                        .ToDictionary(
+                            p => p.Name,
+                            p => Enum.TryParse<LogLevel>(p.Value.ToString(), true, out var level)
+                                ? level
+                                : LogLevel.None,
+                            StringComparer.OrdinalIgnoreCase
+                        );
+                }
+                else
+                {
+                    return envVar
+                        .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                        .Select(p => p.Split('=', 2, StringSplitOptions.TrimEntries))
+                        .Where(p => p.Length == 2)
+                        .ToDictionary(
+                            p => p[0],
+                            p => Enum.TryParse<LogLevel>(p[1], true, out var level) ? level : LogLevel.None,
+                            StringComparer.OrdinalIgnoreCase
+                        );
+                }
+            }
+            catch
+            {
+                // Do nothing, return empty dictionary
+            }
+        }
+        return new Dictionary<string, LogLevel>(StringComparer.OrdinalIgnoreCase);
     }
 
     [MonitoringCategory(MonitoringCategoryAttribute.ConfigCategoryEnum.Common)]

@@ -30,12 +30,14 @@ namespace AiCoreApi.SemanticKernel.Agents
             public const string TopP = "top_p";
         }
 
+        private readonly ExtendedConfig _extendedConfig;
         private readonly ISemanticKernelProvider _semanticKernelProvider;
         private readonly IConnectionProcessor _connectionProcessor;
         private readonly RequestAccessor _requestAccessor;
         private readonly ResponseAccessor _responseAccessor;
 
         public PromptAgent(
+            ExtendedConfig extendedConfig,
             IBaseAgentHelper baseAgentHelper,
             ISemanticKernelProvider semanticKernelProvider,
             IConnectionProcessor connectionProcessor,
@@ -43,6 +45,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             ResponseAccessor responseAccessor,
             ILogger<PromptAgent> logger) : base(baseAgentHelper, logger)
         {
+            _extendedConfig = extendedConfig;
             _semanticKernelProvider = semanticKernelProvider;
             _connectionProcessor = connectionProcessor;
             _requestAccessor = requestAccessor;
