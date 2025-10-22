@@ -128,15 +128,9 @@ namespace AiCoreApi.SemanticKernel.Agents
 
         private HttpClient GetHttpClient()
         {
-            var httpClientHandler = new HttpClientHandler
-            {
-                AllowAutoRedirect = false,
-                Proxy = string.IsNullOrEmpty(_extendedConfig.Proxy)
-                    ? null
-                    : new WebProxy(new Uri(_extendedConfig.Proxy)),
-                ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator,
-            };
-            return new HttpClient(httpClientHandler);
+            var httpHandler = HttpClients.CreateHandler(_extendedConfig);
+            httpHandler.AllowAutoRedirect = false;
+            return new HttpClient(httpHandler);
         }
 
         private string GetCacheKey(string state) => $"oauth_pkce_state|{state}";
@@ -194,7 +188,7 @@ namespace AiCoreApi.SemanticKernel.Agents
                 var locationUrl = authResp.Headers.Location.ToString();
                 if (returnUrl)
                 {
-                    _cacheAccessor.SetCacheValue(cacheKey, JsonSerializer.Serialize(pkceCacheModel), PkceStateTtlMinutes * 60 * 60);
+                    _cacheAccessor.SetCacheValue(cacheKey, JsonSerializer.Serialize(pkceCacheModel), PkceStateTtlMinutes * 60);
                     _responseAccessor.AddDebugMessage(_debug, "ResponseRedirect", locationUrl);
                     return JsonSerializer.Serialize(new { uri = locationUrl },
                         new JsonSerializerOptions { WriteIndented = true });
