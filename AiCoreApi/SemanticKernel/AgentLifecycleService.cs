@@ -74,7 +74,7 @@ namespace AiCoreApi.SemanticKernel
             AgentType.Scheduler
         };
 
-        public bool IsListenerAgentType(AgentType agentType) => ListenerAgentTypes.Contains(agentType);
+        private bool IsListenerAgentType(AgentType agentType) => ListenerAgentTypes.Contains(agentType);
     }
 
     public interface IAgentLifecycleService
