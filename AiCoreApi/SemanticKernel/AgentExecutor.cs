@@ -41,8 +41,7 @@ namespace AiCoreApi.SemanticKernel
 
             _logger.LogDebug("Executing agent: {AgentName}, Workspace: {WorkspaceId}", agentName, _requestAccessor.WorkspaceId);
 
-            var dbAgents = await _agentsProcessor.List(_requestAccessor.WorkspaceId);
-            var agent = dbAgents.FirstOrDefault(a => a.Name.Equals(agentName, StringComparison.OrdinalIgnoreCase));
+            var agent = await _agentsProcessor.GetByName(agentName, _requestAccessor.WorkspaceId);
 
             if (agent == null)
                 throw new AiCoreUiException($"Agent not found: {agentName}");

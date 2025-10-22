@@ -31,8 +31,7 @@ namespace AiCoreApi.SemanticKernel
 
         public async Task OnDeleteAsync(int agentId)
         {
-            var agents = await _agentsProcessor.List(_requestAccessor.WorkspaceId);
-            var agentModel = agents.FirstOrDefault(x => x.AgentId == agentId);
+            var agentModel = await _agentsProcessor.GetById(agentId);
             if (agentModel == null)
                 throw new AiCoreUiException($"Agent not found with ID: {agentId}");
             var baseAgent = _registry.Resolve(agentModel.Type);

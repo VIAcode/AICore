@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Caching.Distributed;
 using System.Web;
+using AiCoreApi.SemanticKernel.Agents;
 
 namespace AiCoreApi.Controllers
 {
@@ -24,6 +25,7 @@ namespace AiCoreApi.Controllers
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly IEntraTokenProvider _entraTokenProvider;
         private readonly IDistributedCache _distributedCache;
+        private readonly IOAuthTokenAgent _oAuthTokenAgent;
         private const int SsoSessionTimeoutMinutes = 5;
         private const string PermanentAcrValue = "permanent";
 
@@ -35,7 +37,8 @@ namespace AiCoreApi.Controllers
             IGoogleSso googleSso,
             IHttpClientFactory httpClientFactory,
             IEntraTokenProvider entraTokenProvider,
-            IDistributedCache distributedCache)
+            IDistributedCache distributedCache,
+            IOAuthTokenAgent oAuthTokenAgent)
         {
             _connectService = connectService;
             _config = config;
@@ -45,6 +48,7 @@ namespace AiCoreApi.Controllers
             _httpClientFactory = httpClientFactory;
             _entraTokenProvider = entraTokenProvider;
             _distributedCache = distributedCache;
+            _oAuthTokenAgent = oAuthTokenAgent;
         }
 
         [HttpGet("authorize")]
@@ -363,5 +367,33 @@ namespace AiCoreApi.Controllers
             return Content(html, "text/html");
         }
 
+        // OAuthTokenAgent callback
+        [HttpGet("agent/callback")]
+        public async Task<IActionResult> AgentCallbackGet(
+           [FromQuery(Name = "code")] string? code,
+           [FromQuery(Name = "state")] string? state,
+           [FromQuery(Name = "error_description")] string? errorDescription)
+        {
+            return await AgentCallback(code, state, errorDescription);
+        }
+
+
+        // OAuthTokenAgent callback
+        [HttpPost("agent/callback")]
+        public async Task<IActionResult> AgentCallback(
+            [FromForm(Name = "code")] string? code,
+            [FromForm(Name = "state")] string? state,
+            [FromForm(Name = "error_description")] string? errorDescription)
+        
+        {
+            if (!string.IsNullOrEmpty(errorDescription))
+                return BadRequest(errorDescription);
+            if (string.IsNullOrEmpty(code))
+                return BadRequest("Code is missing");
+            if (string.IsNullOrEmpty(state))
+                return BadRequest("State is missing");
+
+            return Ok(await _oAuthTokenAgent.ProcessCallBack(code, state));
+        }
     }
 }
