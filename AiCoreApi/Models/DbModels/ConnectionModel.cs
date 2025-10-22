@@ -57,6 +57,7 @@ namespace AiCoreApi.Models.DbModels
         GeminiLlm = 35,
         WikiJs = 36,
         Mcp = 37,
+        OAuth = 38,
     }
 
     public static class ConnectionTypeExtensions

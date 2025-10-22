@@ -50,5 +50,6 @@
         GeminiLlm = 35,
         WikiJs = 36,
         Mcp = 37,
+        OAuth = 38,
     }
 }

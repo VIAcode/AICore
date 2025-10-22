@@ -75,6 +75,7 @@ namespace AiCoreApi.SemanticKernel
                     AgentType.MemZero => Get<IMemZeroAgent>(),
                     AgentType.Git => Get<IGitAgent>(),
                     AgentType.McpClient => Get<IMcpClientAgent>(),
+                    AgentType.OAuth2 => Get<IOAuthTokenAgent>(),
                     _ => throw new AiCoreUiException($"Unsupported agent type: {type}")
                 };
             }
