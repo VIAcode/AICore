@@ -33,7 +33,7 @@ public static class HttpClients
         return services;
     }
 
-    private static HttpClientHandler CreateHandler(ExtendedConfig config)
+    public static HttpClientHandler CreateHandler(ExtendedConfig config)
     {
         return new HttpClientHandler
         {
