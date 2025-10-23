@@ -1,9 +1,8 @@
-using AiCoreApi.Common;
 using AiCoreApi.Data.Processors;
 using AiCoreApi.Models.DbModels;
 using AiCoreApi.Models.ViewModels;
-using AiCoreApi.SemanticKernel.Agents;
 using static AiCoreApi.Common.ExceptionHandlingMiddleware;
+using AgentType = AiCoreApi.Models.DbModels.AgentType;
 
 namespace AiCoreApi.SemanticKernel
 {
@@ -11,20 +10,19 @@ namespace AiCoreApi.SemanticKernel
     {
         private readonly IAgentsProcessor _agentsProcessor;
         private readonly IAgentRegistry _registry;
-        private readonly RequestAccessor _requestAccessor;
 
         public AgentLifecycleService(
             IAgentsProcessor agentsProcessor,
-            IAgentRegistry registry,
-            RequestAccessor requestAccessor)
+            IAgentRegistry registry)
         {
             _agentsProcessor = agentsProcessor;
             _registry = registry;
-            _requestAccessor = requestAccessor;
         }
 
         public async Task OnAddUpdateAsync(AgentModel agentModel)
         {
+            if (IsListenerAgentType(agentModel.Type))
+                return;
             var baseAgent = _registry.Resolve(agentModel.Type);
             await baseAgent.OnAddUpdate(agentModel);
         }
@@ -34,21 +32,49 @@ namespace AiCoreApi.SemanticKernel
             var agentModel = await _agentsProcessor.GetById(agentId);
             if (agentModel == null)
                 throw new AiCoreUiException($"Agent not found with ID: {agentId}");
+
+            if (IsListenerAgentType(agentModel.Type))
+                return;
+
             var baseAgent = _registry.Resolve(agentModel.Type);
             await baseAgent.OnDelete(agentModel);
         }
 
         public async Task OnExportAsync(AgentModel agentModel, Dictionary<int, AgentModelProcessed> agentsToExport)
         {
+            if (IsListenerAgentType(agentModel.Type))
+            {
+                agentsToExport[agentModel.AgentId].Processed = true;
+                return;
+            }
+
             var baseAgent = _registry.Resolve(agentModel.Type);
             await baseAgent.OnExport(agentModel, agentsToExport);
         }
 
         public async Task OnImportAsync(AgentModel agentModel, Dictionary<string, AgentModelProcessed> agentsToImport)
         {
+            if (IsListenerAgentType(agentModel.Type))
+            {
+                agentsToImport[agentModel.Name].Processed = true;
+                return;
+            }
+
             var baseAgent = _registry.Resolve(agentModel.Type);
             await baseAgent.OnImport(agentModel, agentsToImport);
         }
+
+        private static readonly HashSet<AgentType> ListenerAgentTypes = new()
+        {
+            AgentType.AzureServiceBusListener,
+            AgentType.RabbitMqListener,
+            AgentType.Imap,
+            AgentType.GraphMail,
+            AgentType.GraphTeamsListener,
+            AgentType.Scheduler
+        };
+
+        private bool IsListenerAgentType(AgentType agentType) => ListenerAgentTypes.Contains(agentType);
     }
 
     public interface IAgentLifecycleService
