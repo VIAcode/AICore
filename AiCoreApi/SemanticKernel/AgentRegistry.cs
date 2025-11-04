@@ -34,6 +34,7 @@ namespace AiCoreApi.SemanticKernel
                     AgentType.CompositeCSharp => Get<ICompositeCSharpAgent>(),
                     AgentType.CompositePython => Get<ICompositePythonAgent>(),
                     AgentType.CompositeLoop => Get<ICompositeLoopAgent>(),
+                    AgentType.CompositeLoopV2 => Get<ICompositeLoopV2Agent>(),
                     AgentType.CsharpCode => Get<ICsharpCodeAgent>(),
                     AgentType.PythonCode => Get<IPythonCodeAgent>(),
                     AgentType.NodeJsCode => Get<INodeJsCodeAgent>(),

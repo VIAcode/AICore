@@ -89,13 +89,13 @@ namespace AiCoreApi.Services.ProcessingServices.AgentsHandlers
                             .DoCallWrapper(agentToCallModel, parametersValues),
                         AgentType.NodeJsCode => await scope.ServiceProvider.GetRequiredService<INodeJsCodeAgent>()
                             .DoCallWrapper(agentToCallModel, parametersValues),
-                        AgentType.CompositeCSharp => await scope.ServiceProvider
-                            .GetRequiredService<ICompositeCSharpAgent>()
+                        AgentType.CompositeCSharp => await scope.ServiceProvider.GetRequiredService<ICompositeCSharpAgent>()
                             .DoCallWrapper(agentToCallModel, parametersValues),
-                        AgentType.CompositePython => await scope.ServiceProvider
-                            .GetRequiredService<ICompositePythonAgent>()
+                        AgentType.CompositePython => await scope.ServiceProvider.GetRequiredService<ICompositePythonAgent>()
                             .DoCallWrapper(agentToCallModel, parametersValues),
                         AgentType.CompositeLoop => await scope.ServiceProvider.GetRequiredService<ICompositeLoopAgent>()
+                            .DoCallWrapper(agentToCallModel, parametersValues),
+                        AgentType.CompositeLoopV2 => await scope.ServiceProvider.GetRequiredService<ICompositeLoopV2Agent>()
                             .DoCallWrapper(agentToCallModel, parametersValues),
                         AgentType.Flow => await scope.ServiceProvider.GetRequiredService<IFlowAgent>()
                             .DoCallWrapper(agentToCallModel, parametersValues),

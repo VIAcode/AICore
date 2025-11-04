@@ -59,6 +59,7 @@ public class AgentsGraphService : IAgentsGraphService
             if (agent.Type == AgentTypeEnum.Composite ||
                 agent.Type == AgentTypeEnum.CompositeCSharp ||
                 agent.Type == AgentTypeEnum.CompositeLoop ||
+                agent.Type == AgentTypeEnum.CompositeLoopV2 ||
                 agent.Type == AgentTypeEnum.CompositePython)
             {
                 var enabledAgents = agent.Content[BaseEnabledAgentsAgent.GetParameterName(agent)].Value.JsonGet<Dictionary<string, bool>>() ?? [];

@@ -89,6 +89,7 @@ namespace AiCoreApi.Models.DbModels
         Confluence = 54,
         GraphMailNotification = 55,
         McpClient = 56,
-        OAuth2 = 57
+        OAuth2 = 57,
+        CompositeLoopV2 = 58
     }
 }

@@ -53,29 +53,50 @@ namespace AiCoreApi.Common
                 return null;
 
             var parameters = new List<McpActionParameterViewModel>();
-
             if (schema.TryGetProperty("properties", out var props) &&
                 props.ValueKind == JsonValueKind.Object)
             {
                 foreach (var prop in props.EnumerateObject())
                 {
                     var obj = prop.Value;
-
                     var param = new McpActionParameterViewModel
                     {
                         Name = prop.Name,
                         Description = obj.TryGetProperty("description", out var desc) ? desc.GetString() ?? string.Empty : string.Empty,
-                        Type = obj.TryGetProperty("type", out var type) ? type.GetString() ?? "string" : "string",
+                        Type = ExtractTypeValue(obj),
                         Enum = obj.TryGetProperty("enum", out var enumEl) && enumEl.ValueKind == JsonValueKind.Array
                             ? enumEl.EnumerateArray().Select(e => e.GetString() ?? string.Empty).ToList()
                             : null
                     };
-
                     parameters.Add(param);
                 }
             }
-
             return parameters;
+        }
+
+        private string ExtractTypeValue(JsonElement obj)
+        {
+            if (!obj.TryGetProperty("type", out var typeEl))
+                return "string";
+
+            // Handle both string and array types
+            if (typeEl.ValueKind == JsonValueKind.String)
+            {
+                return typeEl.GetString() ?? "string";
+            }
+            else if (typeEl.ValueKind == JsonValueKind.Array)
+            {
+                // For array types, return the first non-null type
+                var types = typeEl.EnumerateArray()
+                    .Where(t => t.ValueKind == JsonValueKind.String)
+                    .Select(t => t.GetString())
+                    .Where(t => t != null && t != "null")
+                    .ToList();
+
+                return types.FirstOrDefault() ?? "string";
+            }
+
+            return "string";
         }
 
         public async Task<string> ExecuteAction(string serverUrl, string? customHeader, string mcpServerActionJson, CancellationToken cancellationToken = default)
