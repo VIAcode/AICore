@@ -112,6 +112,11 @@ namespace AiCoreApi.SemanticKernel
 
         public async Task<string> ExecutePrompt(ConnectionModel llmConnection, string templateText, double temperature, double topP, string systemMessage, string jsonSchema = "")
         {
+            return await ExecutePrompt(llmConnection, templateText, temperature, topP, systemMessage, jsonSchema, false);
+        }
+
+        public async Task<string> ExecutePrompt(ConnectionModel llmConnection, string templateText, double temperature, double topP, string systemMessage, string jsonSchema, bool jsonSchemaIsStrict)
+        {
             var kernel = GetKernel(llmConnection);
             var chat = kernel.GetRequiredService<IChatCompletionService>();
             var history = new ChatHistory();
@@ -132,7 +137,28 @@ namespace AiCoreApi.SemanticKernel
                 var chatResponseFormat = ChatResponseFormat.CreateJsonSchemaFormat(
                     jsonSchemaFormatName: "prompt_result",
                     jsonSchema: BinaryData.FromString(jsonSchema),
-                    jsonSchemaIsStrict: false);
+                    jsonSchemaIsStrict: jsonSchemaIsStrict);
+                executionSettings.ResponseFormat = chatResponseFormat;
+            }
+            var resultContent = await chat.GetChatMessageContentAsync(history, executionSettings);
+            return resultContent.Content ?? "";
+        }
+
+        public async Task<string> ExecutePromptWithHistory(ConnectionModel llmConnection, ChatHistory history, double temperature, double topP, string jsonSchema = "", bool jsonSchemaIsStrict = false)
+        {
+            var kernel = GetKernel(llmConnection);
+            var chat = kernel.GetRequiredService<IChatCompletionService>();
+            var executionSettings = new OpenAIPromptExecutionSettings
+            {
+                Temperature = temperature,
+                TopP = topP,
+            };
+            if (!string.IsNullOrEmpty(jsonSchema))
+            {
+                var chatResponseFormat = ChatResponseFormat.CreateJsonSchemaFormat(
+                    jsonSchemaFormatName: "prompt_result",
+                    jsonSchema: BinaryData.FromString(jsonSchema),
+                    jsonSchemaIsStrict: jsonSchemaIsStrict);
                 executionSettings.ResponseFormat = chatResponseFormat;
             }
             var resultContent = await chat.GetChatMessageContentAsync(history, executionSettings);
@@ -145,5 +171,7 @@ namespace AiCoreApi.SemanticKernel
         Kernel GetKernel(ConnectionModel connectionModel);
         Task<Kernel> GetKernel();
         Task<string> ExecutePrompt(ConnectionModel llmConnection, string templateText, double temperature, double topP, string systemMessage, string jsonSchema = "");
+        Task<string> ExecutePrompt(ConnectionModel llmConnection, string templateText, double temperature, double topP, string systemMessage, string jsonSchema, bool jsonSchemaIsStrict);
+        Task<string> ExecutePromptWithHistory(ConnectionModel llmConnection, ChatHistory history, double temperature, double topP, string jsonSchema = "", bool jsonSchemaIsStrict = false);
     }
 }
