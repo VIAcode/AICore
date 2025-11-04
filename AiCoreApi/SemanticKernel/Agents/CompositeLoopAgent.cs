@@ -17,20 +17,52 @@ namespace AiCoreApi.SemanticKernel.Agents
         private readonly IConnectionProcessor _connectionProcessor;
         private const string LastStepNoAgentsMessage = "Last step so no agents available. Use 'finish' or 'cannot' action.";
 
+        private const string CustomActionsPlaceholder = "{{custom actions}}";
+        private const string CallAgentCustomAction = @"{
+          ""type"": ""object"",
+          ""properties"": {
+            ""action"": { ""type"": ""string"", ""enum"": [""call""] },
+            ""agent"": { ""type"": ""string"", ""description"": ""Agent Name"" },
+            ""params"": { ""type"": ""array"", ""items"": { ""type"": ""string"" } }
+          },
+          ""required"": [""action"", ""agent"", ""params""],
+          ""additionalProperties"": false
+        },";
+
         private const string PlannerPromptJsonSchema = @"{
-  ""$schema"": ""http://json-schema.org/draft-07/schema#"",
-  ""title"": ""PlannerInstruction"",
   ""type"": ""object"",
   ""properties"": {
-    ""action"": { ""type"": ""string"" },
-    ""agent"": { ""type"": ""string"" },
-    ""params"": { ""type"": ""array"", ""items"": { ""type"": ""string"" } },
-    ""result"": { ""type"": ""string"" },
-    ""reason"": { ""type"": ""string"" }
+    ""nextStep"": {
+      ""description"": ""Call an agent with parameters."",
+      ""anyOf"": [
+        " + CustomActionsPlaceholder + @"
+        {
+          ""description"": ""Finish the reasoning with final answer."",
+          ""type"": ""object"",
+          ""properties"": {
+            ""action"": { ""type"": ""string"", ""enum"": [""finish""] },
+            ""result"": { ""type"": ""string"", ""description"": ""Answer to the users question"" }
+          },
+          ""required"": [""action"", ""result""],
+          ""additionalProperties"": false
+        },
+        {
+          ""description"": ""Cannot complete due to missing data or failed attempt."",
+          ""type"": ""object"",
+          ""properties"": {
+            ""action"": { ""type"": ""string"", ""enum"": [""cannot""] },
+            ""reason"": { ""type"": ""string"", ""description"": ""The reason why can not answer"" }
+          },
+          ""required"": [""action"", ""reason""],
+          ""additionalProperties"": false
+        }
+      ]
+    }
   },
-  ""required"": [""action""],
+  ""required"": [""nextStep""],
   ""additionalProperties"": false
 }";
+
 
         private static class AgentContentParameters
         {
@@ -43,6 +75,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             public const string FinalPolishPrompt = "finalPolishPrompt";
             public const string PlannerPromptTemplate = "plannerPromptTemplate";
             public const string PreprocessPromptTemplate = "preprocessPromptTemplate";
+            public const string UseStrictJsonMode = "useStrictJsonMode";
         }
 
         public CompositeLoopAgent(
@@ -80,22 +113,26 @@ namespace AiCoreApi.SemanticKernel.Agents
             var finalPolishPrompt = await GetParameterValueAsync(AgentContentParameters.FinalPolishPrompt);
             var plannerPromptTemplate = await GetParameterValueAsync(AgentContentParameters.PlannerPromptTemplate);
             var temperature = GetTemperature(llmConnection, agent);
+            var useStrictJsonMode = bool.TryParse(await GetParameterValueAsync(AgentContentParameters.UseStrictJsonMode), out var strictMode) && strictMode;
             var topP = GetTopP(agent);
 
             _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Request", userInput);
+
+            var agentsDescription = await GetAgentsDescriptions(agent);
 
             if (!string.IsNullOrEmpty(preprocessPromptTemplate))
             {
                 userInput = await _semanticKernelProvider.ExecutePrompt(
                     llmConnection,
-                    preprocessPromptTemplate.Replace("{userInput}", userInput),
+                    preprocessPromptTemplate
+                        .Replace("{userInput}", userInput)
+                        .Replace("{agentsList}", agentsDescription),
                     temperature,
                     topP,
                     string.Empty);
                 _responseAccessor.AddDebugMessage(_debugMessageSenderName, "Preprocessed Prompt", userInput);
             }
 
-            var agentsDescription = await GetAgentsDescriptions(agent);
             var history = new List<(string agent, List<string> @params, string result)>();
 
             for (int i = 0; i < maxIterations; i++)
@@ -104,8 +141,16 @@ namespace AiCoreApi.SemanticKernel.Agents
                     $"{Environment.NewLine}{Environment.NewLine}",
                     history.Select(h => $"Agent: {h.agent}, Params: [{string.Join(", ", h.@params)}], Result: {h.result}"));
 
+                var jsonSchema = string.Empty;
                 if (i == maxIterations - 1)
+                {
                     agentsDescription = LastStepNoAgentsMessage;
+                    jsonSchema = PlannerPromptJsonSchema.Replace(CustomActionsPlaceholder, string.Empty);
+                }
+                else
+                {
+                    jsonSchema = PlannerPromptJsonSchema.Replace(CustomActionsPlaceholder, CallAgentCustomAction);
+                }
 
                 var plannerPrompt = plannerPromptTemplate
                     .Replace("{agentsList}", agentsDescription)
@@ -120,11 +165,13 @@ namespace AiCoreApi.SemanticKernel.Agents
                     temperature,
                     topP,
                     systemMessage,
-                    PlannerPromptJsonSchema);
+                    jsonSchema,
+                    useStrictJsonMode);
 
                 _responseAccessor.AddDebugMessage(_debugMessageSenderName, $"Step {i + 1} Answer", plannerResponse);
 
-                var parsed = plannerResponse.JsonGet<PlannerInstruction>();
+                var parsedResponse = plannerResponse.JsonGet<PlannerResponse>();
+                var parsed = parsedResponse?.NextStep;
                 if (parsed == null || string.IsNullOrEmpty(parsed.Action))
                     throw new AiCoreUiException("Planner response invalid or empty");
 
@@ -212,15 +259,20 @@ namespace AiCoreApi.SemanticKernel.Agents
 
             return 0;
         }
-    }
 
-    public class PlannerInstruction
-    {
-        public string Action { get; set; } = "";
-        public string Agent { get; set; } = "";
-        public List<string> Params { get; set; } = new();
-        public string Result { get; set; } = "";
-        public string Reason { get; set; } = "";
+        public class PlannerResponse
+        {
+            public PlannerInstruction NextStep { get; set; } = new PlannerInstruction();
+        }
+
+        public class PlannerInstruction
+        {
+            public string Action { get; set; } = "";
+            public string Agent { get; set; } = "";
+            public List<string> Params { get; set; } = new();
+            public string Result { get; set; } = "";
+            public string Reason { get; set; } = "";
+        }
     }
 
     public interface ICompositeLoopAgent

@@ -98,6 +98,8 @@ namespace AiCoreApi.Services.ProcessingServices.AgentsHandlers
                             .DoCallWrapper(agentToCall, parametersValues),
                         AgentType.CompositeLoop => await sp.GetRequiredService<ICompositeLoopAgent>()
                             .DoCallWrapper(agentToCall, parametersValues),
+                        AgentType.CompositeLoopV2 => await sp.GetRequiredService<ICompositeLoopV2Agent>()
+                            .DoCallWrapper(agentToCall, parametersValues),
                         AgentType.Flow => await sp.GetRequiredService<IFlowAgent>()
                             .DoCallWrapper(agentToCall, parametersValues),
                         _ => throw new NotSupportedException($"Unsupported agent type: {agentToCall.Type}")
