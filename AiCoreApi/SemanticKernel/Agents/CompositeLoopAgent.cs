@@ -262,7 +262,7 @@ namespace AiCoreApi.SemanticKernel.Agents
 
         public class PlannerResponse
         {
-            public PlannerInstruction NextStep { get; set; } = new PlannerInstruction();
+            public PlannerInstruction NextStep { get; set; } = new();
         }
 
         public class PlannerInstruction
