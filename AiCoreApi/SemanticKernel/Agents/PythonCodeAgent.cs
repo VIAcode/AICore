@@ -104,7 +104,7 @@ namespace AiCoreApi.SemanticKernel.Agents
                         scope.Set("ExecuteAgent", new Func<string, string[]?, string>(ExecuteAgent).ToPython());
                         scope.Set("GetCacheValue", new Func<string, string>(_cacheAccessor.GetCacheValue).ToPython());
                         scope.Set("SetCacheValue", new Func<string, string, int, string>(_cacheAccessor.SetCacheValue).ToPython());
-                        scope.Set("Log", new Func<string, string[]?, string>(ExecuteAgent).ToPython());
+                        scope.Set("Log", new Action<string>(LogCritical).ToPython());
 
                         PyObject requestAccessorPy = _requestAccessor.ToPython();
                         PyObject responseAccessorPy = _responseAccessor.ToPython();
