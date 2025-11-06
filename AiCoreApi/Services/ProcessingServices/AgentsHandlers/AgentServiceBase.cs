@@ -79,28 +79,20 @@ namespace AiCoreApi.Services.ProcessingServices.AgentsHandlers
 
                     userContextAccessor.SetLoginId(runAs);
                     UserContextAccessor.AsyncScheduledLoginId.Value = runAs;
-                    result = agentToCallModel.Type switch
+                    IDoCallWrapperAgent agent = agentToCallModel.Type switch
                     {
-                        AgentType.Composite => await scope.ServiceProvider.GetRequiredService<ICompositeAgent>()
-                            .DoCallWrapper(agentToCallModel, parametersValues),
-                        AgentType.CsharpCode => await scope.ServiceProvider.GetRequiredService<ICsharpCodeAgent>()
-                            .DoCallWrapper(agentToCallModel, parametersValues),
-                        AgentType.PythonCode => await scope.ServiceProvider.GetRequiredService<IPythonCodeAgent>()
-                            .DoCallWrapper(agentToCallModel, parametersValues),
-                        AgentType.NodeJsCode => await scope.ServiceProvider.GetRequiredService<INodeJsCodeAgent>()
-                            .DoCallWrapper(agentToCallModel, parametersValues),
-                        AgentType.CompositeCSharp => await scope.ServiceProvider.GetRequiredService<ICompositeCSharpAgent>()
-                            .DoCallWrapper(agentToCallModel, parametersValues),
-                        AgentType.CompositePython => await scope.ServiceProvider.GetRequiredService<ICompositePythonAgent>()
-                            .DoCallWrapper(agentToCallModel, parametersValues),
-                        AgentType.CompositeLoop => await scope.ServiceProvider.GetRequiredService<ICompositeLoopAgent>()
-                            .DoCallWrapper(agentToCallModel, parametersValues),
-                        AgentType.CompositeLoopV2 => await scope.ServiceProvider.GetRequiredService<ICompositeLoopV2Agent>()
-                            .DoCallWrapper(agentToCallModel, parametersValues),
-                        AgentType.Flow => await scope.ServiceProvider.GetRequiredService<IFlowAgent>()
-                            .DoCallWrapper(agentToCallModel, parametersValues),
+                        AgentType.Composite =>  scope.ServiceProvider.GetRequiredService<ICompositeAgent>(),
+                        AgentType.CsharpCode => scope.ServiceProvider.GetRequiredService<ICsharpCodeAgent>(),
+                        AgentType.PythonCode => scope.ServiceProvider.GetRequiredService<IPythonCodeAgent>(),
+                        AgentType.NodeJsCode => scope.ServiceProvider.GetRequiredService<INodeJsCodeAgent>(),
+                        AgentType.CompositeCSharp => scope.ServiceProvider.GetRequiredService<ICompositeCSharpAgent>(),
+                        AgentType.CompositePython => scope.ServiceProvider.GetRequiredService<ICompositePythonAgent>(),
+                        AgentType.CompositeLoop => scope.ServiceProvider.GetRequiredService<ICompositeLoopAgent>(),
+                        AgentType.CompositeLoopV2 => scope.ServiceProvider.GetRequiredService<ICompositeLoopV2Agent>(),
+                        AgentType.Flow => scope.ServiceProvider.GetRequiredService<IFlowAgent>(),
                         _ => throw new NotSupportedException($"Unsupported agent type: {agentToCallModel.Type}")
                     };
+                    result = await agent.DoCallWrapper(agentToCallModel, parametersValues);
                     var responseAccessor = scope.ServiceProvider.GetRequiredService<ResponseAccessor>();
                     login = runAsUser.Login;
                     currentMessage = responseAccessor.CurrentMessage;

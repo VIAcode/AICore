@@ -157,9 +157,8 @@ namespace AiCoreApi.SemanticKernel.Agents
         }
     }
 
-    public interface ICompositeAgent
+    public interface ICompositeAgent : IDoCallWrapperAgent
     {
         Task AddAgent(AgentModel agent, Kernel kernel, List<string> pluginsInstructions);
-        Task<string> DoCallWrapper(AgentModel agent, Dictionary<string, string> parameters);
     }
 }

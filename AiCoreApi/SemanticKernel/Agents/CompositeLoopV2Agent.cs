@@ -97,7 +97,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             IConnectionProcessor connectionProcessor,
             RequestAccessor requestAccessor,
             ResponseAccessor responseAccessor,
-            ILogger<CompositeLoopAgent> logger)
+            ILogger<CompositeLoopV2Agent> logger)
             : base(baseAgentHelper, logger)
         {
             _requestAccessor = requestAccessor;
@@ -646,9 +646,8 @@ Based on this, decide the next best action.";
         public string ModificationReason { get; set; } = "";
     }
 
-    public interface ICompositeLoopV2Agent
+    public interface ICompositeLoopV2Agent : IDoCallWrapperAgent
     {
         Task<string> DoCall(AgentModel agent, Dictionary<string, string> parameters);
-        Task<string> DoCallWrapper(AgentModel agent, Dictionary<string, string> parameters);
     }
 }

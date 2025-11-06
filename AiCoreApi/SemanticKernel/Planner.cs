@@ -24,6 +24,7 @@ namespace AiCoreApi.SemanticKernel
         private readonly IPlannerHelpers _plannerHelpers;
         private readonly IAgentExecutor _agentExecutor;
         private readonly IAgentRegistry _registry;
+        private readonly IAgentLifecycleService _agentLifecycleService;
 
         public Planner(
             ISemanticKernelProvider semanticKernelProvider,
@@ -36,7 +37,8 @@ namespace AiCoreApi.SemanticKernel
             ILogger<Planner> logger,
             IPlannerHelpers plannerHelpers,
             IAgentExecutor agentExecutor,
-            IAgentRegistry registry)
+            IAgentRegistry registry,
+            IAgentLifecycleService agentLifecycleService)
         {
             _semanticKernelProvider = semanticKernelProvider;
             _requestAccessor = requestAccessor;
@@ -49,6 +51,7 @@ namespace AiCoreApi.SemanticKernel
             _plannerHelpers = plannerHelpers;
             _agentExecutor = agentExecutor;
             _registry = registry;
+            _agentLifecycleService = agentLifecycleService;
         }
 
         public async Task<MessageDialogViewModel.Message> GetChatResponse()
@@ -158,7 +161,7 @@ namespace AiCoreApi.SemanticKernel
 
             foreach (var agent in agents)
             {
-                if (!agent.IsEnabled)
+                if (!agent.IsEnabled || _agentLifecycleService.IsListenerAgentType(agent.Type))
                     continue;
 
                 var accessible = useAllPlugins ||
