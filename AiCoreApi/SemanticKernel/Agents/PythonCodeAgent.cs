@@ -61,11 +61,11 @@ namespace AiCoreApi.SemanticKernel.Agents
 
             var pythonCode = await GetParameterValueAsync(AgentContentParameters.PythonCode);
             pythonCode = await ApplyParametersAsync(pythonCode, new Dictionary<string, string>
-            {
-                {AgentPromptPlaceholders.HasFilesPlaceholder, _requestAccessor.MessageDialog.Messages.Last().HasFiles().ToString()},
-                {AgentPromptPlaceholders.FilesDataPlaceholder, _requestAccessor.MessageDialog.Messages.Last().GetFileContents()},
-                {AgentPromptPlaceholders.FilesNamesPlaceholder, _requestAccessor.MessageDialog.Messages.Last().GetFileNames()}
-            });
+    {
+        {AgentPromptPlaceholders.HasFilesPlaceholder, _requestAccessor.MessageDialog.Messages.Last().HasFiles().ToString()},
+        {AgentPromptPlaceholders.FilesDataPlaceholder, _requestAccessor.MessageDialog.Messages.Last().GetFileContents()},
+        {AgentPromptPlaceholders.FilesNamesPlaceholder, _requestAccessor.MessageDialog.Messages.Last().GetFileNames()}
+    });
             _responseAccessor.AddDebugMessage(_debugMessageSenderName, "Execute Python Code", pythonCode);
 
 
@@ -88,23 +88,24 @@ namespace AiCoreApi.SemanticKernel.Agents
                                 imports.Add(library);
                             }
                         }
-                        dynamic builtIns = scope.Import("builtins");
+
                         foreach (var lib in imports)
                         {
                             scope.Import(lib);
                         }
 
-                        builtIns.LogCritical = new Action<string>(LogCritical);
-                        builtIns.LogError = new Action<string>(LogError);
-                        builtIns.LogWarning = new Action<string>(LogWarning);
-                        builtIns.LogDebug = new Action<string>(LogDebug);
-                        builtIns.LogInformation = new Action<string>(LogInformation);
-                        builtIns.LogTrace = new Action<string>(LogTrace);
+                        scope.Set("LogCritical", new Action<string>(LogCritical).ToPython());
+                        scope.Set("LogError", new Action<string>(LogError).ToPython());
+                        scope.Set("LogWarning", new Action<string>(LogWarning).ToPython());
+                        scope.Set("LogDebug", new Action<string>(LogDebug).ToPython());
+                        scope.Set("LogInformation", new Action<string>(LogInformation).ToPython());
+                        scope.Set("LogTrace", new Action<string>(LogTrace).ToPython());
 
-                        builtIns.ExecuteAgent = new Func<string, string[]?, string>(ExecuteAgent);
-                        builtIns.GetCacheValue = new Func<string, string>(_cacheAccessor.GetCacheValue);
-                        builtIns.SetCacheValue = new Func<string, string, int, string>(_cacheAccessor.SetCacheValue);
-                        builtIns.Log = new Func<string, string[]?, string>(ExecuteAgent);
+                        scope.Set("ExecuteAgent", new Func<string, string[]?, string>(ExecuteAgent).ToPython());
+                        scope.Set("GetCacheValue", new Func<string, string>(_cacheAccessor.GetCacheValue).ToPython());
+                        scope.Set("SetCacheValue", new Func<string, string, int, string>(_cacheAccessor.SetCacheValue).ToPython());
+                        scope.Set("Log", new Func<string, string[]?, string>(ExecuteAgent).ToPython());
+
                         PyObject requestAccessorPy = _requestAccessor.ToPython();
                         PyObject responseAccessorPy = _responseAccessor.ToPython();
                         PyObject parametersPy = parameters.ToPython();
@@ -118,7 +119,8 @@ namespace AiCoreApi.SemanticKernel.Agents
             }
             catch (Exception e)
             {
-                _responseAccessor.AddDebugMessage(_debugMessageSenderName, "Python Code Error", $"Exception: {e.Message}\r\n\r\nInner Exception: {e.InnerException?.Message}");
+                _responseAccessor.AddDebugMessage(_debugMessageSenderName, "Python Code Error",
+                    $"Exception: {e.Message}\r\n\r\nInner Exception: {e.InnerException?.Message}");
                 throw;
             }
             _responseAccessor.AddDebugMessage(_debugMessageSenderName, "Python Code Result", result);
@@ -230,10 +232,9 @@ except Exception as e:
         }
     }
 
-    public interface IPythonCodeAgent
+    public interface IPythonCodeAgent : IDoCallWrapperAgent
     {
         Task AddAgent(AgentModel agent, Kernel kernel, List<string> pluginsInstructions);
-        Task<string> DoCallWrapper(AgentModel agent, Dictionary<string, string> parameters);
         string Validate(string pythonCode);
     }
 }

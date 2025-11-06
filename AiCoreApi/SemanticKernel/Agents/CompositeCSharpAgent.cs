@@ -257,9 +257,8 @@ Existing Agents:
         }
     }
 
-    public interface ICompositeCSharpAgent
+    public interface ICompositeCSharpAgent: IDoCallWrapperAgent
     {
         Task AddAgent(AgentModel agent, Kernel kernel, List<string> pluginsInstructions);
-        Task<string> DoCallWrapper(AgentModel agent, Dictionary<string, string> parameters);
     }
 }

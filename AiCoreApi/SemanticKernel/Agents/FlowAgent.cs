@@ -77,9 +77,8 @@ namespace AiCoreApi.SemanticKernel.Agents
         }
     }
 
-    public interface IFlowAgent
+    public interface IFlowAgent: IDoCallWrapperAgent
     {
         Task<string> DoCall(AgentModel agent, Dictionary<string, string> parameters);
-        Task<string> DoCallWrapper(AgentModel agent, Dictionary<string, string> parameters);
     }
 }

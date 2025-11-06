@@ -1,6 +1,7 @@
 ﻿using AiCoreApi.Common.Extensions;
 using AiCoreApi.Models.ViewModels;
 using AiCoreApi.SemanticKernel;
+using Newtonsoft.Json;
 
 namespace AiCoreApi.Common
 {
@@ -23,6 +24,9 @@ namespace AiCoreApi.Common
             _requestAccessor = requestAccessor;
             _cacheAccessor = cacheAccessor;
         }
+
+        public Dictionary<string, string> Context { get; set; } = new();
+
         public int AddNotification(string userName, string type, string title, string message, bool inProgress = false) => 
             _requestAccessor.AgentsHelper?.AddNotification(userName, type, title, message, inProgress, _requestAccessor.WorkspaceId ?? 0) ?? 0;
 

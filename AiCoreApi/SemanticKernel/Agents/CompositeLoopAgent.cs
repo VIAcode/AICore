@@ -275,9 +275,8 @@ namespace AiCoreApi.SemanticKernel.Agents
         }
     }
 
-    public interface ICompositeLoopAgent
+    public interface ICompositeLoopAgent : IDoCallWrapperAgent
     {
         Task<string> DoCall(AgentModel agent, Dictionary<string, string> parameters);
-        Task<string> DoCallWrapper(AgentModel agent, Dictionary<string, string> parameters);
     }
 }

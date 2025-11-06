@@ -74,7 +74,7 @@ namespace AiCoreApi.SemanticKernel
             AgentType.Scheduler
         };
 
-        private bool IsListenerAgentType(AgentType agentType) => ListenerAgentTypes.Contains(agentType);
+        public bool IsListenerAgentType(AgentType agentType) => ListenerAgentTypes.Contains(agentType);
     }
 
     public interface IAgentLifecycleService
@@ -83,5 +83,6 @@ namespace AiCoreApi.SemanticKernel
         Task OnDeleteAsync(int agentId);
         Task OnExportAsync(AgentModel agentModel, Dictionary<int, AgentModelProcessed> agentsToExport);
         Task OnImportAsync(AgentModel agentModel, Dictionary<string, AgentModelProcessed> agentsToImport);
+        bool IsListenerAgentType(AgentType agentType);
     }
 }

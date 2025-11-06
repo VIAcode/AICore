@@ -217,9 +217,8 @@ Use `ExecuteAgent('AgentName', ['param1', 'param2'])` to call.
         }
     }
 
-    public interface ICompositePythonAgent
+    public interface ICompositePythonAgent: IDoCallWrapperAgent
     {
         Task AddAgent(AgentModel agent, Kernel kernel, List<string> pluginsInstructions);
-        Task<string> DoCallWrapper(AgentModel agent, Dictionary<string, string> parameters);
     }
 }
