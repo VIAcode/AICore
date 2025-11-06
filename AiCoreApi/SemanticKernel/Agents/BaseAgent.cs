@@ -11,7 +11,7 @@ using System.Text.RegularExpressions;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
-    public abstract class BaseAgent
+    public abstract class BaseAgent : IDoCallWrapperAgent
     {
         private readonly ResponseAccessor _responseAccessor;
         private readonly RequestAccessor _requestAccessor;
@@ -382,5 +382,10 @@ namespace AiCoreApi.SemanticKernel.Agents
             }
             return value;
         }
+    }
+
+    public interface IDoCallWrapperAgent
+    {
+        Task<string> DoCallWrapper(AgentModel agent, Dictionary<string, string> parameters);
     }
 }

@@ -238,9 +238,8 @@ globalThis.executeAgent=(name,args=[])=>{{
         }
     }
 
-    public interface INodeJsCodeAgent
+    public interface INodeJsCodeAgent: IDoCallWrapperAgent
     {
         Task AddAgent(AgentModel agent, Kernel kernel, List<string> pluginsInstructions);
-        Task<string> DoCallWrapper(AgentModel agent, Dictionary<string, string> parameters);
     }
 }
