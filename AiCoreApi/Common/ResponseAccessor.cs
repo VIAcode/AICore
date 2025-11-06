@@ -1,7 +1,6 @@
 ﻿using AiCoreApi.Common.Extensions;
 using AiCoreApi.Models.ViewModels;
 using AiCoreApi.SemanticKernel;
-using Newtonsoft.Json;
 
 namespace AiCoreApi.Common
 {
