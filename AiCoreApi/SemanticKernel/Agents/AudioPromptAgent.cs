@@ -124,9 +124,12 @@ public class AudioPromptAgent : BaseAgent, IAudioPromptAgent
                 new() { { "api-key", connection.Content["azureOpenAiKey"] } }
             );
         }
+        var baseUrl = connection.Content.ContainsKey("baseUrl") && !string.IsNullOrEmpty(connection.Content["baseUrl"])
+            ? connection.Content["baseUrl"].TrimEnd('/')
+            : "https://api.openai.com/v1";
 
         return (
-            "https://api.openai.com/v1/chat/completions",
+            $"{baseUrl}/chat/completions",
             new() { { "Authorization", $"Bearer {connection.Content["apiKey"]}" } }
         );
     }

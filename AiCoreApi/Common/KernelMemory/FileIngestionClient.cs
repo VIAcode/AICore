@@ -199,6 +199,9 @@ namespace AiCoreApi.Common.KernelMemory
             }
             else if (embeddingConnection.Type == Models.DbModels.ConnectionType.OpenAiEmbedding)
             {
+                Endpoint = embeddingConnection.Content.ContainsKey("baseUrl") && !string.IsNullOrEmpty(embeddingConnection.Content["baseUrl"]) 
+                    ? embeddingConnection.Content["baseUrl"].TrimEnd('/')
+                    : "https://api.openai.com/v1";
                 ModelName = embeddingConnection.Content["modelName"];
                 ApiKey = embeddingConnection.Content["apiKey"];
                 MaxTokens = embeddingConnection.Content["maxTokens"];

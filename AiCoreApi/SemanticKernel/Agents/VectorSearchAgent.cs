@@ -97,7 +97,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             var embeddingConnection = await GetConnectionAsync(_requestAccessor, _responseAccessor, connections, 
                 new[] { ConnectionType.AzureOpenAiEmbedding, ConnectionType.OpenAiEmbedding }, _debugMessageSenderName, connectionName: embeddingConnectionName);
             var llmConnection = await GetConnectionAsync(_requestAccessor, _responseAccessor, connections, 
-                new[] { ConnectionType.AzureOpenAiLlm, ConnectionType.OpenAiLlm, ConnectionType.CohereLlm }, _debugMessageSenderName, llmConnectionId);
+                new[] { ConnectionType.AzureOpenAiLlm, ConnectionType.OpenAiLlm, ConnectionType.CohereLlm, ConnectionType.GeminiLlm }, _debugMessageSenderName, llmConnectionId);
             var vectorIndexName = embeddingConnection.Content.ContainsKey("indexName")
                 ? embeddingConnection.Content["indexName"]
                 : "default";

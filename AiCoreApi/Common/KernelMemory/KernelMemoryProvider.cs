@@ -93,6 +93,9 @@ namespace AiCoreApi.Common.KernelMemory
         private OpenAIConfig GetOpenAIConfig(ConnectionModel llmConnection) => new()
         {
             APIKey = llmConnection.Content["apiKey"],
+            Endpoint = llmConnection.Content.ContainsKey("baseUrl") && !string.IsNullOrEmpty(llmConnection.Content["baseUrl"])
+                ? llmConnection.Content["baseUrl"].TrimEnd('/')
+                : "https://api.openai.com/v1",
             TextModel = llmConnection.Content["modelName"],
             TextModelMaxTokenTotal = Convert.ToInt32(llmConnection.Content["maxRequestTokens"]),
             MaxRetries = 5,
@@ -109,6 +112,9 @@ namespace AiCoreApi.Common.KernelMemory
         private OpenAIConfig GetOpenAiEmbeddingConfig(ConnectionModel embeddingConnection) => new()
         {
             APIKey = embeddingConnection.Content["apiKey"],
+            Endpoint = embeddingConnection.Content.ContainsKey("baseUrl") && !string.IsNullOrEmpty(embeddingConnection.Content["baseUrl"])
+                ? embeddingConnection.Content["baseUrl"].TrimEnd('/')
+                : "https://api.openai.com/v1",
             EmbeddingModel = embeddingConnection.Content["modelName"],
             EmbeddingModelMaxTokenTotal = Convert.ToInt32(embeddingConnection.Content["maxTokens"]),
             MaxRetries = 10,
