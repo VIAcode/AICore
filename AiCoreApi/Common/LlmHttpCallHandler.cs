@@ -176,6 +176,7 @@ namespace AiCoreApi.Common
                 return ConnectionType.GeminiLlm;
             if (request.Method == HttpMethod.Post && request.RequestUri.AbsoluteUri.Contains("api.cohere.com"))
                 return ConnectionType.CohereLlm;
+            // Fallback: broad path-only check, lower priority
             if (request.Method == HttpMethod.Post && request.RequestUri.AbsoluteUri.Contains("/v1/chat/completions"))
                 return ConnectionType.OpenAiLlm;
             return null;

@@ -228,6 +228,8 @@ namespace AiCoreApi.SemanticKernel.Agents
                 var agentId = agentItem.AgentId.ToString();
                 if (enabledAgents.TryGetValue(agentId, out var enabled))
                 {
+                    if (string.IsNullOrEmpty(enabled))
+                        continue;
                     var enabledParts = enabled.Split(':');
                     var isEnable = enabledParts[0].ToLower() == "true";
                     var conditionAgent = enabledParts.Length > 1 ? enabledParts[1] : string.Empty;
