@@ -113,7 +113,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             _debugMessageSenderName = $"{agent.Name} ({agent.Type})";
 
             // Initialize connections and configuration
-            var config = await InitializeConfigurationAsync(agent);
+            var config = await InitializeConfigurationAsync(agent, parameters);
 
             _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Request", config.UserInput);
 
@@ -132,7 +132,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             return result;
         }
 
-        private async Task<AgentConfiguration> InitializeConfigurationAsync(AgentModel agent)
+        private async Task<AgentConfiguration> InitializeConfigurationAsync(AgentModel agent, Dictionary<string, string> parameters)
         {
             var connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
             var llmConnection = await GetConnectionAsync(
@@ -158,7 +158,7 @@ namespace AiCoreApi.SemanticKernel.Agents
                 PlannerModificationActionTemplate = await GetParameterValueAsync(AgentContentParameters.PlannerModificationActionTemplate),
                 Temperature = GetTemperature(llmConnection, agent),
                 TopP = GetTopP(agent),
-                AgentsDescription = await GetAgentsDescriptions(agent)
+                AgentsDescription = await GetAgentsDescriptions(agent, parameters)
             };
         }
 
@@ -385,9 +385,9 @@ Provide a clear, revised execution plan that addresses the issues and outlines t
             });
         }
 
-        private async Task<string> GetAgentsDescriptions(AgentModel agent)
+        private async Task<string> GetAgentsDescriptions(AgentModel agent, Dictionary<string, string> parameters)
         {
-            var enabledAgents = agent.Content[AgentContentParameters.EnabledAgents].Value.JsonGet<Dictionary<string, bool>>();
+            var enabledAgents = agent.Content[AgentContentParameters.EnabledAgents].Value.JsonGet<Dictionary<string, string>>();
 
             if (enabledAgents == null || !enabledAgents.Any())
                 return string.Empty;
@@ -399,9 +399,13 @@ Provide a clear, revised execution plan that addresses the issues and outlines t
             {
                 var agentId = agentItem.AgentId.ToString();
 
-                if (enabledAgents.TryGetValue(agentId, out var enabled) && enabled)
+                if (enabledAgents.TryGetValue(agentId, out var enabled))
                 {
-                    result += $@"
+                    var enabledParts = enabled.Split(':');
+                    var isEnable = enabledParts[0].ToLower() == "true";
+                    var conditionAgent = enabledParts.Length > 1 ? enabledParts[1] : string.Empty;
+                    if (isEnable && (string.IsNullOrEmpty(conditionAgent) || await CheckConditionAgent(conditionAgent, parameters)))
+                        result += $@"
 ## AgentName: {agentItem.Name}
 - Description: {agentItem.Description}
 - Parameters: {agentItem.Content.GetValueOrDefault("parameterDescription")?.Value ?? ""}
@@ -411,6 +415,22 @@ Provide a clear, revised execution plan that addresses the issues and outlines t
             }
 
             return result;
+        }
+
+        private async Task<bool> CheckConditionAgent(string conditionAgent, Dictionary<string, string> parameters)
+        {
+            if (string.IsNullOrEmpty(conditionAgent))
+                return true;
+            try
+            {
+                var result = await _agentExecutor.ExecuteAsync(conditionAgent, parameters.Select(x => x.Value).ToList());
+                return result.Trim().ToLower() == "true";
+            }
+            catch (Exception ex)
+            {
+                _responseAccessor.AddDebugMessage(_debugMessageSenderName, "CheckConditionAgent Error", $"{conditionAgent}: {ex}");
+                return false;
+            }
         }
 
         private double GetTemperature(ConnectionModel llmConnection, AgentModel agent)
