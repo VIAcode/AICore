@@ -54,8 +54,12 @@ namespace AiCoreApi.SemanticKernel
             }
             else if (connectionModel.Type == ConnectionType.OpenAiLlm)
             {
+                var baseUrl = connectionModel.Content.ContainsKey("baseUrl") && !string.IsNullOrEmpty(connectionModel.Content["baseUrl"])
+                    ? new Uri(connectionModel.Content["baseUrl"].TrimEnd('/'))
+                    : new Uri("https://api.openai.com/v1");
                 kernelBuilder = kernelBuilder.AddOpenAIChatCompletion(
                     connectionModel.Content["modelName"],
+                    baseUrl,
                     connectionModel.Content["apiKey"],
                     httpClient: httpClient);
             }

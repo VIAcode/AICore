@@ -118,7 +118,7 @@ namespace AiCoreApi.SemanticKernel.Agents
 
             _responseAccessor.AddDebugMessage(_debugMessageSenderName, "DoCall Request", userInput);
 
-            var agentsDescription = await GetAgentsDescriptions(agent);
+            var agentsDescription = await GetAgentsDescriptions(agent, parameters);
 
             if (!string.IsNullOrEmpty(preprocessPromptTemplate))
             {
@@ -214,9 +214,9 @@ namespace AiCoreApi.SemanticKernel.Agents
             throw new AiCoreUiException("Planner did not finish within max iterations");
         }
 
-        private async Task<string> GetAgentsDescriptions(AgentModel agent)
+        private async Task<string> GetAgentsDescriptions(AgentModel agent, Dictionary<string, string> parameters)
         {
-            var enabledAgents = agent.Content[AgentContentParameters.EnabledAgents].Value.JsonGet<Dictionary<string, bool>>();
+            var enabledAgents = agent.Content[AgentContentParameters.EnabledAgents].Value.JsonGet<Dictionary<string, string>>();
             if (enabledAgents == null || !enabledAgents.Any())
                 return string.Empty;
 
@@ -226,9 +226,15 @@ namespace AiCoreApi.SemanticKernel.Agents
             foreach (var agentItem in agentsList)
             {
                 var agentId = agentItem.AgentId.ToString();
-                if (enabledAgents.TryGetValue(agentId, out var enabled) && enabled)
+                if (enabledAgents.TryGetValue(agentId, out var enabled))
                 {
-                    result += $@"
+                    if (string.IsNullOrEmpty(enabled))
+                        continue;
+                    var enabledParts = enabled.Split(':');
+                    var isEnable = enabledParts[0].ToLower() == "true";
+                    var conditionAgent = enabledParts.Length > 1 ? enabledParts[1] : string.Empty;
+                    if (isEnable && (string.IsNullOrEmpty(conditionAgent) || await CheckConditionAgent(conditionAgent, parameters)))
+                        result += $@"
 ## AgentName: {agentItem.Name}
 - Description: {agentItem.Description}
 - Parameters: {agentItem.Content.GetValueOrDefault("parameterDescription")?.Value ?? ""}
@@ -238,6 +244,22 @@ namespace AiCoreApi.SemanticKernel.Agents
             }
 
             return result;
+        }
+
+        private async Task<bool> CheckConditionAgent(string conditionAgent, Dictionary<string, string> parameters)
+        {
+            if (string.IsNullOrEmpty(conditionAgent))
+                return true;
+            try
+            {
+                var result = await _agentExecutor.ExecuteAsync(conditionAgent, parameters.Select(x => x.Value).ToList());
+                return result.Trim().ToLower() == "true";
+            }
+            catch (Exception ex)
+            {
+                _responseAccessor.AddDebugMessage(_debugMessageSenderName, "CheckConditionAgent Error", $"{conditionAgent}: {ex}");
+                return false;
+            }
         }
 
         private double GetTemperature(ConnectionModel llmConnection, AgentModel agent)

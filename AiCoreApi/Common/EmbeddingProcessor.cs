@@ -35,7 +35,7 @@ namespace AiCoreApi.Common
                 var endpoint = connection.Content["endpoint"].TrimEnd('/');
                 var deployment = model;
                 var apiVersion = connection.Content.TryGetValue("apiVersion", out var version) ? version : "2024-10-21";
-                var url = $"{endpoint}/openai/deployments/{deployment}/embeddings?api-version={apiVersion}";
+                var url = new Uri($"{endpoint}/openai/deployments/{deployment}/embeddings?api-version={apiVersion}");
 
                 client.DefaultRequestHeaders.Add("api-key", apiKey);
                 foreach (var chunk in text)
@@ -51,7 +51,10 @@ namespace AiCoreApi.Common
             else
             {
                 // OpenAI: 
-                var url = "https://api.openai.com/v1/embeddings";
+                var baseUrl = connection.Content.ContainsKey("baseUrl") && !string.IsNullOrEmpty(connection.Content["baseUrl"])
+                    ? connection.Content["baseUrl"].TrimEnd('/')
+                    : "https://api.openai.com/v1";
+                var url = new Uri($"{baseUrl}/embeddings");
                 client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
                 foreach (var chunk in text)
                 {
@@ -66,7 +69,7 @@ namespace AiCoreApi.Common
             return result;
         }
 
-        private static async Task<List<float>> PostForEmbedding(HttpClient client, string url, string input, string? model = null)
+        private static async Task<List<float>> PostForEmbedding(HttpClient client, Uri url, string input, string? model = null)
         {
             object payload;
             if (model is null)
