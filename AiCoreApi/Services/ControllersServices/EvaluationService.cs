@@ -124,15 +124,19 @@ public class EvaluationService : IEvaluationService
         });
 
         var systemPrompt = "You are an expert evaluator. Your task is to assess how well a candidate answer matches a reference answer. Use semantic understanding, not just surface similarity. Differences in wording are acceptable if the meaning is preserved. Output only a score from 0 to 100, where:\r\n- 100 means completely correct in meaning,\r\n- 0 means completely incorrect or unrelated.\r\nNo explanation. Only return a single number.";
-        foreach (var question in evaluation.Questions)
+
+        int completionsCount = 0;
+        int totalQuestions = evaluation.Questions.Sum(q => q.SampleSize);
+        foreach (var question in evaluation.Questions.SelectMany(q => Enumerable.Repeat(q, q.SampleSize)))
         {
+            completionsCount++;
             var result = "";
             var score = 0;
             var input = "";
             var i = 0;
-            foreach(var agentParameter in agentParameters)
+            foreach (var agentParameter in agentParameters)
                 input += $"{agentParameter.Trim()}: {question.Parameters[i++]}\n";
-            
+
             try
             {
                 result = await RunAgent(evaluation, question);
@@ -158,20 +162,24 @@ public class EvaluationService : IEvaluationService
                 DebugMessages = debugMessages,
                 Score = score
             });
-            evaluation.Progress = $"{(evaluationHistory.Questions.Count == evaluation.Questions.Count ? "Done" : "In Progress")} [{evaluationHistory.Questions.Count}/{evaluation.Questions.Count}]";
+            evaluation.Progress = $"{(completionsCount == totalQuestions ? "Done" : "In Progress")} [{completionsCount}/{totalQuestions}]";
             await _evaluationProcessor.Update(evaluation);
             await _evaluationHistoryProcessor.Update(evaluationHistory);
+
         }
-        overallScore /= evaluation.Questions.Count;
+        if (completionsCount > 0)
+        {
+            overallScore /= completionsCount;
+        }
         var overallScoreInt = Convert.ToInt32(overallScore);
         if (useRevert && evaluation.LastScore > overallScoreInt)
         {
-            evaluationHistory.Status = $"Completed [{evaluationHistory.Questions.Count}/{evaluation.Questions.Count}], Score: {overallScoreInt}. Reverted.";
+            evaluationHistory.Status = $"Completed [{completionsCount}/{totalQuestions}], Score: {overallScoreInt}. Reverted.";
         }
         else
         {
             evaluation.LastScore = overallScoreInt;
-            evaluationHistory.Status = $"Completed [{evaluationHistory.Questions.Count}/{evaluation.Questions.Count}], Score: {overallScoreInt}";
+            evaluationHistory.Status = $"Completed [{completionsCount}/{totalQuestions}], Score: {overallScoreInt}";
         }
         await _evaluationProcessor.Update(evaluation);
         await _evaluationHistoryProcessor.Update(evaluationHistory);
