@@ -5,6 +5,7 @@ using AiCoreApi.Models.DbModels;
 using AiCoreApi.Models.ViewModels;
 using AiCoreApi.SemanticKernel;
 using AutoMapper;
+using System.Diagnostics;
 using static AiCoreApi.Common.ExceptionHandlingMiddleware;
 
 namespace AiCoreApi.Services.ControllersServices;
@@ -126,46 +127,51 @@ public class EvaluationService : IEvaluationService
         var systemPrompt = "You are an expert evaluator. Your task is to assess how well a candidate answer matches a reference answer. Use semantic understanding, not just surface similarity. Differences in wording are acceptable if the meaning is preserved. Output only a score from 0 to 100, where:\r\n- 100 means completely correct in meaning,\r\n- 0 means completely incorrect or unrelated.\r\nNo explanation. Only return a single number.";
 
         int completionsCount = 0;
+        int overallDurationMs = 0;
         int totalQuestions = evaluation.Questions.Sum(q => q.SampleSize);
         foreach (var question in evaluation.Questions.SelectMany(q => Enumerable.Repeat(q, q.SampleSize)))
         {
             completionsCount++;
-            var result = "";
+            var answer = "";
             var score = 0;
             var input = "";
+            var durationMs = 0;
             var i = 0;
             foreach (var agentParameter in agentParameters)
                 input += $"{agentParameter.Trim()}: {question.Parameters[i++]}\n";
 
             try
             {
-                result = await RunAgent(evaluation, question);
+                var result = await RunAgent(evaluation, question);
+                answer = result.Answer;
+                durationMs = result.DurationMs;
                 var evaluationPrompt = evaluation.EvaluationPrompt;
                 evaluationPrompt = evaluationPrompt
                     .Replace("{{input}}", input)
                     .Replace("{{reference}}", question.ExpectedResult)
-                    .Replace("{{candidate}}", result);
+                    .Replace("{{candidate}}", answer);
                 var promptResult = await _semanticKernelProvider.ExecutePrompt(connection, evaluationPrompt, 0, 1, systemPrompt);
                 score = Convert.ToInt32(promptResult.Trim());
             }
             catch (Exception e)
             {
-                result = $"Exception: {e.Message}";
+                answer = $"Exception: {e.Message}";
             }
             var debugMessages = _responseAccessor.CurrentMessage.DebugMessages.ToJson() ?? "";
             overallScore += score;
+            overallDurationMs += durationMs;
             evaluationHistory.Questions.Add(new EvaluationHistoryQuestionModel
             {
                 Parameters = question.Parameters,
                 ExpectedResult = question.ExpectedResult,
-                Result = result,
+                Result = answer,
                 DebugMessages = debugMessages,
-                Score = score
+                Score = score,
+                DurationTotalMs = durationMs,
             });
             evaluation.Progress = $"{(completionsCount == totalQuestions ? "Done" : "In Progress")} [{completionsCount}/{totalQuestions}]";
             await _evaluationProcessor.Update(evaluation);
             await _evaluationHistoryProcessor.Update(evaluationHistory);
-
         }
         if (completionsCount > 0)
         {
@@ -174,12 +180,12 @@ public class EvaluationService : IEvaluationService
         var overallScoreInt = Convert.ToInt32(overallScore);
         if (useRevert && evaluation.LastScore > overallScoreInt)
         {
-            evaluationHistory.Status = $"Completed [{completionsCount}/{totalQuestions}], Score: {overallScoreInt}. Reverted.";
+            evaluationHistory.Status = $"Completed [{completionsCount}/{totalQuestions}], Score: {overallScoreInt}, Duration total: {overallDurationMs:n0} ms. Reverted.";
         }
         else
         {
             evaluation.LastScore = overallScoreInt;
-            evaluationHistory.Status = $"Completed [{completionsCount}/{totalQuestions}], Score: {overallScoreInt}";
+            evaluationHistory.Status = $"Completed [{completionsCount}/{totalQuestions}], Score: {overallScoreInt}, Duration total: {overallDurationMs:n0} ms";
         }
         await _evaluationProcessor.Update(evaluation);
         await _evaluationHistoryProcessor.Update(evaluationHistory);
@@ -220,7 +226,7 @@ public class EvaluationService : IEvaluationService
         return agentParameters;
     }
 
-    private async Task<string> RunAgent(EvaluationModel evaluation, EvaluationQuestionModel question)
+    private async Task<(string Answer, int DurationMs)> RunAgent(EvaluationModel evaluation, EvaluationQuestionModel question)
     {
         if(_responseAccessor.CurrentMessage.DebugMessages != null)
             _responseAccessor.CurrentMessage.DebugMessages.Clear();
@@ -233,8 +239,8 @@ public class EvaluationService : IEvaluationService
                 {
                     Sender = "User",
                     Text = string.Empty,
-                    Options = new MessageDialogViewModel.CallOptions[]
-                    {
+                    Options =
+                    [
                         new()
                         {
                             Type = MessageDialogViewModel.CallOptions.CallOptionsType.AgentCall,
@@ -243,12 +249,22 @@ public class EvaluationService : IEvaluationService
                                 .Select((p, i) => new {name = $"parameter{i + 1}", value = p})
                                 .ToDictionary(p => p.name, p => p.value),
                         }
-                    }
+                    ]
                 }
             }
         };
-        var result = await _agentExecutor.ExecuteAsync(evaluation.AgentName, question.Parameters);
-        return result;
+        var stopwatch = Stopwatch.StartNew();
+        try
+        {
+            var result = await _agentExecutor.ExecuteAsync(evaluation.AgentName, question.Parameters);
+            stopwatch.Stop();
+            var durationMs = (int)stopwatch.ElapsedMilliseconds;
+            return (result, durationMs);
+        }
+        finally
+        {
+            stopwatch.Stop();
+        }
     }
 
     public async Task<List<DebugMessageViewModel>> GetDebugMessages(int evaluationHistoryId, int logId)
