@@ -285,9 +285,9 @@ namespace AiCoreApi.Common
         private class McpActionParameter
         {
             [JsonPropertyName("name")] public string Name { get; set; } = string.Empty;
+            [JsonPropertyName("value")] public string Value { get; set; } = string.Empty;
             [JsonPropertyName("type")] public string Type { get; set; } = string.Empty;
             [JsonPropertyName("enum")] public string[] Enum { get; set; } = { };
-            [JsonPropertyName("value")] public string Value { get; set; } = string.Empty;
             [JsonPropertyName("canBeNull")] public bool CanBeNull { get; set; } = false;
 
         }

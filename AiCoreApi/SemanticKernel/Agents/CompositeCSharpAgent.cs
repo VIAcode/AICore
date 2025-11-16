@@ -115,7 +115,7 @@ class Agent
             var taskPrompt = await GetParameterValueAsync(AgentContentParameters.Prompt);
 
             var paramDescription = ParameterRecordModel.Parse(agent.Content["parameterDescription"].Value)
-                .Select((p, i) => $@"        // Parameter{i + 1}: {p}{Environment.NewLine}string parameter{i + 1} = Parameters[""parameter{i + 1}""];")
+                .Select((p, i) => $@"        // Parameter{i + 1}: {p.Name}{Environment.NewLine}string parameter{i + 1} = Parameters[""parameter{i + 1}""];")
                 .ToList();
             var parametersDescription = string.Join(Environment.NewLine, paramDescription);
 
