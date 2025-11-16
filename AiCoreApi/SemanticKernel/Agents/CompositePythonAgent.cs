@@ -1,14 +1,17 @@
-using Microsoft.SemanticKernel;
-using AiCoreApi.Models.DbModels;
 using AiCoreApi.Common;
-using AiCoreApi.Data.Processors;
-using System.Collections.Concurrent;
 using AiCoreApi.Common.Extensions;
+using AiCoreApi.Data.Processors;
+using AiCoreApi.Models.DbModels;
+using Microsoft.SemanticKernel;
+using System.Collections.Concurrent;
+using AiCoreApi.Models.ViewModels;
 using static AiCoreApi.Common.ExceptionHandlingMiddleware;
+using AgentType = AiCoreApi.Models.DbModels.AgentType;
+using ConnectionType = AiCoreApi.Models.DbModels.ConnectionType;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
-    public class CompositePythonAgent : BaseEnabledAgentsAgent, ICompositePythonAgent
+    public class CompositePythonAgent : BaseCompositeAgent, ICompositePythonAgent
     {
         private static ConcurrentDictionary<string, string> CodeCache = new();
         private string _debugMessageSenderName = "CompositePythonAgent";
@@ -99,10 +102,8 @@ result = ..expected_output..
             var temperature = GetTemperature(llmConnection, agent);
             var topP = GetTopP(agent);
             var prompt = await GetParameterValueAsync(AgentContentParameters.Prompt);
-
-            var parameterDescription = agent.Content["parameterDescription"].Value
-                .Split(',')
-                .Select((p, i) => $@"# Parameter{i + 1}: {p} (string)
+            var parameterDescription = ParameterRecordModel.Parse(agent.Content["parameterDescription"].Value)
+                .Select((p, i) => $@"# Parameter{i + 1}: {p.Name} (string)
 parameter{i + 1} = Parameters['parameter{i + 1}']")
                 .ToList();
             var parametersDescription = string.Join(Environment.NewLine, parameterDescription);
@@ -177,7 +178,7 @@ Use `ExecuteAgent('AgentName', ['param1', 'param2'])` to call.
                     result += $@"
 ## AgentName: {agentItem.Name}
 - Description: {agentItem.Description}
-- Parameters: {agentItem.Content.GetValueOrDefault("parameterDescription")?.Value ?? ""}
+- Parameters: {GetParametersDefinition(ParameterRecordModel.Parse(agentItem.Content.GetValueOrDefault("parameterDescription")?.Value ?? ""))}
 - Output: {agentItem.Content["outputDescription"].Value}
 ";
                 }

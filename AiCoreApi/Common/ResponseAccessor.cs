@@ -10,7 +10,9 @@ namespace AiCoreApi.Common
         private readonly ILogger<ResponseAccessor> _logger;
         private readonly RequestAccessor _requestAccessor;
         private readonly ICacheAccessor _cacheAccessor;
+        private const string DebugCachePrefix = "Debug_";
         private const string ReasoningCachePrefix = "Reasoning_";
+        private const int DebugCacheTimeout = 600;
         private const int ReasoningCacheTimeout = 600;
         public ResponseAccessor(
             ExtendedConfig extendedConfig,
@@ -50,18 +52,34 @@ namespace AiCoreApi.Common
                 var chatItemId = _requestAccessor?.MessageDialog?.Messages?.Last().ChatItemId;
                 if (!string.IsNullOrEmpty(chatItemId))
                 {
-                    _cacheAccessor.SetCacheValue($"{ReasoningCachePrefix}{chatItemId}", CurrentMessage.DebugMessages.ToJson()!, ReasoningCacheTimeout);
+                    _cacheAccessor.SetCacheValue($"{DebugCachePrefix}{chatItemId}", CurrentMessage.DebugMessages.ToJson()!, DebugCacheTimeout);
                 }
             }
             _logger.LogDebug("{4}, {0}: {1}, {2}", sender, title, details, _requestAccessor.Login);
         }
+
+        public void AddReasoningMessage(string message)
+        {
+            if (_extendedConfig.UseReasoningMessages)
+            {
+                var chatItemId = _requestAccessor?.MessageDialog?.Messages?.Last().ChatItemId;
+                if (!string.IsNullOrEmpty(chatItemId))
+                {
+                    var existingMessages = GetReasoningMessages(chatItemId);
+                    existingMessages.Add(message);
+                    _cacheAccessor.SetCacheValue($"{ReasoningCachePrefix}{chatItemId}", existingMessages.ToJson()!, ReasoningCacheTimeout);
+                }
+            }
+            _logger.LogDebug("Reasoning: {0}, {1}", message, _requestAccessor.Login);
+        }
+
         public int Level { get; set; } = 0;
 
         public List<MessageDialogViewModel.DebugMessage> GetDebugMessages(string chatMessageId)
         {
             if (string.IsNullOrEmpty(chatMessageId))
                 return new List<MessageDialogViewModel.DebugMessage>();
-            var resultString = _cacheAccessor.GetCacheValue($"{ReasoningCachePrefix}{chatMessageId}");
+            var resultString = _cacheAccessor.GetCacheValue($"{DebugCachePrefix}{chatMessageId}");
             if (string.IsNullOrEmpty(resultString))
                 return new List<MessageDialogViewModel.DebugMessage>();
             var result = resultString.JsonGet<List<MessageDialogViewModel.DebugMessage>>();
@@ -69,6 +87,22 @@ namespace AiCoreApi.Common
             {
                 _logger.LogWarning("GetDebugMessages: result is null for chatMessageId {ChatMessageId}", chatMessageId);
                 return new List<MessageDialogViewModel.DebugMessage>();
+            }
+            return result;
+        }
+
+        public List<string> GetReasoningMessages(string chatMessageId)
+        {
+            if (string.IsNullOrEmpty(chatMessageId))
+                return new List<string>();
+            var resultString = _cacheAccessor.GetCacheValue($"{ReasoningCachePrefix}{chatMessageId}");
+            if (string.IsNullOrEmpty(resultString))
+                return new List<string>();
+            var result = resultString.JsonGet<List<string>>();
+            if (result == null)
+            {
+                _logger.LogWarning("GetReasoningMessages: result is null for chatMessageId {ChatMessageId}", chatMessageId);
+                return new List<string>();
             }
             return result;
         }
