@@ -174,5 +174,15 @@ namespace AiCoreApi.Controllers
             var result = await _copilotService.GetDebugMessages(chatMessageId);
             return Ok(result);
         }
+
+        [HttpGet("reasoning/{chatMessageId}")]
+        [CombinedAuthorize]
+        [Consumes("application/json")]
+        [SwaggerResponse(StatusCodes.Status200OK, Type = typeof(List<MessageDialogViewModel.DebugMessage>))]
+        public async Task<IActionResult> GetReasoningMessages(string chatMessageId)
+        {
+            var result = await _copilotService.GetReasoningMessages(chatMessageId);
+            return Ok(result);
+        }
     }
 }

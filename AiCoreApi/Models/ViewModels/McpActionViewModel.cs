@@ -8,6 +8,7 @@ namespace AiCoreApi.Models.ViewModels
         public string Name { get; set; } = string.Empty;
         public string Description { get; set; } = string.Empty;
         public List<McpActionParameterViewModel>? Parameters { get; set; }
+        public string OutputSchema { get; set; } = string.Empty;
 
     }
 
@@ -18,5 +19,6 @@ namespace AiCoreApi.Models.ViewModels
         public string Type { get; set; } = string.Empty;
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public List<string>? Enum { get; set; }
+        public bool CanBeNull { get; set; } = false;
     }
 }

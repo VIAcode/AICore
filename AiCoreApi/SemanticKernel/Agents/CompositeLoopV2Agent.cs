@@ -2,14 +2,17 @@ using AiCoreApi.Common;
 using AiCoreApi.Common.Extensions;
 using AiCoreApi.Data.Processors;
 using AiCoreApi.Models.DbModels;
+using AiCoreApi.Models.ViewModels;
 using Microsoft.SemanticKernel.ChatCompletion;
 using static AiCoreApi.Common.ExceptionHandlingMiddleware;
+using ConnectionType = AiCoreApi.Models.DbModels.ConnectionType;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
-    public class CompositeLoopV2Agent : BaseEnabledAgentsAgent, ICompositeLoopV2Agent
+    public class CompositeLoopV2Agent : BaseCompositeAgent, ICompositeLoopV2Agent
     {
         private string _debugMessageSenderName = "CompositeLoopV2Agent";
+        private readonly ExtendedConfig _extendedConfig;
         private readonly RequestAccessor _requestAccessor;
         private readonly ResponseAccessor _responseAccessor;
         private readonly IPlannerHelpers _plannerHelpers;
@@ -23,18 +26,24 @@ namespace AiCoreApi.SemanticKernel.Agents
           ""properties"": {
             ""action"": { ""type"": ""string"", ""enum"": [""call""] },
             ""agent"": { ""type"": ""string"", ""description"": ""Agent Name"" },
-            ""params"": { ""type"": ""array"", ""items"": { ""type"": ""string"" } }
+            ""parameters"": {
+              ""type"": ""object"",
+              ""description"": ""Dictionary of named parameters to pass into the agent."",
+              ""additionalProperties"": { ""type"": ""string"" }
+            },
+            ""description"": { ""type"": ""string"", ""description"": ""A short, user-friendly explanation (in plain language) of why this agent is being called. This explanation must be written for the end user, not a developer. Avoid technical details; describe the purpose in a way a non-technical user can understand"" }
           },
-          ""required"": [""action"", ""agent"", ""params""],
+          ""required"": [""action"", ""agent"", ""parameters"", ""description""],
           ""additionalProperties"": false
         },";
         private const string RevisePlanCustomAction = @"{
           ""type"": ""object"",
           ""properties"": {
             ""action"": { ""type"": ""string"", ""enum"": [""modifyexecutionplan""] },
-            ""changeReason"": { ""type"": ""string"", ""description"": ""Reason for modification"" }
+            ""changeReason"": { ""type"": ""string"", ""description"": ""Reason for modification"" },
+            ""description"": { ""type"": ""string"", ""description"": ""A short, user-friendly explanation (in plain language) of why the execution plan is being modified. This explanation must be written for the end user, not a developer. Avoid technical details; describe the purpose in a way a non-technical user can understand"" }
           },
-          ""required"": [""action"", ""changeReason""],
+          ""required"": [""action"", ""changeReason"", ""description""],
           ""additionalProperties"": false
         },";
 
@@ -50,9 +59,10 @@ namespace AiCoreApi.SemanticKernel.Agents
           ""type"": ""object"",
           ""properties"": {
             ""action"": { ""type"": ""string"", ""enum"": [""finish""] },
-            ""result"": { ""type"": ""string"", ""description"": ""Answer to the users question"" }
+            ""result"": { ""type"": ""string"", ""description"": ""Answer to the users question"" },
+            ""description"": { ""type"": ""string"", ""description"": ""A short, user-friendly explanation (in plain language) of how the result was obtained. This explanation must be written for the end user, not a developer. Avoid technical details; describe the purpose in a way a non-technical user can understand"" }
           },
-          ""required"": [""action"", ""result""],
+          ""required"": [""action"", ""result"", ""description""],
           ""additionalProperties"": false
         },
         {
@@ -60,9 +70,10 @@ namespace AiCoreApi.SemanticKernel.Agents
           ""type"": ""object"",
           ""properties"": {
             ""action"": { ""type"": ""string"", ""enum"": [""cannot""] },
-            ""reason"": { ""type"": ""string"", ""description"": ""The reason why can not answer"" }
+            ""reason"": { ""type"": ""string"", ""description"": ""The reason why can not answer"" },
+            ""description"": { ""type"": ""string"", ""description"": ""A short, user-friendly explanation (in plain language) of why the planner cannot complete the request. This explanation must be written for the end user, not a developer. Avoid technical details; describe the purpose in a way a non-technical user can understand"" }
           },
-          ""required"": [""action"", ""reason""],
+          ""required"": [""action"", ""reason"", ""description""],
           ""additionalProperties"": false
         }
       ]
@@ -90,6 +101,7 @@ namespace AiCoreApi.SemanticKernel.Agents
         }
 
         public CompositeLoopV2Agent(
+            ExtendedConfig extendedConfig,
             IBaseAgentHelper baseAgentHelper,
             IPlannerHelpers plannerHelpers,
             IAgentExecutor agentExecutor,
@@ -100,6 +112,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             ILogger<CompositeLoopV2Agent> logger)
             : base(baseAgentHelper, logger)
         {
+            _extendedConfig = extendedConfig;
             _requestAccessor = requestAccessor;
             _responseAccessor = responseAccessor;
             _plannerHelpers = plannerHelpers;
@@ -232,6 +245,10 @@ namespace AiCoreApi.SemanticKernel.Agents
 
                 // Parse and execute planner instruction
                 var instruction = ParsePlannerResponse(plannerResponse);
+
+                if (_extendedConfig.UseReasoningMessages && !string.IsNullOrEmpty(instruction.Description))
+                    _responseAccessor.AddReasoningMessage(instruction.Description);
+
                 var result = await ExecutePlannerInstructionAsync(
                     instruction,
                     config,
@@ -292,19 +309,20 @@ namespace AiCoreApi.SemanticKernel.Agents
         {
             try
             {
-                var subAgentResult = await _agentExecutor.ExecuteAsync(instruction.Agent, instruction.Params);
-                if(subAgentResult.Length > config.MaxStepAnswerLength && config.MaxStepAnswerLength > 0)
+                var paramList = instruction.Parameters?.Values.ToList() ?? new List<string>();
+                var subAgentResult = await _agentExecutor.ExecuteAsync(instruction.Agent, paramList);
+                if (subAgentResult.Length > config.MaxStepAnswerLength && config.MaxStepAnswerLength > 0)
                 {
                     subAgentResult = subAgentResult.Substring(0, config.MaxStepAnswerLength) + "...";
                 }
-                context.AddExecutionEntry(instruction.Agent, instruction.Params, subAgentResult);
+                context.AddExecutionEntry(instruction.Agent, instruction.Parameters, subAgentResult);
                 context.ExecutionHistory.Last().PlannerResponse = plannerResponse;
             }
 
             catch (Exception ex)
             {
                 var errorText = $"ERROR: {ex.Message}";
-                context.AddExecutionEntry(instruction.Agent, instruction.Params, errorText);
+                context.AddExecutionEntry(instruction.Agent, instruction.Parameters, errorText);
                 context.ExecutionHistory.Last().PlannerResponse = plannerResponse;
             }
         }
@@ -410,7 +428,7 @@ Provide a clear, revised execution plan that addresses the issues and outlines t
                         result += $@"
 ## AgentName: {agentItem.Name}
 - Description: {agentItem.Description}
-- Parameters: {agentItem.Content.GetValueOrDefault("parameterDescription")?.Value ?? ""}
+- Parameters: {GetParametersDefinition(ParameterRecordModel.Parse(agentItem.Content.GetValueOrDefault("parameterDescription")?.Value ?? ""))}
 - Output: {agentItem.Content["outputDescription"].Value}
 ";
                 }
@@ -464,9 +482,10 @@ Provide a clear, revised execution plan that addresses the issues and outlines t
         {
             public string Action { get; set; } = "";
             public string Agent { get; set; } = "";
-            public List<string> Params { get; set; } = new();
+            public Dictionary<string, string> Parameters { get; set; } = new();
             public string Result { get; set; } = "";
             public string Reason { get; set; } = "";
+            public string Description { get; set; } = "";
             public string ChangeReason { get; set; } = "";
         }
 
@@ -542,12 +561,12 @@ Provide a clear, revised execution plan that addresses the issues and outlines t
             ExecutionPlan = newPlan ?? string.Empty;
         }
 
-        public void AddExecutionEntry(string agentName, List<string> parameters, string result)
+        public void AddExecutionEntry(string agentName, Dictionary<string, string>? parameters, string? result)
         {
             ExecutionHistory.Add(new ExecutionHistoryEntry
             {
                 AgentName = agentName,
-                Parameters = parameters ?? new List<string>(),
+                Parameters = parameters ?? new Dictionary<string, string>(),
                 Result = result ?? string.Empty,
                 Timestamp = DateTime.UtcNow
             });
@@ -561,7 +580,7 @@ Provide a clear, revised execution plan that addresses the issues and outlines t
             return string.Join(
                 Environment.NewLine,
                 ExecutionHistory.Select(h =>
-                    $"Agent: {h.AgentName}, Params: [{string.Join(", ", h.Parameters)}], Result: {h.Result}"));
+                    $"Agent: {h.AgentName}, Params: {{{string.Join(", ", h.Parameters.Select(kvp => $"{kvp.Key}: {kvp.Value}"))}}}, Result: {h.Result}"));
         }
 
         public ChatHistory ProduceChatHistory(AgentConfiguration config)
@@ -659,7 +678,7 @@ Based on this, decide the next best action.";
     public class ExecutionHistoryEntry
     {
         public string AgentName { get; set; } = "";
-        public List<string> Parameters { get; set; } = new();
+        public Dictionary<string, string> Parameters { get; set; } = new();
         public string Result { get; set; } = "";
         public string PlannerPrompt { get; set; } = "";
         public string PlannerResponse { get; set; } = "";

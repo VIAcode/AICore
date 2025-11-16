@@ -1,4 +1,5 @@
-﻿using Newtonsoft.Json;
+﻿using AiCoreApi.Common.Extensions;
+using Newtonsoft.Json;
 
 namespace AiCoreApi.Models.ViewModels
 {
@@ -31,6 +32,34 @@ namespace AiCoreApi.Models.ViewModels
     {
         public string Name { get; set; } = string.Empty;
         public string Description { get; set; } = string.Empty;
+    }
+
+    public class ParameterRecordModel
+    {
+
+        public string Name { get; set; } = string.Empty;
+        public string? Description { get; set; }
+        public string? Type { get; set; }
+        public List<string>? EnumValues { get; set; }
+        public bool? CanBeNull { get; set; }
+
+        public static List<ParameterRecordModel> Parse(string? parameterDescription)
+        {
+            if (string.IsNullOrWhiteSpace(parameterDescription))
+                return new List<ParameterRecordModel>();
+            
+            var parameterDescriptionValue = parameterDescription.JsonGet<List<ParameterRecordModel>>();
+            if (parameterDescriptionValue != null)
+            {
+                return parameterDescriptionValue;
+            }
+            return parameterDescription.Split(',', StringSplitOptions.RemoveEmptyEntries).Select(parameter => new ParameterRecordModel
+            {
+                Name = parameter.Trim(),
+                Description = string.Empty,
+                Type = "string",
+            }).ToList();
+        }
     }
 
     public enum AgentType

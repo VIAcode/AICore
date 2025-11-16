@@ -4,11 +4,14 @@ using AiCoreApi.Common;
 using AiCoreApi.Data.Processors;
 using System.Collections.Concurrent;
 using AiCoreApi.Common.Extensions;
+using AiCoreApi.Models.ViewModels;
 using static AiCoreApi.Common.ExceptionHandlingMiddleware;
+using AgentType = AiCoreApi.Models.DbModels.AgentType;
+using ConnectionType = AiCoreApi.Models.DbModels.ConnectionType;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
-    public class CompositeCSharpAgent : BaseEnabledAgentsAgent, ICompositeCSharpAgent
+    public class CompositeCSharpAgent : BaseCompositeAgent, ICompositeCSharpAgent
     {
         private readonly ICsharpCodeAgent _csharpCodeAgent;
         private readonly RequestAccessor _requestAccessor;
@@ -111,9 +114,8 @@ class Agent
             var topP = GetTopP(agent);
             var taskPrompt = await GetParameterValueAsync(AgentContentParameters.Prompt);
 
-            var paramDescription = agent.Content["parameterDescription"].Value
-                .Split(',')
-                .Select((p, i) => $@"        // Parameter{i + 1}: {p}{Environment.NewLine}string parameter{i + 1} = Parameters[""parameter{i + 1}""];")
+            var paramDescription = ParameterRecordModel.Parse(agent.Content["parameterDescription"].Value)
+                .Select((p, i) => $@"        // Parameter{i + 1}: {p.Name}{Environment.NewLine}string parameter{i + 1} = Parameters[""parameter{i + 1}""];")
                 .ToList();
             var parametersDescription = string.Join(Environment.NewLine, paramDescription);
 
@@ -194,7 +196,7 @@ Error:
             var result = @"
 # Agents
 If possible, use existing Agents. Do not re-implement their functionality.
-Syntax: ExecuteAgent(""agentName"", new List<string> { ""Param1"", ""Param2"" });
+Syntax: ExecuteAgent(""agentName"", new List<string> { ""Param1Value"", ""Param2Value"", ... });
 Existing Agents:
 ";
 
@@ -206,7 +208,7 @@ Existing Agents:
                     result += $@"
 ## AgentName: {item.Name}
 - Description: {item.Description}
-- Parameters: {item.Content.GetValueOrDefault("parameterDescription")?.Value ?? ""}
+- Parameters: {GetParametersDefinition(ParameterRecordModel.Parse(item.Content.GetValueOrDefault("parameterDescription")?.Value ?? ""))}
 - Output: {item.Content.GetValueOrDefault("outputDescription")?.Value ?? ""}
 ";
                 }

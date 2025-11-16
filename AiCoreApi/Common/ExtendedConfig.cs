@@ -287,6 +287,12 @@ public class ExtendedConfig
     [Tooltip("Specifies if Debug Log should be used for each call. When enabled, the system logs detailed debug information for each call, which can be useful for troubleshooting and analysis.")]
     public bool UseDebugLogForEachCall => GetValue<bool>("UseDebugLogForEachCall", false);
 
+    [Category(CategoryAttribute.ConfigCategoryEnum.Debug)]
+    [DataType(DataTypeAttribute.ConfigDataTypeEnum.Boolean)]
+    [Description("Use Reasoning Messages")]
+    [Tooltip("Specifies if Reasoning Messages are used. When enabled, the system includes reasoning messages in the debug output, providing additional context and information about the decision-making process of the AI model.")]
+    public bool UseReasoningMessages => GetValue<bool>("UseReasoningMessages", false);
+
     [Category(CategoryAttribute.ConfigCategoryEnum.Nuget)]
     [DataType(DataTypeAttribute.ConfigDataTypeEnum.Boolean)]
     [Description("Use Custom Nuget Feed")]
