@@ -8,6 +8,8 @@ using System.Web;
 using AiCoreApi.Services.IngestionServices;
 using AiCoreApi.Data.Processors;
 using System.Text.RegularExpressions;
+using AiCoreApi.Models.ViewModels;
+using ConnectionType = AiCoreApi.Models.DbModels.ConnectionType;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
@@ -52,8 +54,8 @@ namespace AiCoreApi.SemanticKernel.Agents
             var parametersList = new List<KernelParameterMetadata>();
             if (agent.Content.ContainsKey(AgentContentParameters.ParameterDescription) && !string.IsNullOrWhiteSpace(agent.Content[AgentContentParameters.ParameterDescription].Value))
             {
-                var parameterDescription = agent.Content[AgentContentParameters.ParameterDescription].Value?.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
-                parametersList.AddRange(parameterDescription.Select((t, i) => new KernelParameterMetadata(name: $"parameter{i + 1}") { Description = t, IsRequired = true }));
+                var parameterDescription = ParameterRecordModel.Parse(agent.Content[AgentContentParameters.ParameterDescription].Value);
+                parametersList.AddRange(parameterDescription.Select((t, i) => new KernelParameterMetadata(name: $"parameter{i + 1}") { Description = t.Name, IsRequired = true }));
             }
             var returnParam = new KernelReturnParameterMetadata { Description = outputDescription };
             var function = kernel.CreateFunctionFromMethod(

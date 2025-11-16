@@ -15,7 +15,6 @@ namespace AiCoreApi.Services.ProcessingServices
         private readonly IDebugLogProcessor _debugLogProcessor;
         private readonly ILoginProcessor _loginProcessor; 
         private readonly ExtendedConfig _extendedConfig;
-        private readonly IAgentExecutor _agentExecutor;
         private readonly IPlannerHelpers _plannerHelpers;
         public const string ParameterDescription = "parameterDescription";
 
@@ -23,13 +22,11 @@ namespace AiCoreApi.Services.ProcessingServices
             IDebugLogProcessor debugLogProcessor,
             ILoginProcessor loginProcessor,
             ExtendedConfig extendedConfig,
-            IAgentExecutor agentExecutor,
             IPlannerHelpers plannerHelpers)
         {
             _debugLogProcessor = debugLogProcessor;
             _loginProcessor = loginProcessor;
             _extendedConfig = extendedConfig;
-            _agentExecutor = agentExecutor;
             _plannerHelpers = plannerHelpers;
         }
 
@@ -41,30 +38,16 @@ namespace AiCoreApi.Services.ProcessingServices
                     agent.Content[AgentTypeCalls.AgentCallTypeFieldName].Value.Contains(AgentTypeCalls.McpCall))
                 .Select(agent =>
                 {
-                    var parameters = new List<string>();
+                    var parameters = new List<ParameterRecordModel>();
                     if (agent.Content.ContainsKey(ParameterDescription) && !string.IsNullOrWhiteSpace(agent.Content[ParameterDescription].Value))
                     {
-                        parameters = agent.Content[ParameterDescription].Value
-                            .Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
-                            .ToList();
+                        parameters = ParameterRecordModel.Parse(agent.Content[ParameterDescription].Value);
                     }
                     return new Tool
                     {
                         Name = GetAlias(agent.Name),
                         Description = agent.Description,
-                        InputSchema = JsonDocument.Parse($@"
-                        {{
-                            ""type"": ""object"",
-                            ""properties"": {{
-                                {string.Join(",", parameters.Select(parameter => $@"
-                                    ""{GetAlias(parameter)}"": {{
-                                        ""type"": ""string"",
-                                        ""description"": ""{parameter}""
-                                    }}"
-                                ))}
-                            }},
-                            ""required"": [{string.Join(",", parameters.Select(param => $@"""{GetAlias(param)}"""))}]
-                        }}").RootElement
+                        InputSchema = BuildInputSchema(parameters)
                     };
                 }).ToList();
 
@@ -113,9 +96,8 @@ namespace AiCoreApi.Services.ProcessingServices
                         !string.IsNullOrWhiteSpace(agent.Content[ParameterDescription].Value) &&
                         context.Params.Arguments != null)
                     {
-                        parameters = agent.Content[ParameterDescription].Value
-                            .Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
-                            .Select(GetAlias)
+                        parameters = ParameterRecordModel.Parse(agent.Content[ParameterDescription].Value)
+                            .Select(item => GetAlias(item.Name))
                             .Select(param =>
                                 context.Params.Arguments.ContainsKey(param)
                                     ? $"{context.Params.Arguments[param].GetString()}"
@@ -126,7 +108,8 @@ namespace AiCoreApi.Services.ProcessingServices
                     requestAccessor.WorkspaceId = agent.WorkspaceId;
                     try
                     {
-                        result = await _agentExecutor.ExecuteAsync(agent.Name, parameters);
+                        var agentExecutor = scope.ServiceProvider.GetRequiredService<IAgentExecutor>();
+                        result = await agentExecutor.ExecuteAsync(agent.Name, parameters);
                     }
                     catch (Exception ex)
                     {
@@ -179,6 +162,24 @@ namespace AiCoreApi.Services.ProcessingServices
         }
 
         private static string GetAlias(string name) => name.ToLower().Trim().Replace(" ", "_");
+        private static JsonElement BuildInputSchema(List<ParameterRecordModel> parameters)
+        {
+            using var doc = JsonDocument.Parse(JsonSerializer.Serialize(new
+            {
+                type = "object",
+                properties = parameters.ToDictionary(
+                    p => GetAlias(p.Name),
+                    p => new
+                    {
+                        type = p.Type,
+                        description = p.Description,
+                        @enum = p.EnumValues
+                    }
+                ),
+                required = parameters.Select(p => GetAlias(p.Name)).ToArray()
+            }));
+            return doc.RootElement.Clone();
+        }
     }
 
     public interface IMcpServerProcessingService

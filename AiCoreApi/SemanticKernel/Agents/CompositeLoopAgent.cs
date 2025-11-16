@@ -1,14 +1,17 @@
-using AiCoreApi.Models.DbModels;
 using AiCoreApi.Common;
-using AiCoreApi.Data.Processors;
-using static AiCoreApi.Common.ExceptionHandlingMiddleware;
 using AiCoreApi.Common.Extensions;
+using AiCoreApi.Data.Processors;
+using AiCoreApi.Models.DbModels;
+using AiCoreApi.Models.ViewModels;
+using static AiCoreApi.Common.ExceptionHandlingMiddleware;
+using ConnectionType = AiCoreApi.Models.DbModels.ConnectionType;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
-    public class CompositeLoopAgent : BaseEnabledAgentsAgent, ICompositeLoopAgent
+    public class CompositeLoopAgent : BaseCompositeAgent, ICompositeLoopAgent
     {
         private string _debugMessageSenderName = "CompositeLoopAgent";
+        private readonly ExtendedConfig _extendedConfig;
         private readonly RequestAccessor _requestAccessor;
         private readonly ResponseAccessor _responseAccessor;
         private readonly IPlannerHelpers _plannerHelpers;
@@ -23,9 +26,14 @@ namespace AiCoreApi.SemanticKernel.Agents
           ""properties"": {
             ""action"": { ""type"": ""string"", ""enum"": [""call""] },
             ""agent"": { ""type"": ""string"", ""description"": ""Agent Name"" },
-            ""params"": { ""type"": ""array"", ""items"": { ""type"": ""string"" } }
+            ""parameters"": { 
+              ""type"": ""object"", 
+              ""description"": ""Dictionary of named parameters to pass into the agent."",
+              ""additionalProperties"": { ""type"": ""string"" }
+            },
+            ""description"": { ""type"": ""string"", ""description"": ""A short, user-friendly explanation (in plain language) of why this agent is being called. This explanation must be written for the end user, not a developer. Avoid technical details; describe the purpose in a way a non-technical user can understand"" }
           },
-          ""required"": [""action"", ""agent"", ""params""],
+          ""required"": [""action"", ""agent"", ""parameters"", ""description""],
           ""additionalProperties"": false
         },";
 
@@ -41,9 +49,10 @@ namespace AiCoreApi.SemanticKernel.Agents
           ""type"": ""object"",
           ""properties"": {
             ""action"": { ""type"": ""string"", ""enum"": [""finish""] },
-            ""result"": { ""type"": ""string"", ""description"": ""Answer to the users question"" }
+            ""result"": { ""type"": ""string"", ""description"": ""Answer to the users question"" },
+            ""description"": { ""type"": ""string"", ""description"": ""A short, user-friendly explanation (in plain language) of the final answer. This explanation must be written for the end user, not a developer. Avoid technical details; describe the answer in a way a non-technical user can understand"" }
           },
-          ""required"": [""action"", ""result""],
+          ""required"": [""action"", ""result"", ""description""],
           ""additionalProperties"": false
         },
         {
@@ -51,9 +60,10 @@ namespace AiCoreApi.SemanticKernel.Agents
           ""type"": ""object"",
           ""properties"": {
             ""action"": { ""type"": ""string"", ""enum"": [""cannot""] },
-            ""reason"": { ""type"": ""string"", ""description"": ""The reason why can not answer"" }
+            ""reason"": { ""type"": ""string"", ""description"": ""The reason why can not answer"" },
+            ""description"": { ""type"": ""string"", ""description"": ""A short, user-friendly explanation (in plain language) of why the planner cannot complete the request. This explanation must be written for the end user, not a developer. Avoid technical details; describe the issue in a way a non-technical user can understand"" }
           },
-          ""required"": [""action"", ""reason""],
+          ""required"": [""action"", ""reason"", ""description""],
           ""additionalProperties"": false
         }
       ]
@@ -79,6 +89,7 @@ namespace AiCoreApi.SemanticKernel.Agents
         }
 
         public CompositeLoopAgent(
+            ExtendedConfig extendedConfig,
             IBaseAgentHelper baseAgentHelper,
             IPlannerHelpers plannerHelpers,
             IAgentExecutor agentExecutor,
@@ -89,6 +100,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             ILogger<CompositeLoopAgent> logger)
             : base(baseAgentHelper, logger)
         {
+            _extendedConfig = extendedConfig;
             _requestAccessor = requestAccessor;
             _responseAccessor = responseAccessor;
             _plannerHelpers = plannerHelpers;
@@ -133,13 +145,17 @@ namespace AiCoreApi.SemanticKernel.Agents
                 _responseAccessor.AddDebugMessage(_debugMessageSenderName, "Preprocessed Prompt", userInput);
             }
 
-            var history = new List<(string agent, List<string> @params, string result)>();
+            var history = new List<(string agent, Dictionary<string, string> parameters, string result)>();
 
             for (int i = 0; i < maxIterations; i++)
             {
                 var context = string.Join(
                     $"{Environment.NewLine}{Environment.NewLine}",
-                    history.Select(h => $"Agent: {h.agent}, Params: [{string.Join(", ", h.@params)}], Result: {h.result}"));
+                    history.Select(h =>
+                    {
+                        var paramsStr = string.Join(", ", h.parameters.Select(kvp => $"{kvp.Key}: {kvp.Value}"));
+                        return $"Agent: {h.agent}, Parameters: {{{paramsStr}}}, Result: {h.result}";
+                    }));
 
                 var jsonSchema = string.Empty;
                 if (i == maxIterations - 1)
@@ -175,17 +191,21 @@ namespace AiCoreApi.SemanticKernel.Agents
                 if (parsed == null || string.IsNullOrEmpty(parsed.Action))
                     throw new AiCoreUiException("Planner response invalid or empty");
 
+                if (_extendedConfig.UseReasoningMessages && !string.IsNullOrEmpty(parsed.Description))
+                    _responseAccessor.AddReasoningMessage(parsed.Description);
+
                 switch (parsed.Action.ToLower())
                 {
                     case "call":
                         try
                         {
-                            var subAgentResult = await _agentExecutor.ExecuteAsync(parsed.Agent, parsed.Params);
-                            history.Add((parsed.Agent, parsed.Params, subAgentResult));
+                            var paramsList = parsed.Parameters.Select(kvp => kvp.Value).ToList();
+                            var subAgentResult = await _agentExecutor.ExecuteAsync(parsed.Agent, paramsList);
+                            history.Add((parsed.Agent, parsed.Parameters, subAgentResult));
                         }
                         catch (Exception ex)
                         {
-                            history.Add((parsed.Agent, parsed.Params, $"ERROR: {ex.Message}"));
+                            history.Add((parsed.Agent, parsed.Parameters, $"ERROR: {ex.Message}"));
                         }
                         break;
 
@@ -221,7 +241,7 @@ namespace AiCoreApi.SemanticKernel.Agents
                 return string.Empty;
 
             var agentsList = await _plannerHelpers.GetAgentsList();
-            var result = $"# Agents (all parameters are strings, outputs are strings){Environment.NewLine}";
+            var result = $"# Agents (use named parameters as key-value pairs, all values are strings){Environment.NewLine}";
 
             foreach (var agentItem in agentsList)
             {
@@ -237,7 +257,7 @@ namespace AiCoreApi.SemanticKernel.Agents
                         result += $@"
 ## AgentName: {agentItem.Name}
 - Description: {agentItem.Description}
-- Parameters: {agentItem.Content.GetValueOrDefault("parameterDescription")?.Value ?? ""}
+- Parameters: {GetParametersDefinition(ParameterRecordModel.Parse(agentItem.Content.GetValueOrDefault("parameterDescription")?.Value ?? ""))}
 - Output: {agentItem.Content["outputDescription"].Value}
 ";
                 }
@@ -252,7 +272,8 @@ namespace AiCoreApi.SemanticKernel.Agents
                 return true;
             try
             {
-                var result = await _agentExecutor.ExecuteAsync(conditionAgent, parameters.Select(x => x.Value).ToList());
+                var paramsList = parameters.Select(kvp => kvp.Value).ToList();
+                var result = await _agentExecutor.ExecuteAsync(conditionAgent, paramsList);
                 return result.Trim().ToLower() == "true";
             }
             catch (Exception ex)
@@ -291,9 +312,10 @@ namespace AiCoreApi.SemanticKernel.Agents
         {
             public string Action { get; set; } = "";
             public string Agent { get; set; } = "";
-            public List<string> Params { get; set; } = new();
+            public Dictionary<string, string> Parameters { get; set; } = new();
             public string Result { get; set; } = "";
             public string Reason { get; set; } = "";
+            public string Description { get; set; } = "";
         }
     }
 

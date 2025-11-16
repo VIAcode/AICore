@@ -9,6 +9,16 @@ namespace AiCoreApi.Common
 {
     public class McpClient: IMcpClient
     {
+        private readonly ILogger<McpClient> _logger;
+        private readonly IHttpClientFactory _httpClientFactory;
+        public McpClient(
+            ILogger<McpClient> logger,
+            IHttpClientFactory httpClientFactory)
+        {
+            _logger = logger;
+            _httpClientFactory = httpClientFactory;
+        }
+
         public async Task<List<McpActionViewModel>?> GetActions(string serverUrl, string? customHeader)
         {
             try
@@ -29,7 +39,8 @@ namespace AiCoreApi.Common
                     }
                 }
 
-                var clientTransport = new SseClientTransport(sseClientTransportOptions);
+                using var httpClient = _httpClientFactory.CreateClient(HttpClients.NoRetryClient);
+                var clientTransport = new SseClientTransport(sseClientTransportOptions, httpClient);
 
                 await using var mcpClient = await McpClientFactory.CreateAsync(clientTransport!);
                 var tools = await mcpClient.ListToolsAsync();
@@ -38,13 +49,97 @@ namespace AiCoreApi.Common
                     Title = tool.Title,
                     Name = tool.Name,
                     Description = tool.Description,
-                    Parameters = ExtractParameters(tool.JsonSchema)
+                    Parameters = ExtractParameters(tool.JsonSchema),
+                    OutputSchema = ExtractOutputSchema(tool.ReturnJsonSchema)
                 }).ToList() ?? null;
             }
             catch (Exception ex)
             {
                 throw new AiCoreUiException($"Unable to retrieve MCP Actions: {ex.Message}");
             }
+        }
+
+        private string ExtractOutputSchema(JsonElement? schema)
+        {
+            try
+            {
+                if (!schema.HasValue || schema.Value.ValueKind == JsonValueKind.Undefined ||
+                    schema.Value.ValueKind == JsonValueKind.Null)
+                    return string.Empty;
+
+                var description = new System.Text.StringBuilder();
+
+                var mainType = ExtractTypeValue(schema.Value);
+                description.Append($"Type: {mainType}");
+
+                if (schema.Value.TryGetProperty("description", out var desc) && !string.IsNullOrEmpty(desc.GetString()))
+                {
+                    description.Append($". {desc.GetString()}");
+                }
+
+                if (schema.Value.TryGetProperty("properties", out var props) && props.ValueKind == JsonValueKind.Object)
+                {
+                    var requiredFields = new HashSet<string>();
+                    if (schema.Value.TryGetProperty("required", out var requiredEl) &&
+                        requiredEl.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (var req in requiredEl.EnumerateArray())
+                        {
+                            if (req.ValueKind == JsonValueKind.String)
+                                requiredFields.Add(req.GetString() ?? string.Empty);
+                        }
+                    }
+
+                    description.Append(" Properties: ");
+                    var propertyDescriptions = new List<string>();
+
+                    foreach (var prop in props.EnumerateObject())
+                    {
+                        var propValue = prop.Value;
+                        var propDesc = new System.Text.StringBuilder();
+
+                        propDesc.Append($"{prop.Name} ({ExtractTypeValue(propValue)}");
+
+                        if (requiredFields.Contains(prop.Name))
+                            propDesc.Append(", required");
+
+                        propDesc.Append(")");
+
+                        if (propValue.TryGetProperty("description", out var propDescription) &&
+                            !string.IsNullOrEmpty(propDescription.GetString()))
+                        {
+                            propDesc.Append($": {propDescription.GetString()}");
+                        }
+
+                        if (propValue.TryGetProperty("enum", out var enumEl) && enumEl.ValueKind == JsonValueKind.Array)
+                        {
+                            var enumValues = string.Join(", ", enumEl.EnumerateArray()
+                                .Where(e => e.ValueKind == JsonValueKind.String)
+                                .Select(e => e.GetString() ?? string.Empty));
+                            propDesc.Append($" Possible values: [{enumValues}]");
+                        }
+
+                        // Handle array items
+                        if (propValue.TryGetProperty("items", out var items))
+                        {
+                            propDesc.Append($" Items type: {ExtractTypeValue(items)}");
+                        }
+
+                        propertyDescriptions.Add(propDesc.ToString());
+                    }
+
+                    description.Append(string.Join("; ", propertyDescriptions));
+                }
+
+                return description.ToString();
+            }
+            catch (Exception ex)
+            {
+                // Just suppress any errors as MCP output schema is optional
+                _logger.LogError(ex, $"Error extracting output schema from MCP action: {ex.Message}");
+                return string.Empty;
+            }
+            
         }
 
         private List<McpActionParameterViewModel>? ExtractParameters(JsonElement schema)
@@ -62,11 +157,16 @@ namespace AiCoreApi.Common
                     var param = new McpActionParameterViewModel
                     {
                         Name = prop.Name,
-                        Description = obj.TryGetProperty("description", out var desc) ? desc.GetString() ?? string.Empty : string.Empty,
+                        Description = (obj.TryGetProperty("description", out var desc) ? desc.GetString() ?? string.Empty : string.Empty)
+                            + (obj.TryGetProperty("minimum", out var minimum) ? $" Minimum: {minimum.GetRawText()}." : string.Empty)
+                            + (obj.TryGetProperty("maximum", out var maximum) ? $" Maximum: {maximum.GetRawText()}." : string.Empty)
+                            + (obj.TryGetProperty("default", out var defaultValue) ? $" Default value: {defaultValue.GetRawText()}." : string.Empty)
+                            + (obj.TryGetProperty("items", out var arrayItems) ? $" Items format: {arrayItems.GetRawText()}." : string.Empty),
                         Type = ExtractTypeValue(obj),
                         Enum = obj.TryGetProperty("enum", out var enumEl) && enumEl.ValueKind == JsonValueKind.Array
                             ? enumEl.EnumerateArray().Select(e => e.GetString() ?? string.Empty).ToList()
-                            : null
+                            : null,
+                        CanBeNull = !(schema.TryGetProperty("required", out var requiredEl) && requiredEl.ValueKind == JsonValueKind.Array && requiredEl.EnumerateArray().Any(r => r.GetString() == prop.Name))
                     };
                     parameters.Add(param);
                 }
@@ -120,13 +220,15 @@ namespace AiCoreApi.Common
                     }
                 }
 
-                var clientTransport = new SseClientTransport(sseClientTransportOptions);
+                using var httpClient = _httpClientFactory.CreateClient(HttpClients.NoRetryClient);
+                var clientTransport = new SseClientTransport(sseClientTransportOptions, httpClient);
                 await using var mcpClient = await McpClientFactory.CreateAsync(clientTransport, cancellationToken: cancellationToken);
 
                 var actionRequest = JsonSerializer.Deserialize<McpActionRequest>(mcpServerActionJson)
                     ?? throw new AiCoreUiException("Invalid MCP action request JSON.");
 
                 var paramDict = actionRequest.ActionParameters?
+                        .Where(p => !((string.IsNullOrEmpty(p.Value) || p.Value.Equals("null", StringComparison.OrdinalIgnoreCase)) && p.CanBeNull))
                         .ToDictionary(p => p.Name, ConvertParameterValue)
                     ?? new Dictionary<string, object?>();
 
@@ -144,6 +246,10 @@ namespace AiCoreApi.Common
 
         private static object? ConvertParameterValue(McpActionParameter p)
         {
+            if (string.IsNullOrEmpty(p.Value) || p.Value.Equals("null", StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
             return p.Type.ToLowerInvariant() switch
             {
                 "number" => double.TryParse(p.Value, out var num) ? num : p.Value,
@@ -179,10 +285,12 @@ namespace AiCoreApi.Common
         private class McpActionParameter
         {
             [JsonPropertyName("name")] public string Name { get; set; } = string.Empty;
-            [JsonPropertyName("value")] public string Value { get; set; } = string.Empty;
             [JsonPropertyName("type")] public string Type { get; set; } = string.Empty;
-        }
+            [JsonPropertyName("enum")] public string[] Enum { get; set; } = { };
+            [JsonPropertyName("value")] public string Value { get; set; } = string.Empty;
+            [JsonPropertyName("canBeNull")] public bool CanBeNull { get; set; } = false;
 
+        }
     }
 
     public interface IMcpClient

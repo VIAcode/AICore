@@ -119,13 +119,12 @@ public class AgentsService : IAgentsService
         if(!agentViewModel.Content.ContainsKey("parameterDescription") || string.IsNullOrEmpty(agentViewModel.Content["parameterDescription"].Value))
             return null;
         var parameterId = 1;
-        var result = agentViewModel.Content["parameterDescription"].Value.Split(',', StringSplitOptions.RemoveEmptyEntries).Select(parameter => new ParameterModel
+        var parameterRecordModels = ParameterRecordModel.Parse(agentViewModel.Content["parameterDescription"].Value);
+        return parameterRecordModels.Select(parameter => new ParameterModel
         {
             Name = $"parameter{parameterId++}",
-            Description = parameter
+            Description = parameter.Name
         }).ToList();
-        return result;
-
     }
 
     public async Task SwitchEnableAgent(int agentId, bool isEnabled)

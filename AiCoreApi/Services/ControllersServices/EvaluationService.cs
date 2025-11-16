@@ -208,7 +208,7 @@ public class EvaluationService : IEvaluationService
         {
             throw new AiCoreUiException($"Agent '{evaluation.AgentName}' does not have a parameter description.");
         }
-        var agentParameters = agent.Content[ParameterDescription].Value.Split(',');
+        var agentParameters = ParameterRecordModel.Parse(agent.Content[ParameterDescription].Value).Select(item => item.Name).ToArray();
         return agentParameters;
     }
 
