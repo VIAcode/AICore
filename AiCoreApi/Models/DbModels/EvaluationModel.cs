@@ -25,5 +25,6 @@ namespace AiCoreApi.Models.DbModels
     {
         public List<string> Parameters { get; set; } = new();
         public string ExpectedResult { get; set; } = string.Empty;
+        public int SampleSize { get; set; } = 1;
     }
 }
