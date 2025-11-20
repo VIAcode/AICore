@@ -228,7 +228,7 @@ public class EvaluationService : IEvaluationService
 
     private async Task<(string Answer, int DurationMs)> RunAgent(EvaluationModel evaluation, EvaluationQuestionModel question)
     {
-        if(_responseAccessor.CurrentMessage.DebugMessages != null)
+        if (_responseAccessor.CurrentMessage.DebugMessages != null)
             _responseAccessor.CurrentMessage.DebugMessages.Clear();
         _requestAccessor.UseDebug = true;
         _requestAccessor.MessageDialog = new MessageDialogViewModel
@@ -254,17 +254,10 @@ public class EvaluationService : IEvaluationService
             }
         };
         var stopwatch = Stopwatch.StartNew();
-        try
-        {
-            var result = await _agentExecutor.ExecuteAsync(evaluation.AgentName, question.Parameters);
-            stopwatch.Stop();
-            var durationMs = (int)stopwatch.ElapsedMilliseconds;
-            return (result, durationMs);
-        }
-        finally
-        {
-            stopwatch.Stop();
-        }
+        var result = await _agentExecutor.ExecuteAsync(evaluation.AgentName, question.Parameters);
+        stopwatch.Stop();
+        var durationMs = (int)stopwatch.ElapsedMilliseconds;
+        return (result, durationMs);
     }
 
     public async Task<List<DebugMessageViewModel>> GetDebugMessages(int evaluationHistoryId, int logId)
