@@ -31,7 +31,7 @@ public class EvaluationProcessor: IEvaluationProcessor
     public async Task<List<EvaluationModel>> List(int workspaceId)
     {
         await using var db = await _dbFactory.CreateDbContextAsync();
-        var qry = db.Evaluation.OrderByDescending(item => item.EvaluationId).AsNoTracking();
+        var qry = db.Evaluation.OrderBy(item => item.Name).AsNoTracking();
         qry = qry.Where(e => e.WorkspaceId == workspaceId);
         var data = await qry.ToListAsync();
         return data;
