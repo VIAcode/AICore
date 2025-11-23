@@ -13,7 +13,7 @@ namespace AiCoreApi.SemanticKernel
         private readonly RequestAccessor _requestAccessor;
         private readonly IConnectionProcessor _connectionProcessor;
         private readonly IHttpClientFactory _httpClientFactory;
-        private readonly IEntraTokenProvider _entraTokenProvider; 
+        private readonly IEntraTokenProvider _entraTokenProvider;
 
         public SemanticKernelProvider(
             RequestAccessor requestAccessor,
@@ -114,14 +114,25 @@ namespace AiCoreApi.SemanticKernel
 
         }
 
-        public async Task<string> ExecutePrompt(ConnectionModel llmConnection, string templateText, double temperature, double topP, string systemMessage, string jsonSchema = "")
+
+        public async Task<string> ExecutePrompt(string llmConnectionName, string templateText, double? temperature, double? topP, string systemMessage = "", string jsonSchema = "")
+        {
+            var connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
+            var llmConnection = connections.FirstOrDefault(c => c.Name == llmConnectionName);
+            return await ExecutePrompt(llmConnection, templateText, temperature, topP, systemMessage, jsonSchema, false);
+        }
+
+        public async Task<string> ExecutePrompt(ConnectionModel? llmConnection, string templateText, double? temperature, double? topP, string systemMessage = "", string jsonSchema = "")
         {
             return await ExecutePrompt(llmConnection, templateText, temperature, topP, systemMessage, jsonSchema, false);
         }
 
-        public async Task<string> ExecutePrompt(ConnectionModel llmConnection, string templateText, double temperature, double topP, string systemMessage, string jsonSchema, bool jsonSchemaIsStrict)
+        public async Task<string> ExecutePrompt(ConnectionModel? llmConnection, string templateText, double? temperature, double? topP, string systemMessage, string jsonSchema, bool jsonSchemaIsStrict)
         {
-            var kernel = GetKernel(llmConnection);
+            var kernel = llmConnection == null
+                ? await GetKernel()
+                : GetKernel(llmConnection);
+
             var chat = kernel.GetRequiredService<IChatCompletionService>();
             var history = new ChatHistory();
             if (!string.IsNullOrEmpty(systemMessage))
@@ -131,11 +142,11 @@ namespace AiCoreApi.SemanticKernel
                 new TextContent(templateText),
             };
             history.AddUserMessage(message);
-            var executionSettings = new OpenAIPromptExecutionSettings
-            {
-                Temperature = temperature,
-                TopP = topP,
-            };
+            var executionSettings = new OpenAIPromptExecutionSettings();
+            if (temperature.HasValue)
+                executionSettings.Temperature = temperature;
+            if (topP.HasValue)
+                executionSettings.TopP = topP;
             if (!string.IsNullOrEmpty(jsonSchema))
             {
                 var chatResponseFormat = ChatResponseFormat.CreateJsonSchemaFormat(
@@ -174,8 +185,9 @@ namespace AiCoreApi.SemanticKernel
     {
         Kernel GetKernel(ConnectionModel connectionModel);
         Task<Kernel> GetKernel();
-        Task<string> ExecutePrompt(ConnectionModel llmConnection, string templateText, double temperature, double topP, string systemMessage, string jsonSchema = "");
-        Task<string> ExecutePrompt(ConnectionModel llmConnection, string templateText, double temperature, double topP, string systemMessage, string jsonSchema, bool jsonSchemaIsStrict);
+        Task<string> ExecutePrompt(string llmConnection, string templateText, double? temperature, double? topP, string systemMessage = "", string jsonSchema = "");
+        Task<string> ExecutePrompt(ConnectionModel? llmConnection, string templateText, double? temperature, double? topP, string systemMessage = "", string jsonSchema = "");
+        Task<string> ExecutePrompt(ConnectionModel? llmConnection, string templateText, double? temperature, double? topP, string systemMessage, string jsonSchema, bool jsonSchemaIsStrict);
         Task<string> ExecutePromptWithHistory(ConnectionModel llmConnection, ChatHistory history, double temperature, double topP, string jsonSchema = "", bool jsonSchemaIsStrict = false);
     }
 }
