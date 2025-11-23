@@ -61,11 +61,11 @@ namespace AiCoreApi.SemanticKernel.Agents
 
             var pythonCode = await GetParameterValueAsync(AgentContentParameters.PythonCode);
             pythonCode = await ApplyParametersAsync(pythonCode, new Dictionary<string, string>
-            {
-                {AgentPromptPlaceholders.HasFilesPlaceholder, _requestAccessor.MessageDialog.Messages.Last().HasFiles().ToString()},
-                {AgentPromptPlaceholders.FilesDataPlaceholder, _requestAccessor.MessageDialog.Messages.Last().GetFileContents()},
-                {AgentPromptPlaceholders.FilesNamesPlaceholder, _requestAccessor.MessageDialog.Messages.Last().GetFileNames()}
-            });
+    {
+        {AgentPromptPlaceholders.HasFilesPlaceholder, _requestAccessor.MessageDialog.Messages.Last().HasFiles().ToString()},
+        {AgentPromptPlaceholders.FilesDataPlaceholder, _requestAccessor.MessageDialog.Messages.Last().GetFileContents()},
+        {AgentPromptPlaceholders.FilesNamesPlaceholder, _requestAccessor.MessageDialog.Messages.Last().GetFileNames()}
+    });
             _responseAccessor.AddDebugMessage(_debugMessageSenderName, "Execute Python Code", pythonCode);
 
 

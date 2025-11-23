@@ -3,6 +3,7 @@ using AiCoreApi.Common.Extensions;
 using AiCoreApi.Data.Processors;
 using AiCoreApi.Models.DbModels;
 using AiCoreApi.Models.ViewModels;
+using Microsoft.KernelMemory.AI;
 using Microsoft.SemanticKernel.ChatCompletion;
 using static AiCoreApi.Common.ExceptionHandlingMiddleware;
 using ConnectionType = AiCoreApi.Models.DbModels.ConnectionType;
@@ -20,6 +21,12 @@ namespace AiCoreApi.SemanticKernel.Agents
         private readonly ISemanticKernelProvider _semanticKernelProvider;
         private readonly IConnectionProcessor _connectionProcessor;
 
+        private const int ContextTokensDelta = 8000;
+
+        private static class RunAgentContentParameters
+        {
+            public const string ParameterDescription = "parameterDescription";
+        }
         private const string CustomActionsPlaceholder = "{{custom actions}}";
         private const string CallAgentCustomAction = @"{
           ""type"": ""object"",
@@ -27,11 +34,25 @@ namespace AiCoreApi.SemanticKernel.Agents
             ""action"": { ""type"": ""string"", ""enum"": [""call""] },
             ""agent"": { ""type"": ""string"", ""description"": ""Agent Name"" },
             ""parameters"": {
-              ""type"": ""object"",
-              ""description"": ""Dictionary of named parameters to pass into the agent."",
-              ""additionalProperties"": { ""type"": ""string"" }
+              ""type"": ""array"",
+              ""description"": ""Array of parameter name-value pairs to pass into the agent."",
+              ""items"": {
+                ""type"": ""object"",
+                ""properties"": {
+                  ""name"": {
+                    ""type"": ""string"",
+                    ""description"": ""Parameter name""
+                  },
+                  ""value"": {
+                    ""type"": ""string"",
+                    ""description"": ""Parameter value""
+                  }
+                },
+                ""required"": [""name"", ""value""],
+                ""additionalProperties"": false
+              }
             },
-            ""description"": { ""type"": ""string"", ""description"": ""A short, user-friendly explanation (in plain language) of why this agent is being called. This explanation must be written for the end user, not a developer. Avoid technical details; describe the purpose in a way a non-technical user can understand"" }
+            ""description"": { ""type"": ""string"", ""description"": ""A short, user-friendly message that explains what the system is doing right now and why this agent is being called. The explanation is shown while the user is waiting, so it must NOT ask the user to do anything, must NOT request input, and must NOT give instructions. Write it in natural, simple language, focused only on describing the purpose of the current step for a non-technical user. Avoid technical details."" }
           },
           ""required"": [""action"", ""agent"", ""parameters"", ""description""],
           ""additionalProperties"": false
@@ -83,6 +104,45 @@ namespace AiCoreApi.SemanticKernel.Agents
   ""additionalProperties"": false
 }";
 
+
+        public const string StepSummaryPromptTemplate = @"You are summarizing a step in a multi-agent task execution process. Focus on extracting only the information that is critical for completing the user's goal.
+
+# Context
+User's Goal: {userInput}
+{executionPlan}
+
+# Step to Summarize
+Agent Called: {agentName}
+Parameters: {parameters}
+Step Description: {description}
+Full Result: {result}
+
+# Instructions
+Analyze the result and extract ONLY:
+1. Key data or facts that are directly needed to answer the user's goal
+2. Important status information (success/failure, errors, missing data)
+3. Critical dependencies or prerequisites discovered
+4. Any actionable insights that affect next steps
+
+Ignore:
+- Verbose explanations or background information
+- Intermediate reasoning that doesn't affect the final answer
+- Formatting details or metadata
+- Redundant information already captured elsewhere
+
+Provide a concise summary that preserves essential information for task completion.
+
+Summary:";
+        public static class StepSummaryPromptParameters
+        {
+            public const string UserInput = "{userInput}";
+            public const string ExecutionPlan = "{executionPlan}";
+            public const string AgentName = "{agentName}";
+            public const string Parameters = "{parameters}";
+            public const string Description = "{description}";
+            public const string Result = "{result}";
+        }
+
         private static class AgentContentParameters
         {
             public const string UserInput = "userInput";
@@ -98,6 +158,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             public const string PlanModificationPrompt = "planModificationPrompt";
             public const string PlannerModificationActionTemplate = "plannerModificationActionTemplate";
             public const string MaxStepAnswerLength = "maxStepAnswerLength";
+            public const string StepSummaryPrompt = "stepSummaryPrompt";
         }
 
         public CompositeLoopV2Agent(
@@ -169,10 +230,134 @@ namespace AiCoreApi.SemanticKernel.Agents
                 ExecutionPlanTemplate = await GetParameterValueAsync(AgentContentParameters.ExecutionPlanTemplate),
                 PlanModificationPrompt = await GetParameterValueAsync(AgentContentParameters.PlanModificationPrompt),
                 PlannerModificationActionTemplate = await GetParameterValueAsync(AgentContentParameters.PlannerModificationActionTemplate),
+                StepSummaryPrompt = await GetParameterValueAsync(AgentContentParameters.StepSummaryPrompt, StepSummaryPromptTemplate),
                 Temperature = GetTemperature(llmConnection, agent),
                 TopP = GetTopP(agent),
                 AgentsDescription = await GetAgentsDescriptions(agent, parameters)
             };
+        }
+
+
+        private O200KTokenizer? _tokenizer;
+        private O200KTokenizer Tokenizer => _tokenizer ??= new O200KTokenizer();
+
+        private string BuildFullPrompt(Microsoft.SemanticKernel.ChatCompletion.ChatHistory? chatHistory, string? currentStep) => 
+            string.Join(Environment.NewLine, chatHistory.Select(msg => $"{msg.Role}: {msg.Content}")) + Environment.NewLine + $"User: {currentStep}";
+
+        private async Task PrepareCall(ConnectionModel llmConnection, ConversationContext conversationContext, AgentConfiguration config)
+        {
+            if (llmConnection.Content.ContainsKey("maxRequestTokens") && int.TryParse(llmConnection.Content["maxRequestTokens"], out var maxRequestTokens))
+            {
+                var chatHistory = conversationContext.ProduceChatHistory(config);
+                var currentStep = conversationContext.ProduceNextStepPrompt();
+
+                // Build the full prompt that will be sent
+                var fullPrompt = BuildFullPrompt(chatHistory, currentStep);
+
+                var requestTokensCount = Tokenizer.CountTokens(fullPrompt);
+
+                // Reserve ContextTokensDelta tokens for response and safety margin
+                if (requestTokensCount > maxRequestTokens - ContextTokensDelta)
+                {
+                    _responseAccessor.AddDebugMessage(_debugMessageSenderName, "Token Limit Warning",
+                        $"Request tokens ({requestTokensCount}) approaching limit ({maxRequestTokens}). Truncating history.");
+
+                    // Truncate execution history to fit within token limit
+                    var targetTokens = maxRequestTokens - ContextTokensDelta;
+                    await TruncateConversationHistory(conversationContext, config, targetTokens);
+                }
+            }
+        }
+
+        private async Task TruncateConversationHistory(ConversationContext conversationContext, AgentConfiguration config, int targetTokens)
+        {
+            // Summarize oldest entries until we're under the token limit
+            while (conversationContext.ExecutionHistory.Count > 1)
+            {
+                var chatHistory = conversationContext.ProduceChatHistory(config);
+                var currentStep = conversationContext.ProduceNextStepPrompt();
+
+                var fullPrompt = BuildFullPrompt(chatHistory, currentStep);
+
+                var currentTokens = Tokenizer.CountTokens(fullPrompt);
+
+                if (currentTokens <= targetTokens)
+                    break;
+
+                // Find oldest entry that's not a plan modification and not already summarized
+                var entryToSummarize = conversationContext.ExecutionHistory
+                    .FirstOrDefault(e => !e.IsPlanModification && !e.IsSummarized);
+
+                if (entryToSummarize != null)
+                {
+                    await SummarizeHistoryEntry(entryToSummarize, conversationContext, config);
+                }
+                else
+                {
+                    // All non-plan entries are already summarized, start removing oldest
+                    var entryToRemove = conversationContext.ExecutionHistory
+                        .FirstOrDefault(e => !e.IsPlanModification);
+
+                    if (entryToRemove != null)
+                    {
+                        conversationContext.ExecutionHistory.Remove(entryToRemove);
+                        _responseAccessor.AddDebugMessage(_debugMessageSenderName, "History Truncation", $"Removed summarized entry: Agent={entryToRemove.AgentName}");
+                    }
+                    else
+                    {
+                        // Only plan modifications left, remove the oldest one
+                        conversationContext.ExecutionHistory.RemoveAt(0);
+                        break;
+                    }
+                }
+            }
+        }
+
+        private async Task SummarizeHistoryEntry(ExecutionHistoryEntry entry, ConversationContext conversationContext, AgentConfiguration config)
+        {
+            var summarizationPrompt = config.StepSummaryPrompt
+                .Replace(StepSummaryPromptParameters.UserInput, conversationContext.UserInput)
+                .Replace(StepSummaryPromptParameters.ExecutionPlan, conversationContext.ExecutionPlan)
+                .Replace(StepSummaryPromptParameters.AgentName, entry.AgentName)
+                .Replace(StepSummaryPromptParameters.Parameters, string.Join(", ", entry.Parameters.Select(p => $"{p.Key}={p.Value}")))
+                .Replace(StepSummaryPromptParameters.Description, entry.Description)
+                .Replace(StepSummaryPromptParameters.Result, entry.Result);
+
+            try
+            {
+                var summary = await _semanticKernelProvider.ExecutePrompt(
+                    config.LlmConnection,
+                    summarizationPrompt,
+                    config.Temperature,
+                    config.TopP,
+                    string.Empty);
+
+                // Store original result in case we need it later
+                if (string.IsNullOrEmpty(entry.OriginalResult))
+                {
+                    entry.OriginalResult = entry.Result;
+                }
+
+                // Replace result with summary
+                entry.Result = $"[SUMMARIZED] {summary.Trim()}";
+                entry.IsSummarized = true;
+
+                _responseAccessor.AddDebugMessage(_debugMessageSenderName, $"Summarized {entry.AgentName}",
+                    $"Original: {entry.OriginalResult.Length} chars -> Summary: {entry.Result.Length} chars{Environment.NewLine}{Environment.NewLine}From:{entry.OriginalResult}{Environment.NewLine}{Environment.NewLine}To:{entry.Result}");
+            }
+            catch (Exception ex)
+            {
+                _responseAccessor.AddDebugMessage(_debugMessageSenderName, "Summarization Error",
+                    $"Failed to summarize entry for {entry.AgentName}: {ex.Message}");
+
+                // Fallback: simple truncation if summarization fails
+                if (entry.Result.Length > 500)
+                {
+                    entry.OriginalResult = entry.Result;
+                    entry.Result = $"[TRUNCATED] {entry.Result.Substring(0, Math.Min(entry.Result.Length, 500))}...";
+                    entry.IsSummarized = true;
+                }
+            }
         }
 
         private async Task<string> PreprocessUserInputAsync(AgentConfiguration config)
@@ -222,7 +407,10 @@ namespace AiCoreApi.SemanticKernel.Agents
         {
             for (var iteration = 0; iteration < config.MaxIterations; iteration++)
             {
-                context.CurrentIteration++; 
+                context.CurrentIteration++;
+
+                // Check and manage token limits before building the prompt
+                await PrepareCall(config.LlmConnection, context, config);
 
                 // Produce ChatHistory from context
                 var chatHistory = context.ProduceChatHistory(config);
@@ -307,24 +495,47 @@ namespace AiCoreApi.SemanticKernel.Agents
             string plannerResponse,
             AgentConfiguration config)
         {
+            var paramDict = instruction.Parameters?
+                .DistinctBy(p => p.Name)
+                .ToDictionary(item => item.Name, item => item.Value) ?? new Dictionary<string, string>();
             try
             {
-                var paramList = instruction.Parameters?.Values.ToList() ?? new List<string>();
-                var subAgentResult = await _agentExecutor.ExecuteAsync(instruction.Agent, paramList);
+                var paramsList = await GetParametersListByDictionary(instruction.Agent, paramDict);
+                var subAgentResult = await _agentExecutor.ExecuteAsync(instruction.Agent, paramsList);
                 if (subAgentResult.Length > config.MaxStepAnswerLength && config.MaxStepAnswerLength > 0)
                 {
                     subAgentResult = subAgentResult.Substring(0, config.MaxStepAnswerLength) + "...";
                 }
-                context.AddExecutionEntry(instruction.Agent, instruction.Parameters, subAgentResult);
+                context.AddExecutionEntry(instruction.Agent, paramDict, subAgentResult, instruction.Description);
                 context.ExecutionHistory.Last().PlannerResponse = plannerResponse;
             }
 
             catch (Exception ex)
             {
                 var errorText = $"ERROR: {ex.Message}";
-                context.AddExecutionEntry(instruction.Agent, instruction.Parameters, errorText);
+                context.AddExecutionEntry(instruction.Agent, paramDict, errorText, instruction.Description);
                 context.ExecutionHistory.Last().PlannerResponse = plannerResponse;
             }
+        }
+
+        private async Task<List<string>> GetParametersListByDictionary(string agentName, Dictionary<string, string> parameters)
+        {
+            var agent = (await _plannerHelpers.GetAgentsList())
+                .FirstOrDefault(a => a.Name == agentName);
+            if (agent == null)
+                return new List<string>();
+
+            if (!agent.Content.ContainsKey(RunAgentContentParameters.ParameterDescription) || string.IsNullOrEmpty(agent.Content[RunAgentContentParameters.ParameterDescription].Value))
+                return new List<string>();
+
+            var parameterDescription = ParameterRecordModel.Parse(agent.Content[RunAgentContentParameters.ParameterDescription].Value);
+            var result = new List<string>();
+            foreach (var param in parameterDescription)
+            {
+                result.Add(parameters.TryGetValue(param.Name, out var value) ? value : "");
+            }
+
+            return result;
         }
 
         private async Task<string> ExecuteFinishActionAsync(PlannerInstruction instruction, AgentConfiguration config)
@@ -482,11 +693,17 @@ Provide a clear, revised execution plan that addresses the issues and outlines t
         {
             public string Action { get; set; } = "";
             public string Agent { get; set; } = "";
-            public Dictionary<string, string> Parameters { get; set; } = new();
+            public List<PlannerInstructionParameter> Parameters { get; set; } = new();
             public string Result { get; set; } = "";
             public string Reason { get; set; } = "";
             public string Description { get; set; } = "";
             public string ChangeReason { get; set; } = "";
+        }
+
+        public class PlannerInstructionParameter
+        {
+            public string Name { get; set; } = "";
+            public string Value { get; set; } = "";
         }
 
         public class PlannerInstructionResult
@@ -510,6 +727,7 @@ Provide a clear, revised execution plan that addresses the issues and outlines t
         public string ExecutionPlanTemplate { get; set; } = "";
         public string PlanModificationPrompt { get; set; } = "";
         public string PlannerModificationActionTemplate { get; set; } = "";
+        public string StepSummaryPrompt { get; set; } = "";
         public double Temperature { get; set; }
         public double TopP { get; set; }
         public string AgentsDescription { get; set; } = "";
@@ -561,11 +779,12 @@ Provide a clear, revised execution plan that addresses the issues and outlines t
             ExecutionPlan = newPlan ?? string.Empty;
         }
 
-        public void AddExecutionEntry(string agentName, Dictionary<string, string>? parameters, string? result)
+        public void AddExecutionEntry(string agentName, Dictionary<string, string>? parameters, string? result, string description)
         {
             ExecutionHistory.Add(new ExecutionHistoryEntry
             {
                 AgentName = agentName,
+                Description = description,
                 Parameters = parameters ?? new Dictionary<string, string>(),
                 Result = result ?? string.Empty,
                 Timestamp = DateTime.UtcNow
@@ -631,7 +850,7 @@ Provide a clear, revised execution plan that addresses the issues and outlines t
                     chatHistory.AddAssistantMessage(responseWithResult);
                 }
             }
-            
+
             return chatHistory;
         }
 
@@ -678,6 +897,7 @@ Based on this, decide the next best action.";
     public class ExecutionHistoryEntry
     {
         public string AgentName { get; set; } = "";
+        public string Description { get; set; } = "";
         public Dictionary<string, string> Parameters { get; set; } = new();
         public string Result { get; set; } = "";
         public string PlannerPrompt { get; set; } = "";
@@ -685,6 +905,8 @@ Based on this, decide the next best action.";
         public DateTime Timestamp { get; set; }
         public bool IsPlanModification { get; set; }
         public string ModificationReason { get; set; } = "";
+        public bool IsSummarized { get; set; } = false;
+        public string OriginalResult { get; set; } = "";
     }
 
     public interface ICompositeLoopV2Agent : IDoCallWrapperAgent

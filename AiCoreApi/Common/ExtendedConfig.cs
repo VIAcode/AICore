@@ -141,7 +141,7 @@ public class ExtendedConfig
     [Description("Permanent Refresh Token expiration time in days")]
     [Tooltip("The permanent refresh token expiration time determines the number of days before a permanent refresh token becomes invalid. This is used in scenarios requiring long-lived tokens, such as external applications using OIDC for login. Each time the new access token generated, the refresh token lifetime is extended.")]
     public int PermanentTokenExpirationTimeDays => GetValue<int>("PermanentTokenExpirationTimeDays", 365);
-    
+
     [Category(CategoryAttribute.ConfigCategoryEnum.Authentication)]
     [Description("Auth Issuer")]
     [Tooltip("The Auth Issuer is used to specify the issuer of the authentication token. This is used to verify the token.")]
@@ -157,7 +157,7 @@ public class ExtendedConfig
     [Description("Auth security key")]
     [Tooltip("The Auth Security Key serves as a security key for the SHA-256 hashing algorithm during the creation of access tokens to sign-in JWT token.")]
     public string AuthSecurityKey => GetValue<string>("AuthSecurityKey");
-    
+
     [Category(CategoryAttribute.ConfigCategoryEnum.Authentication)]
     [Description("Tenant Id (Microsoft SSO)")]
     [Tooltip("The Tenant Id is used to specify the tenant for the Microsoft SSO service. This Id is used to authenticate the application with the Microsoft SSO service. If empty, then user`s default Tenant will be used.")]
@@ -362,7 +362,7 @@ public class ExtendedConfig
     [Category(CategoryAttribute.ConfigCategoryEnum.GitStorage)]
     [DataType(DataTypeAttribute.ConfigDataTypeEnum.String)]
     [Description("Git Storage Url")]
-    [Tooltip("The Git Storage Url is used to specify the URL of the Git Storage. Git Storage is used to store Agents History. This URL is used to connect to the Git Storage. (i.e. https://viacode@dev.azure.com/viacode/ProjectName/_git/RepositoryName)")] 
+    [Tooltip("The Git Storage Url is used to specify the URL of the Git Storage. Git Storage is used to store Agents History. This URL is used to connect to the Git Storage. (i.e. https://viacode@dev.azure.com/viacode/ProjectName/_git/RepositoryName)")]
     public string GitStorageUrl => GetValue<string>("GitStorageUrl", "");
 
     [Category(CategoryAttribute.ConfigCategoryEnum.GitStorage)]
@@ -455,6 +455,19 @@ public class ExtendedConfig
     [Description("LLM Connection Name")]
     [Tooltip("Specifies which LLM Connection to use for generating Agents and Tools descriptions. The connection must be configured in the LLM Connections settings and should point to a capable AI model that can generate detailed and accurate descriptions based on the Agent's or Tool's functionality.")]
     public string AgentsDescriptionLlmConnectionName => GetValue<string>("AgentsDescriptionLlmConnectionName", "");
+
+    [Category(CategoryAttribute.ConfigCategoryEnum.McpClient)]
+    [DataType(DataTypeAttribute.ConfigDataTypeEnum.String)]
+    [Description("MCP Client LLM Connection")]
+    [Tooltip("Specifies the LLM Connection name to be used by the MCP Client Agent for processing agent definitions creation. Such as Output preparation from JSON Schema.")]
+    public string McpClientLlmConnection => GetValue<string>("McpClientLlmConnection", "");
+
+    [Category(CategoryAttribute.ConfigCategoryEnum.McpClient)]
+    [DataType(DataTypeAttribute.ConfigDataTypeEnum.String)]
+    [Description("MCP Client Agent Output Prompt")]
+    [Tooltip("The prompt template used by the MCP Client Agent to generate the final output based on the provided JSON Schema.")]
+    public string McpClientAgentOutputPrompt => GetValue<string>("McpClientAgentOutputPrompt", "Produce one sentence describing the output of this MCP Action according to the JSON Schema: {{jsonSchema}}. Return only this sentence.");
+
 }
 
 [AttributeUsage(AttributeTargets.Property)]
@@ -551,5 +564,7 @@ public class CategoryAttribute : Attribute, IAttributeHandler
         WebHooksCalls,
         [System.ComponentModel.Description("Agents and Tool Description")]
         AgentsDescription,
+        [System.ComponentModel.Description("MCP Client")]
+        McpClient,
     }
 }
