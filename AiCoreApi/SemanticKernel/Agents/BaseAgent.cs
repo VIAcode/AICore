@@ -188,6 +188,10 @@ namespace AiCoreApi.SemanticKernel.Agents
                             resolvedDsCache[key] = value;
                         }
                     }
+                    else if (TryGetContextValue(key, out var contextValue))
+                    {
+                        value = contextValue;
+                    }
 
                     sb.Append(value ?? $"{{{{{key}}}}}");
 
@@ -203,6 +207,28 @@ namespace AiCoreApi.SemanticKernel.Agents
             return sb.ToString();
         }
 
+        private bool TryGetContextValue(string key, out string? value)
+        {
+            const string prefix = "context:";
+
+            // Expect pattern: context:<name>
+            if (key.StartsWith(prefix, StringComparison.Ordinal) && key.Length > prefix.Length)
+            {
+                var k = key[prefix.Length..];
+                if (_responseAccessor.Context.TryGetValue(k, out value))
+                {
+                    return true;
+                }
+
+                var message = $"Failed to resolve context value {k}.";
+
+                _responseAccessor.AddDebugMessage($"{_agent.Name} ({_agent.Type})", "Context", message);
+                _logger.LogWarning(message);
+            }
+
+            value = null;
+            return false;
+        }
 
         private async Task<string?> ResolveDataSourceValueAsync(string key)
         {

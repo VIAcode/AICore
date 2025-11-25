@@ -1,21 +1,28 @@
 ﻿using System.Text.Json;
 using System.Text.Json.Serialization;
 using AiCoreApi.Models.ViewModels;
+using AiCoreApi.SemanticKernel;
 using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
 using static AiCoreApi.Common.ExceptionHandlingMiddleware;
 
 namespace AiCoreApi.Common
 {
-    public class McpClient: IMcpClient
+    public class McpClient : IMcpClient
     {
         private readonly ILogger<McpClient> _logger;
+        private readonly ExtendedConfig _extendedConfig;
+        private readonly ISemanticKernelProvider _semanticKernelProvider;
         private readonly IHttpClientFactory _httpClientFactory;
         public McpClient(
             ILogger<McpClient> logger,
+            ExtendedConfig extendedConfig,
+            ISemanticKernelProvider semanticKernelProvider,
             IHttpClientFactory httpClientFactory)
         {
             _logger = logger;
+            _extendedConfig = extendedConfig;
+            _semanticKernelProvider = semanticKernelProvider;
             _httpClientFactory = httpClientFactory;
         }
 
@@ -44,14 +51,17 @@ namespace AiCoreApi.Common
 
                 await using var mcpClient = await McpClientFactory.CreateAsync(clientTransport!);
                 var tools = await mcpClient.ListToolsAsync();
-                return tools.Select(tool => new McpActionViewModel
+
+                var viewModelTasks = tools.Select(async tool => new McpActionViewModel
                 {
                     Title = tool.Title,
                     Name = tool.Name,
                     Description = tool.Description,
                     Parameters = ExtractParameters(tool.JsonSchema),
-                    OutputSchema = ExtractOutputSchema(tool.ReturnJsonSchema)
-                }).ToList() ?? null;
+                    OutputSchema = await ExtractOutputSchema(tool.ReturnJsonSchema)
+                }).ToList();
+
+                return (await Task.WhenAll(viewModelTasks)).ToList();
             }
             catch (Exception ex)
             {
@@ -59,79 +69,20 @@ namespace AiCoreApi.Common
             }
         }
 
-        private string ExtractOutputSchema(JsonElement? schema)
+        private async Task<string> ExtractOutputSchema(JsonElement? schema)
         {
             try
             {
-                if (!schema.HasValue || schema.Value.ValueKind == JsonValueKind.Undefined ||
-                    schema.Value.ValueKind == JsonValueKind.Null)
+                if (!schema.HasValue
+                    || schema.Value.ValueKind == JsonValueKind.Undefined
+                    || schema.Value.ValueKind == JsonValueKind.Null
+                    || string.IsNullOrEmpty(_extendedConfig.McpClientLlmConnection)
+                    || string.IsNullOrEmpty(_extendedConfig.McpClientAgentOutputPrompt))
                     return string.Empty;
 
-                var description = new System.Text.StringBuilder();
-
-                var mainType = ExtractTypeValue(schema.Value);
-                description.Append($"Type: {mainType}");
-
-                if (schema.Value.TryGetProperty("description", out var desc) && !string.IsNullOrEmpty(desc.GetString()))
-                {
-                    description.Append($". {desc.GetString()}");
-                }
-
-                if (schema.Value.TryGetProperty("properties", out var props) && props.ValueKind == JsonValueKind.Object)
-                {
-                    var requiredFields = new HashSet<string>();
-                    if (schema.Value.TryGetProperty("required", out var requiredEl) &&
-                        requiredEl.ValueKind == JsonValueKind.Array)
-                    {
-                        foreach (var req in requiredEl.EnumerateArray())
-                        {
-                            if (req.ValueKind == JsonValueKind.String)
-                                requiredFields.Add(req.GetString() ?? string.Empty);
-                        }
-                    }
-
-                    description.Append(" Properties: ");
-                    var propertyDescriptions = new List<string>();
-
-                    foreach (var prop in props.EnumerateObject())
-                    {
-                        var propValue = prop.Value;
-                        var propDesc = new System.Text.StringBuilder();
-
-                        propDesc.Append($"{prop.Name} ({ExtractTypeValue(propValue)}");
-
-                        if (requiredFields.Contains(prop.Name))
-                            propDesc.Append(", required");
-
-                        propDesc.Append(")");
-
-                        if (propValue.TryGetProperty("description", out var propDescription) &&
-                            !string.IsNullOrEmpty(propDescription.GetString()))
-                        {
-                            propDesc.Append($": {propDescription.GetString()}");
-                        }
-
-                        if (propValue.TryGetProperty("enum", out var enumEl) && enumEl.ValueKind == JsonValueKind.Array)
-                        {
-                            var enumValues = string.Join(", ", enumEl.EnumerateArray()
-                                .Where(e => e.ValueKind == JsonValueKind.String)
-                                .Select(e => e.GetString() ?? string.Empty));
-                            propDesc.Append($" Possible values: [{enumValues}]");
-                        }
-
-                        // Handle array items
-                        if (propValue.TryGetProperty("items", out var items))
-                        {
-                            propDesc.Append($" Items type: {ExtractTypeValue(items)}");
-                        }
-
-                        propertyDescriptions.Add(propDesc.ToString());
-                    }
-
-                    description.Append(string.Join("; ", propertyDescriptions));
-                }
-
-                return description.ToString();
+                var prompt = _extendedConfig.McpClientAgentOutputPrompt.Replace("{{jsonSchema}}", schema.Value.GetRawText());
+                var result = await _semanticKernelProvider.ExecutePrompt(_extendedConfig.McpClientLlmConnection, prompt, null, null);
+                return result;
             }
             catch (Exception ex)
             {
@@ -139,7 +90,7 @@ namespace AiCoreApi.Common
                 _logger.LogError(ex, $"Error extracting output schema from MCP action: {ex.Message}");
                 return string.Empty;
             }
-            
+
         }
 
         private List<McpActionParameterViewModel>? ExtractParameters(JsonElement schema)
@@ -164,7 +115,7 @@ namespace AiCoreApi.Common
                             + (obj.TryGetProperty("items", out var arrayItems) ? $" Items format: {arrayItems.GetRawText()}." : string.Empty),
                         Type = ExtractTypeValue(obj),
                         Enum = obj.TryGetProperty("enum", out var enumEl) && enumEl.ValueKind == JsonValueKind.Array
-                            ? enumEl.EnumerateArray().Select(e => e.GetString() ?? string.Empty).ToList()
+                            ? enumEl.EnumerateArray().Select(e => e.GetString() ?? "null").ToList()
                             : null,
                         CanBeNull = !(schema.TryGetProperty("required", out var requiredEl) && requiredEl.ValueKind == JsonValueKind.Array && requiredEl.EnumerateArray().Any(r => r.GetString() == prop.Name))
                     };

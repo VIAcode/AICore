@@ -26,12 +26,26 @@ namespace AiCoreApi.SemanticKernel.Agents
           ""properties"": {
             ""action"": { ""type"": ""string"", ""enum"": [""call""] },
             ""agent"": { ""type"": ""string"", ""description"": ""Agent Name"" },
-            ""parameters"": { 
-              ""type"": ""object"", 
-              ""description"": ""Dictionary of named parameters to pass into the agent."",
-              ""additionalProperties"": { ""type"": ""string"" }
+            ""parameters"": {
+              ""type"": ""array"",
+              ""description"": ""Array of parameter name-value pairs to pass into the agent."",
+              ""items"": {
+                ""type"": ""object"",
+                ""properties"": {
+                  ""name"": {
+                    ""type"": ""string"",
+                    ""description"": ""Parameter name""
+                  },
+                  ""value"": {
+                    ""type"": ""string"",
+                    ""description"": ""Parameter value""
+                  }
+                },
+                ""required"": [""name"", ""value""],
+                ""additionalProperties"": false
+              }
             },
-            ""description"": { ""type"": ""string"", ""description"": ""A short, user-friendly explanation (in plain language) of why this agent is being called. This explanation must be written for the end user, not a developer. Avoid technical details; describe the purpose in a way a non-technical user can understand"" }
+            ""description"": { ""type"": ""string"", ""description"": ""A short, user-friendly message that explains what the system is doing right now and why this agent is being called. The explanation is shown while the user is waiting, so it must NOT ask the user to do anything, must NOT request input, and must NOT give instructions. Write it in natural, simple language, focused only on describing the purpose of the current step for a non-technical user. Avoid technical details."" }
           },
           ""required"": [""action"", ""agent"", ""parameters"", ""description""],
           ""additionalProperties"": false
@@ -86,6 +100,11 @@ namespace AiCoreApi.SemanticKernel.Agents
             public const string PlannerPromptTemplate = "plannerPromptTemplate";
             public const string PreprocessPromptTemplate = "preprocessPromptTemplate";
             public const string UseStrictJsonMode = "useStrictJsonMode";
+        }
+
+        private static class RunAgentContentParameters
+        {
+            public const string ParameterDescription = "parameterDescription";
         }
 
         public CompositeLoopAgent(
@@ -197,15 +216,18 @@ namespace AiCoreApi.SemanticKernel.Agents
                 switch (parsed.Action.ToLower())
                 {
                     case "call":
+                        var parsedParamsDict = parsed.Parameters
+                            .DistinctBy(p => p.Name)
+                            .ToDictionary(p => p.Name, p => p.Value);
                         try
                         {
-                            var paramsList = parsed.Parameters.Select(kvp => kvp.Value).ToList();
+                            var paramsList = await GetParametersListByDictionary(parsed.Agent, parsedParamsDict);
                             var subAgentResult = await _agentExecutor.ExecuteAsync(parsed.Agent, paramsList);
-                            history.Add((parsed.Agent, parsed.Parameters, subAgentResult));
+                            history.Add((parsed.Agent, parsedParamsDict, subAgentResult));
                         }
                         catch (Exception ex)
                         {
-                            history.Add((parsed.Agent, parsed.Parameters, $"ERROR: {ex.Message}"));
+                            history.Add((parsed.Agent, parsedParamsDict, $"ERROR: {ex.Message}"));
                         }
                         break;
 
@@ -232,6 +254,26 @@ namespace AiCoreApi.SemanticKernel.Agents
             }
 
             throw new AiCoreUiException("Planner did not finish within max iterations");
+        }
+
+        private async Task<List<string>> GetParametersListByDictionary(string agentName, Dictionary<string, string> parameters)
+        {
+            var agent = (await _plannerHelpers.GetAgentsList())
+                .FirstOrDefault(a => a.Name == agentName);
+            if (agent == null)
+                return new List<string>();
+
+            if (!agent.Content.ContainsKey(RunAgentContentParameters.ParameterDescription) || string.IsNullOrEmpty(agent.Content[RunAgentContentParameters.ParameterDescription].Value))
+                return new List<string>();
+
+            var parameterDescription = ParameterRecordModel.Parse(agent.Content[RunAgentContentParameters.ParameterDescription].Value);
+            var result = new List<string>();
+            foreach (var param in parameterDescription)
+            {
+                result.Add(parameters.TryGetValue(param.Name, out var value) ? value : "");
+            }
+
+            return result;
         }
 
         private async Task<string> GetAgentsDescriptions(AgentModel agent, Dictionary<string, string> parameters)
@@ -312,10 +354,16 @@ namespace AiCoreApi.SemanticKernel.Agents
         {
             public string Action { get; set; } = "";
             public string Agent { get; set; } = "";
-            public Dictionary<string, string> Parameters { get; set; } = new();
+            public List<PlannerInstructionParameter> Parameters { get; set; } = new();
             public string Result { get; set; } = "";
             public string Reason { get; set; } = "";
             public string Description { get; set; } = "";
+        }
+
+        public class PlannerInstructionParameter
+        {
+            public string Name { get; set; } = "";
+            public string Value { get; set; } = "";
         }
     }
 
