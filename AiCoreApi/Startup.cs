@@ -61,6 +61,7 @@ public class Startup
         services.AddScoped<IPlannerHelpers, PlannerHelpers>();
         services.AddScoped<IAgentRegistry, AgentRegistry>();
         services.AddScoped<IAgentExecutor, AgentExecutor>();
+        services.AddScoped<IConnectionManager, ConnectionManager>();
 
         services.AddStackExchangeRedisCache(options =>
         {

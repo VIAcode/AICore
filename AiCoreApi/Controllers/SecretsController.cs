@@ -44,4 +44,13 @@ public class SecretsController : ControllerBase
         await _secretsService.Delete(secretId);
         return Ok(true);
     }
+
+    [HttpPost("dbAdd")]
+    [CombinedAuthorize]
+    [RoleAuthorize(Role.Admin)]
+    public async Task<IActionResult> AddToDatabase([FromBody] SecretViewModel secretViewModel)
+    {
+        secretViewModel = await _secretsService.AddToDatabase(secretViewModel);
+        return Ok(secretViewModel);
+    }
 }
