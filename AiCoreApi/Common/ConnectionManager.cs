@@ -54,7 +54,7 @@ namespace AiCoreApi.Common
                 WorkspaceId = connection.WorkspaceId,
                 Content = new Dictionary<string, string>(connection.Content),
             };
-            return await _parametersHelper.ApplySecrets(connectionCopy); ;
+            return await _parametersHelper.ApplySecrets(connectionCopy);
         }
 
         public async Task<ConnectionModel?> GetConnection(int? workspaceId = null, int? connectionId = null, ConnectionType? connectionType = null, bool isLlmConnection = false, bool isEmbeddingConnection = false, string? connectionName = null)
