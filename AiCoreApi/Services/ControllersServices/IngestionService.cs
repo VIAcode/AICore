@@ -264,7 +264,7 @@ public class IngestionService : IIngestionService
         }
 
         var ingestionImportId = Guid.NewGuid().ToString();
-        await _distributedCache.SetStringAsync(GetConnectionImportCacheKey(ingestionImportId), ingestionExportModels.ToJson(),
+        await _distributedCache.SetStringAsync(GetIngestionImportCacheKey(ingestionImportId), ingestionExportModels.ToJson(),
             new DistributedCacheEntryOptions { SlidingExpiration = new TimeSpan(0, 20, 0) });
 
         var confirmationMessages = new List<string> { $"The following ingestions are already present in the system:" };
@@ -283,14 +283,14 @@ public class IngestionService : IIngestionService
 
     public async Task ConfirmImportIngestions(string confirmationId, int workspaceId)
     {
-        var importIngestions = await _distributedCache.GetStringAsync(GetConnectionImportCacheKey(confirmationId));
+        var importIngestions = await _distributedCache.GetStringAsync(GetIngestionImportCacheKey(confirmationId));
         if (string.IsNullOrEmpty(importIngestions)) 
             throw new ArgumentException("ConfirmationId is not valid.", nameof(confirmationId));
         var importIngestionsList = importIngestions.JsonGet<List<IngestionExportModel>>();
         await ImportIngestionsConfirmed(importIngestionsList, workspaceId);
     }
 
-    private string GetConnectionImportCacheKey(string confirmationId) => $"ingestionImport-{confirmationId}";
+    private string GetIngestionImportCacheKey(string confirmationId) => $"ingestionImport-{confirmationId}";
 
     private async Task ImportIngestionsConfirmed(List<IngestionExportModel> ingestionExportModels, int workspaceId)
     {

@@ -57,7 +57,7 @@ namespace AiCoreApi.Services.IngestionServices
                 throw new InvalidOperationException("The 'ConnectionName' key is required but was not found in ingestion.Content.");
             }
 
-            var wikiJsConnection = await _connectionManager.GetConnectionWithParams(workspaceId: ingestion.WorkspaceId, connectionId: Convert.ToInt32(connectionNameValue), ConnectionType.WikiJs);
+            var wikiJsConnection = await _connectionManager.GetConnectionWithParams(workspaceId: ingestion.WorkspaceId, connectionId: Convert.ToInt32(connectionNameValue), connectionType: ConnectionType.WikiJs);
             if (wikiJsConnection == null)
             {
                 _logger.LogError($"No WikiJS connection {connectionNameValue} found.");

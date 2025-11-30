@@ -317,7 +317,7 @@ namespace AiCoreApi.Services.IngestionServices
             var sharePointConnection = await _connectionManager.GetConnectionWithParams(ingestion.WorkspaceId, connectionId: sharePointConnectionId);
             if (sharePointConnection == null)
             {
-                _logger.LogError("No LLM connection found.");
+                _logger.LogError("No SharePoint connection found.");
                 throw new InvalidOperationException($"SharePoint connection with Id = {sharePointConnectionId} not found.");
             }
 
