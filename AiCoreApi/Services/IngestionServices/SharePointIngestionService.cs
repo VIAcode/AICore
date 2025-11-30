@@ -1,16 +1,15 @@
-using System.Reflection;
-using Azure.Identity;
-using Microsoft.Graph.Models;
-using Microsoft.Graph;
 using AiCoreApi.Common;
-using AiCoreApi.Models.DbModels;
-using AiCoreApi.Data.Processors;
 using AiCoreApi.Common.Extensions;
-using Microsoft.KernelMemory.Pipeline;
 using AiCoreApi.Common.KernelMemory;
-using static AiCoreApi.Common.ExceptionHandlingMiddleware;
+using AiCoreApi.Data.Processors;
+using AiCoreApi.Models.DbModels;
+using Azure.Identity;
+using Microsoft.Graph;
+using Microsoft.Graph.Models;
 using Microsoft.KernelMemory;
-using System.Web;
+using Microsoft.KernelMemory.Pipeline;
+using System.Reflection;
+using static AiCoreApi.Common.ExceptionHandlingMiddleware;
 
 namespace AiCoreApi.Services.IngestionServices
 {
@@ -19,33 +18,33 @@ namespace AiCoreApi.Services.IngestionServices
         private readonly ExtendedConfig _config;
         private readonly IFileIngestionClient _fileIngestionClient;
         private readonly IDocumentMetadataProcessor _documentMetadataProcessor;
-        private readonly IConnectionProcessor _connectionProcessor;
         private readonly ITaskProcessor _taskProcessor;
         private readonly HttpClient _httpClient;
         private readonly ILogger<SharePointIngestionService> _logger;
         private readonly IDataIngestionHelperService _dataIngestionHelperService;
         private readonly IKernelMemoryProvider _kernelMemoryProvider;
+        private readonly IConnectionManager _connectionManager;
 
         public SharePointIngestionService(
             ExtendedConfig config,
             IFileIngestionClient fileIngestionClient,
             IDocumentMetadataProcessor documentMetadataProcessor,
-            IConnectionProcessor connectionProcessor,
             ITaskProcessor taskProcessor,
             IHttpClientFactory httpClientFactory,
             ILogger<SharePointIngestionService> logger,
             IDataIngestionHelperService dataIngestionHelperService,
-            IKernelMemoryProvider kernelMemoryProvider)
+            IKernelMemoryProvider kernelMemoryProvider,
+            IConnectionManager connectionManager)
         {
             _config = config;
             _fileIngestionClient = fileIngestionClient;
             _documentMetadataProcessor = documentMetadataProcessor;
-            _connectionProcessor = connectionProcessor;
             _taskProcessor = taskProcessor;
             _httpClient = httpClientFactory.CreateClient(HttpClients.NoRetryClient);
             _logger = logger;
             _dataIngestionHelperService = dataIngestionHelperService;
             _kernelMemoryProvider = kernelMemoryProvider;
+            _connectionManager = connectionManager;
         }
 
         private static string[]? _ext;
@@ -69,8 +68,12 @@ namespace AiCoreApi.Services.IngestionServices
         {
             // Retrieve connection
             var sharePointConnectionId = Convert.ToInt32(ingestion.Content["ConnectionId"]);
-            var sharePointConnection = await _connectionProcessor.GetById(sharePointConnectionId)
-                                       ?? throw new InvalidOperationException($"SharePoint connection with Id = {sharePointConnectionId} not found.");
+            var sharePointConnection = await _connectionManager.GetConnectionWithParams(ingestion.WorkspaceId, connectionId: sharePointConnectionId);
+            if (sharePointConnection == null)
+            {
+                _logger.LogError($"SharePoint connection {sharePointConnectionId} not found.");
+                throw new InvalidOperationException($"SharePoint connection {sharePointConnectionId} not found.");
+            }
             var connection = new SharePointConnection(sharePointConnection.Content);
             // Graph client
             var graph = new GraphServiceClient(
@@ -146,8 +149,12 @@ namespace AiCoreApi.Services.IngestionServices
             {
                 // Retrieve connection
                 var sharePointConnectionId = Convert.ToInt32(ingestion.Content["ConnectionId"]);
-                var sharePointConnection = await _connectionProcessor.GetById(sharePointConnectionId)
-                    ?? throw new InvalidOperationException($"SharePoint connection with Id = {sharePointConnectionId} not found.");
+                var sharePointConnection = await _connectionManager.GetConnectionWithParams(ingestion.WorkspaceId, connectionId: sharePointConnectionId);
+                if (sharePointConnection == null)
+                {
+                    _logger.LogError($"SharePoint connection {sharePointConnectionId} not found.");
+                    throw new InvalidOperationException($"SharePoint connection {sharePointConnectionId} not found.");
+                }
                 var connection = new SharePointConnection(sharePointConnection.Content);
 
                 // Retrieve metadata
@@ -210,7 +217,7 @@ namespace AiCoreApi.Services.IngestionServices
                 return new List<string>();
             if (!ingestionModel.Content.TryGetValue("Path", out var path))
                 path = "/";
-            var sharePointConnection = await _connectionProcessor.GetById(Convert.ToInt32(sharePointConnectionId));
+            var sharePointConnection = await _connectionManager.GetConnectionWithParams(ingestionModel.WorkspaceId, connectionId: Convert.ToInt32(sharePointConnectionId));
             if (sharePointConnection == null)
                 return new List<string>();
             var connection = new SharePointConnection(sharePointConnection.Content);
@@ -299,20 +306,20 @@ namespace AiCoreApi.Services.IngestionServices
             var embeddingConnectionModel = new EmbeddingConnectionModel().Populate(embeddingConnection);
             await _dataIngestionHelperService.FillVectorDbConnection(ingestion, embeddingConnectionModel);
 
-            var connections = await _connectionProcessor.List(ingestion.WorkspaceId);
-            var llmConnection = connections.FirstOrDefault(x => x.Type.IsLlmConnection()); // Assuming there's a default LLM connection
-            var vectorDbConnectionId = ingestion.Content.ContainsKey(DataIngestionHelperService.Constants.VectorDbConnectionField) ? ingestion.Content[DataIngestionHelperService.Constants.VectorDbConnectionField] : "";
+            var llmConnection = await _connectionManager.GetConnectionWithParams(ingestion.WorkspaceId, isLlmConnection: true); // Assuming there's a default LLM connection
+            var vectorDbConnectionId = Convert.ToInt32(ingestion.Content.ContainsKey(DataIngestionHelperService.Constants.VectorDbConnectionField) ? ingestion.Content[DataIngestionHelperService.Constants.VectorDbConnectionField] : "0");
 
-            var vectorDbConnection = (string.IsNullOrEmpty(vectorDbConnectionId) || vectorDbConnectionId == "0")
-                ? null
-                : connections.FirstOrDefault(x => x.ConnectionId.ToString() == vectorDbConnectionId);
+            var vectorDbConnection = await _connectionManager.GetConnectionWithParams(ingestion.WorkspaceId, connectionId: vectorDbConnectionId);
             var kernelMemory = _kernelMemoryProvider.GetKernelMemory(llmConnection, embeddingConnection, vectorDbConnection);
 
             var excludedExtensions = GetExcludedExtensions(ingestion);
             var sharePointConnectionId = Convert.ToInt32(ingestion.Content["ConnectionId"]);
-            var sharePointConnection = await _connectionProcessor.GetById(sharePointConnectionId);
+            var sharePointConnection = await _connectionManager.GetConnectionWithParams(ingestion.WorkspaceId, connectionId: sharePointConnectionId);
             if (sharePointConnection == null)
+            {
+                _logger.LogError("No SharePoint connection found.");
                 throw new InvalidOperationException($"SharePoint connection with Id = {sharePointConnectionId} not found.");
+            }
 
             var connection = new SharePointConnection(sharePointConnection.Content);
             ingestion.Content.TryGetValue("ExcludeFolders", out var excludeFolderPathsAsString);

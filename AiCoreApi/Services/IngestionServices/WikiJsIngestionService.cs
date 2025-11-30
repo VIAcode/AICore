@@ -18,8 +18,8 @@ namespace AiCoreApi.Services.IngestionServices
         private readonly ILogger<WikiJsIngestionService> _logger;
         private readonly IDataIngestionHelperService _dataIngestionHelperService;
         private readonly IHttpClientFactory _httpClientFactory;
-        private readonly IConnectionProcessor _connectionProcessor;
         private readonly IKernelMemoryProvider _kernelMemoryProvider;
+        private readonly IConnectionManager _connectionManager;
 
         private const int DelayBeforeReUploadMilliseconds = 5000;
 
@@ -30,8 +30,8 @@ namespace AiCoreApi.Services.IngestionServices
             ILogger<WikiJsIngestionService> logger,
             IDataIngestionHelperService dataIngestionHelperService,
             IHttpClientFactory httpClientFactory,
-            IConnectionProcessor connectionProcessor,
-            IKernelMemoryProvider kernelMemoryProvider)
+            IKernelMemoryProvider kernelMemoryProvider,
+            IConnectionManager connectionManager)
         {
             _fileIngestionClient = fileIngestionClient;
             _documentMetadataProcessor = documentMetadataProcessor;
@@ -39,8 +39,8 @@ namespace AiCoreApi.Services.IngestionServices
             _logger = logger;
             _dataIngestionHelperService = dataIngestionHelperService;
             _httpClientFactory = httpClientFactory;
-            _connectionProcessor = connectionProcessor;
             _kernelMemoryProvider = kernelMemoryProvider;
+            _connectionManager = connectionManager;
         }
 
         public async Task Process(IngestionModel ingestion, int taskId)
@@ -54,23 +54,27 @@ namespace AiCoreApi.Services.IngestionServices
             if (!ingestion.Content.TryGetValue("ConnectionName", out var connectionNameValue))
             {
                 _logger.LogError("ConnectionName key is missing in ingestion.Content.");
-                throw new KeyNotFoundException("The 'ConnectionName' key is required but was not found in ingestion.Content.");
+                throw new InvalidOperationException("The 'ConnectionName' key is required but was not found in ingestion.Content.");
             }
 
-            var connections = await _connectionProcessor.List(ingestion.WorkspaceId);
-            var wikiJsConnection = await GetConnection(ingestion, Convert.ToInt32(connectionNameValue), connections);
-            var llmConnection = connections.FirstOrDefault(x => x.Type.IsLlmConnection());
-            var vectorDbConnectionId = ingestion.Content.ContainsKey(DataIngestionHelperService.Constants.VectorDbConnectionField) ? ingestion.Content[DataIngestionHelperService.Constants.VectorDbConnectionField] : "";
+            var wikiJsConnection = await _connectionManager.GetConnectionWithParams(workspaceId: ingestion.WorkspaceId, connectionId: Convert.ToInt32(connectionNameValue), connectionType: ConnectionType.WikiJs);
+            if (wikiJsConnection == null)
+            {
+                _logger.LogError($"No WikiJS connection {connectionNameValue} found.");
+                throw new InvalidOperationException($"No WikiJS connection {connectionNameValue} found.");
+            }
 
-            var vectorDbConnection = (string.IsNullOrEmpty(vectorDbConnectionId) || vectorDbConnectionId == "0")
-                ? null
-                : connections.FirstOrDefault(x => x.ConnectionId.ToString() == vectorDbConnectionId);
-
+            var llmConnection = await _connectionManager.GetConnectionWithParams(workspaceId: ingestion.WorkspaceId, isLlmConnection: true);
             if (llmConnection == null)
             {
-                _logger.LogError("No LLM connection found in workspace. Please configure an LLM connection before running ingestion.");
-                throw new InvalidOperationException("No LLM connection found in workspace. Please configure an LLM connection before running ingestion.");
+                _logger.LogError("No LLM connection found.");
+                throw new InvalidOperationException("No LLM connection found.");
             }
+
+            var vectorDbConnectionId = ingestion.Content.ContainsKey(DataIngestionHelperService.Constants.VectorDbConnectionField) ? ingestion.Content[DataIngestionHelperService.Constants.VectorDbConnectionField] : "";
+            var vectorDbConnection = (string.IsNullOrEmpty(vectorDbConnectionId) || vectorDbConnectionId == "0")
+                ? null // Internal Qdrant
+                : await _connectionManager.GetConnectionWithParams(workspaceId: ingestion.WorkspaceId, connectionId: Convert.ToInt32(vectorDbConnectionId));
 
             var kernelMemory = _kernelMemoryProvider.GetKernelMemory(llmConnection, embeddingConnection, vectorDbConnection);
             var baseUrl = wikiJsConnection.Content["baseUrl"];
@@ -144,20 +148,14 @@ namespace AiCoreApi.Services.IngestionServices
             await _taskProcessor.SetMessage(taskId, "Completed");
         }
 
-        private async Task<ConnectionModel> GetConnection(IngestionModel ingestion, int connectionId, List<ConnectionModel>? connections = null)
-        {
-            connections ??= await _connectionProcessor.List(ingestion.WorkspaceId);
-            var connection = connections.FirstOrDefault(c => c.ConnectionId == Convert.ToInt32(connectionId) && c.Type == ConnectionType.WikiJs)
-                             ?? throw new InvalidOperationException($"Connection '{connectionId}' not found.");
-            return connection;
-        }
+
 
         public async Task<string> GetFileByPath(IngestionModel ingestion, string path)
         {
-            var connection = await GetConnection(ingestion, Convert.ToInt32(ingestion.Content["ConnectionName"]));
-            var baseUrl = connection.Content["baseUrl"];
-            var apiToken = connection.Content["apiToken"];
-            var locale = connection.Content.ContainsKey("locale") ? connection.Content["locale"] : "en";
+            var wikiJsConnection = await _connectionManager.GetConnectionWithParams(ingestion.WorkspaceId, Convert.ToInt32(ingestion.Content["ConnectionName"]), ConnectionType.WikiJs);
+            var baseUrl = wikiJsConnection.Content["baseUrl"];
+            var apiToken = wikiJsConnection.Content["apiToken"];
+            var locale = wikiJsConnection.Content.ContainsKey("locale") ? wikiJsConnection.Content["locale"] : "en";
 
             var client = _httpClientFactory.CreateClient(HttpClients.NoRetryClient);
             client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiToken);
@@ -186,10 +184,10 @@ namespace AiCoreApi.Services.IngestionServices
         {
             try
             {
-                var connection = await GetConnection(ingestion, Convert.ToInt32(ingestion.Content["ConnectionName"]));
-                var baseUrl = connection.Content["baseUrl"];
-                var apiToken = connection.Content["apiToken"];
-                var locale = connection.Content.ContainsKey("locale") ? connection.Content["locale"] : "en";
+                var wikiJsConnection = await _connectionManager.GetConnectionWithParams(ingestion.WorkspaceId, Convert.ToInt32(ingestion.Content["ConnectionName"]), ConnectionType.WikiJs);
+                var baseUrl = wikiJsConnection.Content["baseUrl"];
+                var apiToken = wikiJsConnection.Content["apiToken"];
+                var locale = wikiJsConnection.Content.ContainsKey("locale") ? wikiJsConnection.Content["locale"] : "en";
 
                 var client = _httpClientFactory.CreateClient(HttpClients.NoRetryClient);
                 client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiToken);

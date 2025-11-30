@@ -13,7 +13,7 @@ namespace AiCoreApi.Services.ProcessingServices.AgentsHandlers
     public class ImapListenerAgentService : AgentServiceBase, IImapListenerAgentService
     {
         private readonly IAgentsProcessor _agentsProcessor;
-        private readonly IConnectionProcessor _connectionProcessor;
+        private readonly IConnectionManager _connectionManager;
         private static readonly ConcurrentDictionary<string, CancellationTokenSource> ImapListeners = new();
 
         public ImapListenerAgentService(
@@ -22,11 +22,11 @@ namespace AiCoreApi.Services.ProcessingServices.AgentsHandlers
             IDebugLogProcessor debugLogProcessor,
             ExtendedConfig extendedConfig,
             IServiceScopeFactory scopeFactory,
-            IConnectionProcessor connectionProcessor)
+            IConnectionManager connectionManager)
             : base(loginProcessor, debugLogProcessor, extendedConfig, scopeFactory)
         {
             _agentsProcessor = agentsProcessor;
-            _connectionProcessor = connectionProcessor;
+            _connectionManager = connectionManager;
         }
 
         public async Task ProcessTask(List<AgentModel> agents)
@@ -47,9 +47,8 @@ namespace AiCoreApi.Services.ProcessingServices.AgentsHandlers
                 if (ImapListeners.ContainsKey(key))
                     continue;
 
-                var connList = await _connectionProcessor.List(agent.WorkspaceId);
-                var conn = connList.FirstOrDefault(c => c.Type == ConnectionType.Imap && c.Name == connName);
-                if (conn == null)
+                var connection = await _connectionManager.GetConnectionWithParams(agent.WorkspaceId, connectionName: connName, connectionType: ConnectionType.Imap);
+                if (connection == null)
                 {
                     agent.Content["lastResult"].Value = $"Connection not found: {connName}";
                     agent.Content["lastRun"].Value = DateTime.UtcNow.ToString("o");
@@ -57,11 +56,11 @@ namespace AiCoreApi.Services.ProcessingServices.AgentsHandlers
                     continue;
                 }
 
-                var host = conn.Content["imapServer"];
-                var port = int.Parse(conn.Content["imapPort"]);
-                var user = conn.Content["emailAddress"];
-                var pass = conn.Content["password"];
-                var useSsl = bool.Parse(conn.Content["useSSL"]);
+                var host = connection.Content["imapServer"];
+                var port = int.Parse(connection.Content["imapPort"]);
+                var user = connection.Content["emailAddress"];
+                var pass = connection.Content["password"];
+                var useSsl = bool.Parse(connection.Content["useSSL"]);
 
                 var cts = new CancellationTokenSource();
                 ImapListeners[key] = cts;

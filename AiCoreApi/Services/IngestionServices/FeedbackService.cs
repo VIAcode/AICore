@@ -13,7 +13,7 @@ namespace AiCoreApi.Services.IngestionServices
         private readonly ISemanticKernelProvider _semanticKernelProvider;
         private readonly IDataIngestionWorkerFactory _ingestionWorkerFactory;
         private readonly IServiceProvider _serviceProvider;
-        private readonly IConnectionProcessor _connectionProcessor;
+        private readonly IConnectionManager _connectionManager;
         private readonly ITaskProcessor _taskProcessor;
         private readonly ILoginProcessor _loginProcessor;
         private readonly INotificationsProcessor _notificationsProcessor;
@@ -40,7 +40,7 @@ namespace AiCoreApi.Services.IngestionServices
             ISemanticKernelProvider semanticKernelProvider,
             IDataIngestionWorkerFactory ingestionWorkerFactory,
             IServiceProvider serviceProvider,
-            IConnectionProcessor connectionProcessor,
+            IConnectionManager connectionManager,
             ITaskProcessor taskProcessor,
             ILoginProcessor loginProcessor,
             INotificationsProcessor notificationsProcessor)
@@ -49,7 +49,7 @@ namespace AiCoreApi.Services.IngestionServices
             _semanticKernelProvider = semanticKernelProvider;
             _ingestionWorkerFactory = ingestionWorkerFactory;
             _serviceProvider = serviceProvider;
-            _connectionProcessor = connectionProcessor;
+            _connectionManager = connectionManager;
             _taskProcessor = taskProcessor;
             _loginProcessor = loginProcessor;
             _notificationsProcessor = notificationsProcessor;
@@ -84,7 +84,7 @@ namespace AiCoreApi.Services.IngestionServices
             var autoSyncOnFeedback = payloadDictionary[Constants.AutoSyncOnFeedback].ToLower() == "true";
             var documentIds = payloadDictionary[Constants.DocumentIds].Split(','); 
 
-            var llmConnection = await _connectionProcessor.GetById(llmConnectionId) 
+            var llmConnection = await _connectionManager.GetConnectionWithParams(workspaceId, connectionId: llmConnectionId) 
                 ?? throw new Exception($"FeedbackService: LLM Connection not found (Ingestion: {ingestionId})");
             var runAsUser = await _loginProcessor.GetById(loginId)
                 ?? throw new Exception($"FeedbackService: User not found (Ingestion: {ingestionId})");

@@ -2,12 +2,8 @@ using AiCoreApi.Common.Extensions;
 using Microsoft.SemanticKernel;
 using AiCoreApi.Models.DbModels;
 using AiCoreApi.Common;
-using System.Text;
 using AiCoreApi.Common.Monitoring;
 using System.Web;
-using AiCoreApi.Services.IngestionServices;
-using AiCoreApi.Data.Processors;
-using System.Text.RegularExpressions;
 using AiCoreApi.Models.ViewModels;
 using ConnectionType = AiCoreApi.Models.DbModels.ConnectionType;
 
@@ -18,10 +14,7 @@ namespace AiCoreApi.SemanticKernel.Agents
         private readonly ResponseAccessor _responseAccessor;
         private readonly RequestAccessor _requestAccessor;
         private readonly MonitoringConfig _monitoringConfig;
-        private readonly IDataIngestionWorkerFactory _dataIngestionWorkerFactory;
-        private readonly IIngestionProcessor _ingestionProcessor;
-        private readonly ICacheAccessor _cacheAccessor;
-        private readonly IEntraTokenProvider _entraTokenProvider;
+        private readonly IIngestionParametersHelper _parametersHelper;
 
         private readonly ILogger<BaseAgent> _logger;
         private Dictionary<string, string>? _parameters;
@@ -33,10 +26,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             _responseAccessor = baseAgentHelper.ResponseAccessor;
             _requestAccessor = baseAgentHelper.RequestAccessor;
             _monitoringConfig = baseAgentHelper.MonitoringConfig;
-            _dataIngestionWorkerFactory = baseAgentHelper.DataIngestionWorkerFactory;
-            _cacheAccessor = baseAgentHelper.CacheAccessor;
-            _entraTokenProvider = baseAgentHelper.EntraTokenProvider;
-            _ingestionProcessor = baseAgentHelper.IngestionProcessor;
+            _parametersHelper = baseAgentHelper.ParametersHelper;
             _logger = logger;
         }
 
@@ -105,160 +95,13 @@ namespace AiCoreApi.SemanticKernel.Agents
                 return text;
 
             var result = await ApplyParametersAsync(text, null);
-            result = await ApplySecret(result);
+            result = await _parametersHelper.ApplySecret(result);
             return result;
         }
 
-        protected async Task<string> ApplyParametersAsync(string text, Dictionary<string, string>? additionalParameters = null)
-        {
-            var sb = new StringBuilder(text.Length);
-            int i = 0;
-            var resolvedDsCache = new Dictionary<string, string>();
+        protected async Task<string> ApplyParametersAsync(string text, Dictionary<string, string>? additionalParameters = null) => 
+            await _parametersHelper.ApplyParametersAsync(text, $"{_agent.Name} ({_agent.Type})", _parameters!, additionalParameters);
 
-            while (i < text.Length)
-            {
-                // Handle escaped braces: \{{ or \}}
-                if (i + 2 < text.Length && text[i] == '\\' && text[i + 1] == '{' && text[i + 2] == '{')
-                {
-                    sb.Append("{{");
-                    i += 3;
-                    continue;
-                }
-                if (i + 2 < text.Length && text[i] == '\\' && text[i + 1] == '}' && text[i + 2] == '}')
-                {
-                    sb.Append("}}");
-                    i += 3;
-                    continue;
-                }
-
-                if (i + 1 < text.Length && text[i] == '{' && text[i + 1] == '{')
-                {
-                    int start = i + 2;
-                    int braceDepth = 1;
-                    int j = start;
-
-                    while (j < text.Length - 1)
-                    {
-                        if (text[j] == '{' && text[j + 1] == '{')
-                        {
-                            braceDepth++;
-                            j += 2;
-                        }
-                        else if (text[j] == '}' && text[j + 1] == '}')
-                        {
-                            braceDepth--;
-                            j += 2;
-                            if (braceDepth == 0) break;
-                        }
-                        else
-                        {
-                            j++;
-                        }
-                    }
-
-                    if (braceDepth != 0 || j > text.Length)
-                    {
-                        sb.Append(text.Substring(i));
-                        break;
-                    }
-
-                    string key = text.Substring(start, j - start - 2).Trim(); 
-                    if (string.IsNullOrWhiteSpace(key))
-                    {
-                        sb.Append("{{}}");
-                        i = j;
-                        continue;
-                    }
-
-                    string? value = null;
-
-                    if (_parameters.TryGetValue(key, out var paramValue))
-                    {
-                        value = paramValue;
-                    }
-                    else if (additionalParameters != null && additionalParameters.TryGetValue(key, out var extra))
-                    {
-                        value = extra;
-                    }
-                    else if (key.StartsWith("DS:"))
-                    {
-                        if (!resolvedDsCache.TryGetValue(key, out value!))
-                        {
-                            value = await ResolveDataSourceValueAsync(key);
-                            resolvedDsCache[key] = value;
-                        }
-                    }
-                    else if (TryGetContextValue(key, out var contextValue))
-                    {
-                        value = contextValue;
-                    }
-
-                    sb.Append(value ?? $"{{{{{key}}}}}");
-
-                    i = j;
-                }
-                else
-                {
-                    sb.Append(text[i]);
-                    i++;
-                }
-            }
-
-            return sb.ToString();
-        }
-
-        private bool TryGetContextValue(string key, out string? value)
-        {
-            const string prefix = "context:";
-
-            // Expect pattern: context:<name>
-            if (key.StartsWith(prefix, StringComparison.Ordinal) && key.Length > prefix.Length)
-            {
-                var k = key[prefix.Length..];
-                if (_responseAccessor.Context.TryGetValue(k, out value))
-                {
-                    return true;
-                }
-
-                var message = $"Failed to resolve context value {k}.";
-
-                _responseAccessor.AddDebugMessage($"{_agent.Name} ({_agent.Type})", "Context", message);
-                _logger.LogWarning(message);
-            }
-
-            value = null;
-            return false;
-        }
-
-        private async Task<string?> ResolveDataSourceValueAsync(string key)
-        {
-            var parts = key.Split(':');
-            if (parts.Length < 3 || parts.Length > 4)
-                return "Invalid Data Source parameters count";
-
-            var dsName = parts[1];
-            var dsPath = parts[2];
-            var cacheSeconds = (parts.Length == 4 && int.TryParse(parts[3], out var c)) ? c : 0;
-            var cacheKey = $"{HttpUtility.UrlEncode(dsName)}_{HttpUtility.UrlEncode(dsPath)}";
-
-            var cachedValue = _cacheAccessor.GetCacheValue(cacheKey);
-            if (!string.IsNullOrEmpty(cachedValue))
-                return cachedValue;
-
-            var ingestion = await _ingestionProcessor.Get(dsName, _requestAccessor.WorkspaceId);
-            if (ingestion == null)
-                return $"Data Source '{dsName}' not found";
-
-            var worker = _dataIngestionWorkerFactory.GetService(ingestion);
-            var file = await worker.GetFileByPath(ingestion, dsPath);
-            if (string.IsNullOrEmpty(file))
-                return $"File '{dsPath}' not found in Data Source '{dsName}'";
-
-            if (cacheSeconds > 0)
-                _cacheAccessor.SetCacheValue(cacheKey, file, cacheSeconds);
-
-            return file;
-        }
 
         public virtual async Task OnAddUpdate(AgentModel agentModel)
         {
@@ -358,7 +201,7 @@ namespace AiCoreApi.SemanticKernel.Agents
                 connectionTypes.Contains(conn.Type) &&
                 (conn.ConnectionId == connectionId || conn.Name == connectionName));
             if (connection != null)
-                return await ApplySecrets(connection);
+                return await _parametersHelper.ApplySecrets(connection);
 
             // Check connection specified in Request
             connection = connections.FirstOrDefault(conn =>
@@ -368,7 +211,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             {
                 if (connectionSpecified)
                     responseAccessor.AddDebugMessage(debugMessageSenderName, "Warning", $"Specified connection not found. Using default from Request: {connection.Name}");
-                return await ApplySecrets(connection);
+                return await _parametersHelper.ApplySecrets(connection);
             }
 
             // Check just any connection
@@ -377,38 +220,11 @@ namespace AiCoreApi.SemanticKernel.Agents
             {
                 if (connectionSpecified)
                     responseAccessor.AddDebugMessage(debugMessageSenderName, "Warning", $"Specified connection not found. Using default: {connection.Name}");
-                return await ApplySecrets(connection);
+                return await _parametersHelper.ApplySecrets(connection);
             }
             var connectionTypesString = string.Join(", ", connectionTypes.Select(e => e.ToString()));
             responseAccessor.AddDebugMessage(debugMessageSenderName, "Error", $"No any [{connectionTypesString}] connections found.");
             throw new Exception("No any LLM connections found.");
-        }
-
-        protected async Task<ConnectionModel> ApplySecrets(ConnectionModel connectionModel)
-        {
-            var keys = connectionModel.Content.Keys.ToList();
-            foreach (var key in keys)
-            {
-                connectionModel.Content[key] = await ApplySecret(connectionModel.Content[key]);
-            }
-            return connectionModel;
-        }
-
-        protected async Task<string> ApplySecret(string value)
-        {
-            var regex = new Regex(@"\{\{secret:(?<name>[^}]+)\}\}", RegexOptions.Compiled);
-            if (string.IsNullOrEmpty(value))
-                return value;
-            var matches = regex.Matches(value);
-            if (matches.Count == 0)
-                return value;
-            foreach (Match match in matches)
-            {
-                var secretName = match.Groups["name"].Value.Trim();
-                var secretValue = await _entraTokenProvider.GetSecretFromKeyVaultAsync(secretName);
-                value = value.Replace(match.Value, secretValue);
-            }
-            return value;
         }
     }
 

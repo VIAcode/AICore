@@ -19,7 +19,7 @@ namespace AiCoreApi.Services.IngestionServices
         private readonly ILogger<ConfluenceIngestionService> _logger;
         private readonly IDataIngestionHelperService _dataIngestionHelperService;
         private readonly IHttpClientFactory _httpClientFactory;
-        private readonly IConnectionProcessor _connectionProcessor;
+        private readonly IConnectionManager _connectionManager;
         private readonly IKernelMemoryProvider _kernelMemoryProvider;
 
         private const int DelayBeforeReUploadMilliseconds = 5000;
@@ -32,7 +32,7 @@ namespace AiCoreApi.Services.IngestionServices
             ILogger<ConfluenceIngestionService> logger,
             IDataIngestionHelperService dataIngestionHelperService,
             IHttpClientFactory httpClientFactory,
-            IConnectionProcessor connectionProcessor,
+            IConnectionManager connectionManager,
             IKernelMemoryProvider kernelMemoryProvider)
         {
             _fileIngestionClient = fileIngestionClient;
@@ -41,7 +41,7 @@ namespace AiCoreApi.Services.IngestionServices
             _logger = logger;
             _dataIngestionHelperService = dataIngestionHelperService;
             _httpClientFactory = httpClientFactory;
-            _connectionProcessor = connectionProcessor;
+            _connectionManager = connectionManager;
             _kernelMemoryProvider = kernelMemoryProvider;
         }
 
@@ -53,19 +53,27 @@ namespace AiCoreApi.Services.IngestionServices
             var embeddingConnectionModel = new EmbeddingConnectionModel().Populate(embeddingConnection);
             await _dataIngestionHelperService.FillVectorDbConnection(ingestion, embeddingConnectionModel);
 
-            if (!ingestion.Content.TryGetValue("ConnectionName", out var connectionNameValue))
+            if (!ingestion.Content.TryGetValue("ConnectionName", out var connectionId))
             {
                 _logger.LogError("ConnectionName key is missing in ingestion.Content.");
                 throw new KeyNotFoundException("The 'ConnectionName' key is required but was not found in ingestion.Content.");
             }
-            var connections = await _connectionProcessor.List(ingestion.WorkspaceId);
-            var confluenceConnection = await GetConnection(ingestion, Convert.ToInt32(connectionNameValue), connections);
-            var llmConnection = connections.FirstOrDefault(x => x.Type.IsLlmConnection()); // Assuming there's a default LLM connection
+            var confluenceConnection = await _connectionManager.GetConnectionWithParams(workspaceId: ingestion.WorkspaceId, connectionId: Convert.ToInt32(connectionId));
+            if (confluenceConnection == null)
+            {
+                _logger.LogError($"Confluence connection {connectionId} not found.");
+                throw new InvalidOperationException($"Confluence connection {connectionId} not found.");
+            }
+            var llmConnection = await _connectionManager.GetConnectionWithParams(workspaceId: ingestion.WorkspaceId, isLlmConnection: true);
+            if (llmConnection == null)
+            {
+                _logger.LogError("No LLM connection found.");
+                throw new InvalidOperationException("No LLM connection found.");
+            }
             var vectorDbConnectionId = ingestion.Content.ContainsKey(DataIngestionHelperService.Constants.VectorDbConnectionField) ? ingestion.Content[DataIngestionHelperService.Constants.VectorDbConnectionField] : "";
-
             var vectorDbConnection = (string.IsNullOrEmpty(vectorDbConnectionId) || vectorDbConnectionId == "0")
-                ? null
-                : connections.FirstOrDefault(x => x.ConnectionId.ToString() == vectorDbConnectionId);
+                ? null // Internal Qdrant
+                : await _connectionManager.GetConnectionWithParams(workspaceId: ingestion.WorkspaceId, connectionId: Convert.ToInt32(vectorDbConnectionId));
 
             var kernelMemory = _kernelMemoryProvider.GetKernelMemory(llmConnection, embeddingConnection, vectorDbConnection);
             var baseUrl = confluenceConnection.Content["baseUrl"];
@@ -140,17 +148,9 @@ namespace AiCoreApi.Services.IngestionServices
             await _taskProcessor.SetMessage(taskId, "Completed");
         }
 
-        private async Task<ConnectionModel> GetConnection(IngestionModel ingestion, int connectionId, List<ConnectionModel>? connections = null)
-        {
-            connections ??= await _connectionProcessor.List(ingestion.WorkspaceId);
-            var connection = connections.FirstOrDefault(c => c.ConnectionId == Convert.ToInt32(connectionId) && c.Type == ConnectionType.Confluence)
-                             ?? throw new InvalidOperationException($"Connection '{connectionId}' not found.");
-            return connection;
-        }
-
         public async Task<string> GetFileByPath(IngestionModel ingestion, string path)
         {
-            var connection = await GetConnection(ingestion, Convert.ToInt32(ingestion.Content["ConnectionName"]));
+            var connection = await _connectionManager.GetConnectionWithParams(ingestion.WorkspaceId, Convert.ToInt32(ingestion.Content["ConnectionName"]), ConnectionType.Confluence);
 
             var baseUrl = connection.Content["baseUrl"];
             var username = connection.Content["username"];
@@ -181,7 +181,7 @@ namespace AiCoreApi.Services.IngestionServices
         {
             try
             {
-                var connection = await GetConnection(ingestion, Convert.ToInt32(ingestion.Content["ConnectionName"]));
+                var connection = await _connectionManager.GetConnectionWithParams(ingestion.WorkspaceId, Convert.ToInt32(ingestion.Content["ConnectionName"]), ConnectionType.Confluence);
 
                 var baseUrl = connection.Content["baseUrl"];
                 var username = connection.Content["username"];

@@ -22,7 +22,7 @@ namespace AiCoreApi.Services.IngestionServices
         private readonly IDataIngestionHelperService _dataIngestionHelperService;
         private readonly IEntraTokenProvider _entraTokenProvider;
         private readonly IKernelMemoryProvider _kernelMemoryProvider;
-        private readonly IConnectionProcessor _connectionProcessor;
+        private readonly IConnectionManager _connectionManager;
 
         public AzureBlobStorageIngestionService(
             IFileIngestionClient fileIngestionClient,
@@ -32,7 +32,7 @@ namespace AiCoreApi.Services.IngestionServices
             IDataIngestionHelperService dataIngestionHelperService,
             IEntraTokenProvider entraTokenProvider,
             IKernelMemoryProvider kernelMemoryProvider,
-            IConnectionProcessor connectionProcessor)
+            IConnectionManager connectionManager)
         {
             _fileIngestionClient = fileIngestionClient;
             _documentMetadataProcessor = documentMetadataProcessor;
@@ -41,7 +41,7 @@ namespace AiCoreApi.Services.IngestionServices
             _dataIngestionHelperService = dataIngestionHelperService;
             _entraTokenProvider = entraTokenProvider;
             _kernelMemoryProvider = kernelMemoryProvider;
-            _connectionProcessor = connectionProcessor;
+            _connectionManager = connectionManager;
         }
 
         public async Task Process(IngestionModel ingestion, int taskId)
@@ -52,13 +52,17 @@ namespace AiCoreApi.Services.IngestionServices
             var embeddingConnectionModel = new EmbeddingConnectionModel().Populate(embeddingConnection);
             await _dataIngestionHelperService.FillVectorDbConnection(ingestion, embeddingConnectionModel);
 
-            var connections = await _connectionProcessor.List(ingestion.WorkspaceId);
-            var llmConnection = connections.FirstOrDefault(x => x.Type.IsLlmConnection()); // Assuming there's a default LLM connection
+            var llmConnection = await _connectionManager.GetConnectionWithParams(workspaceId: ingestion.WorkspaceId, isLlmConnection: true);
+            if (llmConnection == null)
+            {
+                _logger.LogError("No LLM connection found.");
+                throw new InvalidOperationException("No LLM connection found.");
+            }
             var vectorDbConnectionId = ingestion.Content.ContainsKey(DataIngestionHelperService.Constants.VectorDbConnectionField) ? ingestion.Content[DataIngestionHelperService.Constants.VectorDbConnectionField] : "";
-
             var vectorDbConnection = (string.IsNullOrEmpty(vectorDbConnectionId) || vectorDbConnectionId == "0")
-                ? null
-                : connections.FirstOrDefault(x => x.ConnectionId.ToString() == vectorDbConnectionId);
+                ? null // Internal Qdrant
+                : await _connectionManager.GetConnectionWithParams(workspaceId: ingestion.WorkspaceId, connectionId: Convert.ToInt32(vectorDbConnectionId));
+
             var kernelMemory = _kernelMemoryProvider.GetKernelMemory(llmConnection, embeddingConnection, vectorDbConnection);
 
             var docIds = await IngestBlobs(ingestion, taskId, translateStepModel, embeddingConnectionModel, kernelMemory);
