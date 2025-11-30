@@ -13,7 +13,7 @@ namespace AiCoreApi.Services.ControllersServices
 
         private readonly ISpentProcessor _spentProcessor;
         private readonly ILoginProcessor _loginProcessor;
-        private readonly IConnectionProcessor _connectionProcessor;
+        private readonly IConnectionManager _connectionManager;
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly RequestAccessor _requestAccessor;
         private readonly IDistributedCache _cache;
@@ -21,14 +21,14 @@ namespace AiCoreApi.Services.ControllersServices
         public SpentService(
             ISpentProcessor spentProcessor,
             ILoginProcessor loginProcessor,
-            IConnectionProcessor connectionProcessor,
+            IConnectionManager connectionManager,
             IHttpClientFactory httpClientFactory,
             RequestAccessor requestAccessor,
             IDistributedCache cache)
         {
             _spentProcessor = spentProcessor;
             _loginProcessor = loginProcessor;
-            _connectionProcessor = connectionProcessor;
+            _connectionManager = connectionManager;
             _httpClientFactory = httpClientFactory;
             _requestAccessor = requestAccessor;
             _cache = cache;
@@ -37,7 +37,7 @@ namespace AiCoreApi.Services.ControllersServices
         public async Task<List<SpentItemViewModel>> List()
         {
             var logins = await _loginProcessor.List();
-            var connectionList = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
+            var connectionList = await _connectionManager.List(_requestAccessor.WorkspaceId);
 
             var llmConnections = connectionList
                 .Where(c => c.Type.IsLlmConnection())

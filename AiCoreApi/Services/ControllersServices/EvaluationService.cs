@@ -18,7 +18,7 @@ public class EvaluationService : IEvaluationService
     private readonly IEvaluationProcessor _evaluationProcessor;
     private readonly IEvaluationHistoryProcessor _evaluationHistoryProcessor;
     private readonly ISemanticKernelProvider _semanticKernelProvider;
-    private readonly IConnectionProcessor _connectionProcessor;
+    private readonly IConnectionManager _connectionManager;
     private readonly IAgentsProcessor _agentsProcessor;
     private readonly IAgentExecutor _agentExecutor;
     public const string ParameterDescription = "parameterDescription";
@@ -30,7 +30,7 @@ public class EvaluationService : IEvaluationService
         IEvaluationProcessor evaluationProcessor,
         IEvaluationHistoryProcessor evaluationHistoryProcessor,
         ISemanticKernelProvider semanticKernelProvider,
-        IConnectionProcessor connectionProcessor,
+        IConnectionManager connectionManager,
         IAgentsProcessor agentsProcessor,
         IAgentExecutor agentExecutor)
     {
@@ -40,7 +40,7 @@ public class EvaluationService : IEvaluationService
         _evaluationProcessor = evaluationProcessor;
         _evaluationHistoryProcessor = evaluationHistoryProcessor;
         _semanticKernelProvider = semanticKernelProvider;
-        _connectionProcessor = connectionProcessor;
+        _connectionManager = connectionManager;
         _agentsProcessor = agentsProcessor;
         _agentExecutor = agentExecutor;
     }
@@ -197,12 +197,11 @@ public class EvaluationService : IEvaluationService
         ConnectionModel? connection = null;
         if (evaluation.EvaluationLlmModel != "Default")
         {
-            connection = await _connectionProcessor.GetByName(evaluation.EvaluationLlmModel, _requestAccessor.WorkspaceId);
+            connection = await _connectionManager.GetConnectionWithParams(_requestAccessor.WorkspaceId, connectionName: evaluation.EvaluationLlmModel);
         }
         if (connection == null)
         {
-            connection = await _connectionProcessor.List(_requestAccessor.WorkspaceId)
-                .ContinueWith(t => t.Result.FirstOrDefault(c => c.Type.IsLlmConnection()));
+            connection = await _connectionManager.GetConnectionWithParams(_requestAccessor.WorkspaceId, isLlmConnection: true);
         }
         if (connection == null)
         {

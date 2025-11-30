@@ -1,7 +1,6 @@
 using AiCoreApi.Common;
 using AiCoreApi.Common.Monitoring;
 using AiCoreApi.Data.Processors;
-using AiCoreApi.Services.IngestionServices;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
@@ -9,43 +8,32 @@ namespace AiCoreApi.SemanticKernel.Agents
     {
         public BaseAgentHelper(
             IAgentsProcessor agentsProcessor,
-            IDataIngestionWorkerFactory dataIngestionWorkerFactory,
             RequestAccessor requestAccessor,
             ResponseAccessor responseAccessor,
             MonitoringConfig monitoringConfig,
-            IIngestionProcessor ingestionProcessor,
-            ICacheAccessor cacheAccessor,
-            IEntraTokenProvider entraTokenProvider)
+            IIngestionParametersHelper parametersHelper
+            )
         {
             AgentsProcessor = agentsProcessor;
-            DataIngestionWorkerFactory = dataIngestionWorkerFactory;
             RequestAccessor = requestAccessor;
             ResponseAccessor = responseAccessor;
             MonitoringConfig = monitoringConfig;
-            IngestionProcessor = ingestionProcessor;
-            CacheAccessor = cacheAccessor;
-            EntraTokenProvider = entraTokenProvider;
+            ParametersHelper = parametersHelper;
         }
 
-        public IDataIngestionWorkerFactory DataIngestionWorkerFactory { get; }
         public IAgentsProcessor AgentsProcessor { get; }
         public RequestAccessor RequestAccessor { get; }
         public ResponseAccessor ResponseAccessor { get; }
         public MonitoringConfig MonitoringConfig { get; }
-        public IIngestionProcessor IngestionProcessor { get; }
-        public ICacheAccessor CacheAccessor { get; }
-        public IEntraTokenProvider EntraTokenProvider { get; }
+        public IIngestionParametersHelper ParametersHelper { get; }
     }
 
     public interface IBaseAgentHelper
     {
-        IDataIngestionWorkerFactory DataIngestionWorkerFactory { get; }
         IAgentsProcessor AgentsProcessor { get; }
         RequestAccessor RequestAccessor { get; }
         ResponseAccessor ResponseAccessor { get; }
         MonitoringConfig MonitoringConfig { get; }
-        IIngestionProcessor IngestionProcessor { get; }
-        ICacheAccessor CacheAccessor { get; }
-        IEntraTokenProvider EntraTokenProvider { get; }
+        IIngestionParametersHelper ParametersHelper { get; }
     }
 }

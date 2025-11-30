@@ -12,7 +12,7 @@ namespace AiCoreApi.Services.ProcessingServices.AgentsHandlers
     public class GraphTeamsListenerAgentService : AgentServiceBase, IGraphTeamsListenerAgentService
     {
         private readonly IAgentsProcessor _agentsProcessor;
-        private readonly IConnectionProcessor _connectionProcessor;
+        private readonly IConnectionManager _connectionManager;
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly IEntraTokenProvider _entraTokenProvider;
         private bool _isInProgress;
@@ -24,13 +24,13 @@ namespace AiCoreApi.Services.ProcessingServices.AgentsHandlers
             IDebugLogProcessor debugLogProcessor,
             ExtendedConfig extendedConfig,
             IServiceScopeFactory scopeFactory,
-            IConnectionProcessor connectionProcessor,
+            IConnectionManager connectionManager,
             IHttpClientFactory httpClientFactory,
             IEntraTokenProvider entraTokenProvider)
             : base(loginProcessor, debugLogProcessor, extendedConfig, scopeFactory)
         {
             _agentsProcessor = agentsProcessor;
-            _connectionProcessor = connectionProcessor;
+            _connectionManager = connectionManager;
             _entraTokenProvider = entraTokenProvider;
             _httpClientFactory = httpClientFactory;
         }
@@ -71,17 +71,16 @@ namespace AiCoreApi.Services.ProcessingServices.AgentsHandlers
                 if (now < lastRun + TimeSpan.FromSeconds(secondsBetweenChecks))
                     continue;
 
-                var connList = await _connectionProcessor.List(agent.WorkspaceId);
-                var conn = connList.FirstOrDefault(c => c.Type == ConnectionType.GraphApi && c.Name == connectionName);
-                if (conn == null) continue;
+                var connection = await _connectionManager.GetConnectionWithParams(agent.WorkspaceId, connectionName: connectionName, connectionType: ConnectionType.GraphApi);
+                if (connection == null) continue;
 
-                var resourceName = conn.Content["resourceName"];
-                var tenantId = conn.Content.GetValueOrDefault("tenantId");
-                var accessType = conn.Content.GetValueOrDefault("accessType") ?? EntraTokenProvider.DefaultStorageName;
+                var resourceName = connection.Content["resourceName"];
+                var tenantId = connection.Content.GetValueOrDefault("tenantId");
+                var accessType = connection.Content.GetValueOrDefault("accessType") ?? EntraTokenProvider.DefaultStorageName;
 
                 try
                 {
-                    var hasRefreshToken = conn.Content.TryGetValue("refreshToken", out var refreshToken);
+                    var hasRefreshToken = connection.Content.TryGetValue("refreshToken", out var refreshToken);
                     var accessToken = hasRefreshToken
                         ? await _entraTokenProvider.GetAccessTokenByRefreshTokenAsync(accessType, refreshToken, resourceName, tenantId)
                         : await _entraTokenProvider.GetAccessTokenObjectAsync(accessType, resourceName);

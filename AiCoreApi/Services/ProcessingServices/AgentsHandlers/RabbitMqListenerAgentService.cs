@@ -13,7 +13,7 @@ namespace AiCoreApi.Services.ProcessingServices.AgentsHandlers
         private static readonly Dictionary<string, IModel> RabbitMqChannels = new();
         private static readonly Dictionary<string, IConnection> RabbitMqConnections = new();
         private readonly IAgentsProcessor _agentsProcessor;
-        private readonly IConnectionProcessor _connectionProcessor;
+        private readonly IConnectionManager _connectionManager;
 
         public RabbitMqListenerAgentService(
             ILoginProcessor loginProcessor,
@@ -21,11 +21,11 @@ namespace AiCoreApi.Services.ProcessingServices.AgentsHandlers
             IDebugLogProcessor debugLogProcessor,
             ExtendedConfig extendedConfig,
             IServiceScopeFactory scopeFactory,
-            IConnectionProcessor connectionProcessor)
+            IConnectionManager connectionManager)
             : base(loginProcessor, debugLogProcessor, extendedConfig, scopeFactory)
         {
             _agentsProcessor = agentsProcessor;
-            _connectionProcessor = connectionProcessor;
+            _connectionManager = connectionManager;
         }
 
         public async Task ProcessTask(List<AgentModel> agents)
@@ -52,8 +52,7 @@ namespace AiCoreApi.Services.ProcessingServices.AgentsHandlers
                 if (RabbitMqChannels.ContainsKey(key))
                     continue;
 
-                var connections = await _connectionProcessor.List(agent.WorkspaceId);
-                var connection = connections.FirstOrDefault(conn => conn.Type == ConnectionType.RabbitMq && conn.Name == connectionName);
+                var connection = await _connectionManager.GetConnectionWithParams(agent.WorkspaceId, connectionName: connectionName, connectionType: ConnectionType.RabbitMq);
                 if (connection == null)
                 {
                     agent.Content["lastResult"].Value = $"Connection not found: {connectionName}";

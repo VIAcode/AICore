@@ -1,4 +1,5 @@
-﻿using AiCoreApi.Authorization.Attributes;
+﻿using AiCoreApi.Authorization;
+using AiCoreApi.Authorization.Attributes;
 using AiCoreApi.Common.Extensions;
 using AiCoreApi.Models.ViewModels;
 using AiCoreApi.Services.ControllersServices;
@@ -93,5 +94,33 @@ public class IngestionController : ControllerBase
     {
         var result = await _ingestionService.GetAutoComplete(parameterName, ingestionViewModel);
         return Ok(result);
+    }
+
+    [HttpGet("export")]
+    [AllowAnonymous]
+    [RoleAuthorize(Role.Admin, Role.Developer)]
+    public async Task<IActionResult> Export([FromQuery] string ingestionIds, [FromQuery] string token)
+    {
+        var ingestionIdsList = ingestionIds.Split(',').Select(int.Parse).ToList();
+        var result = await _ingestionService.ExportIngestions(ingestionIdsList);
+        return File(result, "application/zip", $"datasources-{DateTime.UtcNow:yyyy-MM-dd-HH-mm}.zip");
+    }
+
+    [HttpPost("import")]
+    [CombinedAuthorize]
+    [RoleAuthorize(Role.Admin, Role.Developer)]
+    public async Task<IActionResult> Import(IFormFile file, [FromQuery(Name = "workspace_id")] int workspaceId = 0)
+    {
+        var result = await _ingestionService.ImportIngestions(file, workspaceId);
+        return Ok(result);
+    }
+
+    [HttpPut("import/{confirmationId}")]
+    [CombinedAuthorize]
+    [RoleAuthorize(Role.Admin, Role.Developer)]
+    public async Task<IActionResult> ImportConfirm(string confirmationId, [FromQuery(Name = "workspace_id")] int workspaceId = 0)
+    {
+        await _ingestionService.ConfirmImportIngestions(confirmationId, workspaceId);
+        return Ok();
     }
 }

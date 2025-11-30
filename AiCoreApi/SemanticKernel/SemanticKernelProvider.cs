@@ -1,5 +1,4 @@
 using AiCoreApi.Common;
-using AiCoreApi.Data.Processors;
 using AiCoreApi.Models.DbModels;
 using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
@@ -11,18 +10,18 @@ namespace AiCoreApi.SemanticKernel
     public class SemanticKernelProvider : ISemanticKernelProvider
     {
         private readonly RequestAccessor _requestAccessor;
-        private readonly IConnectionProcessor _connectionProcessor;
+        private readonly IConnectionManager _connectionManager;
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly IEntraTokenProvider _entraTokenProvider;
 
         public SemanticKernelProvider(
             RequestAccessor requestAccessor,
-            IConnectionProcessor connectionProcessor,
+            IConnectionManager connectionManager,
             IHttpClientFactory httpClientFactory,
             IEntraTokenProvider entraTokenProvider)
         {
             _requestAccessor = requestAccessor;
-            _connectionProcessor = connectionProcessor;
+            _connectionManager = connectionManager;
             _httpClientFactory = httpClientFactory;
             _entraTokenProvider = entraTokenProvider;
         }
@@ -102,23 +101,16 @@ namespace AiCoreApi.SemanticKernel
         public async Task<Kernel> GetKernel()
         {
             // Get the default LLM connection
-            var connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
-            var llmConnection = connections.FirstOrDefault(conn =>
-                conn.Type.IsLlmConnection() &&
-                _requestAccessor.DefaultConnectionNames.Contains(conn.Name))
-                    ?? connections.FirstOrDefault(conn => conn.Type.IsLlmConnection());
+            var llmConnection = await _connectionManager.GetConnectionWithParams(workspaceId: _requestAccessor.WorkspaceId, isLlmConnection: true);
             if (llmConnection == null)
                 throw new Exception("No any LLM connection found");
-
             return GetKernel(llmConnection);
-
         }
 
 
         public async Task<string> ExecutePrompt(string llmConnectionName, string templateText, double? temperature, double? topP, string systemMessage = "", string jsonSchema = "")
         {
-            var connections = await _connectionProcessor.List(_requestAccessor.WorkspaceId);
-            var llmConnection = connections.FirstOrDefault(c => c.Name == llmConnectionName);
+            var llmConnection = await _connectionManager.GetConnectionWithParams(_requestAccessor.WorkspaceId, connectionName: llmConnectionName);
             return await ExecutePrompt(llmConnection, templateText, temperature, topP, systemMessage, jsonSchema, false);
         }
 

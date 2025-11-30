@@ -8,7 +8,7 @@ namespace AiCoreApi.Common
     {
         private readonly ExtendedConfig _extendedConfig;
         private readonly IAgentsProcessor _agentsProcessor;
-        private readonly IConnectionProcessor _connectionProcessor;
+        private readonly IConnectionManager _connectionManager;
         private readonly ISemanticKernelProvider _semanticKernelProvider;
 
         private const string SystemMessage = "You are a helpful assistant that helps to create and describe AI agents based on user requirements. Provide clear and concise descriptions.";
@@ -50,12 +50,12 @@ Focus on the key features, functionalities and business logic. Do not take into 
         public AgentsFlowDescriber(
             ExtendedConfig extendedConfig,
             IAgentsProcessor agentsProcessor,
-            IConnectionProcessor connectionProcessor,
+            IConnectionManager connectionManager,
             ISemanticKernelProvider semanticKernelProvider)
         {
             _extendedConfig = extendedConfig;
             _agentsProcessor = agentsProcessor;
-            _connectionProcessor = connectionProcessor;
+            _connectionManager = connectionManager;
             _semanticKernelProvider = semanticKernelProvider;
         }
 
@@ -263,7 +263,7 @@ Focus on the key features, functionalities and business logic. Do not take into 
         {
             if(!_extendedConfig.UseAgentsDescription)
                 return "Agents description feature is disabled.";
-            var connection = await _connectionProcessor.GetByName(_extendedConfig.AgentsDescriptionLlmConnectionName, workspaceId);
+            var connection = await _connectionManager.GetConnectionWithParams(workspaceId, connectionName: _extendedConfig.AgentsDescriptionLlmConnectionName);
             if (connection == null || !connection.Type.IsLlmConnection())
                 return $"No valid LLM connection found with name '{_extendedConfig.AgentsDescriptionLlmConnectionName}'";
             var topP = 1;

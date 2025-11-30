@@ -11,15 +11,12 @@ namespace AiCoreApi.Common
 {
     public class LlmHttpCallHandler : DelegatingHandler
     {
-        private readonly UserContextAccessor _userContextAccessor;
         private readonly IServiceProvider _serviceProvider;
 
         public LlmHttpCallHandler(
-            UserContextAccessor userContextAccessor,
             IServiceProvider serviceProvider)
         {
             _serviceProvider = serviceProvider;
-            _userContextAccessor = userContextAccessor;
         }
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)

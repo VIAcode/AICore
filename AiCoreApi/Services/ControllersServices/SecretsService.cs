@@ -112,6 +112,41 @@ public class SecretsService : ISecretsService
             throw new AiCoreUiException("Failed to delete secret");
         }
     }
+    
+    public async Task<SecretViewModel> AddToDatabase(SecretViewModel item)
+    {
+        var type = item.Type == SettingTypes.AppRegistration
+            ? SettingType.EntraCredentials
+            : SettingType.SecretValue;
+
+        var settings = _settingsProcessor.Get(type);
+
+        var existing = settings.FirstOrDefault(kvp => kvp.Value == item.Name);
+        if (!string.IsNullOrEmpty(existing.Value))
+        {
+            item.SecretId = Convert.ToInt32(existing.Key);
+            return item;
+        }
+
+        if (item.SecretId > 0 && settings.ContainsKey(item.SecretId.ToString()))
+        {
+            settings[item.SecretId.ToString()] = item.Name;
+            _settingsProcessor.Set(type, settings);
+            return item;
+        }
+
+        var newId = GetNextId(type);
+
+        if (type == SettingType.SecretValue)
+            newId = Math.Max(newId, SecretsIdStart);
+
+        item.SecretId = newId;
+
+        settings[newId.ToString()] = item.Name;
+        _settingsProcessor.Set(type, settings);
+
+        return item;
+    }
 
     // --- Helpers ---
 
@@ -134,9 +169,9 @@ public class SecretsService : ISecretsService
         if (!settings.TryGetValue(id.ToString(), out var name))
             throw new AiCoreUiException($"{type} with id {id} not found");
 
-        await keyVaultDelete(name);
         settings.Remove(id.ToString());
         _settingsProcessor.Set(type, settings);
+        await keyVaultDelete(name);
     }
 }
 
@@ -145,4 +180,5 @@ public interface ISecretsService
     Task<SecretExtendedItem> Add(SecretExtendedItem secretExtendedItem);
     Task<List<SecretViewModel>> List();
     Task Delete(int secretId);
+    Task<SecretViewModel> AddToDatabase(SecretViewModel secretExtendedItem);
 }

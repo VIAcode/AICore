@@ -13,8 +13,8 @@ namespace AiCoreApi.Services.ProcessingServices.AgentsHandlers
         private static readonly Dictionary<string, ServiceBusProcessor> ServiceBusProcessors = new();
         private static readonly Dictionary<string, ServiceBusClient> ServiceBusClients = new();
         private readonly IEntraTokenProvider _entraTokenProvider; 
-        private readonly IAgentsProcessor _agentsProcessor; 
-        private readonly IConnectionProcessor _connectionProcessor;
+        private readonly IAgentsProcessor _agentsProcessor;
+        private readonly IConnectionManager _connectionManager;
 
         public AzureServiceBusListenerAgentService(
             IEntraTokenProvider entraTokenProvider,
@@ -23,12 +23,12 @@ namespace AiCoreApi.Services.ProcessingServices.AgentsHandlers
             IServiceScopeFactory scopeFactory,
             IDebugLogProcessor debugLogProcessor,
             ExtendedConfig extendedConfig,
-            IConnectionProcessor connectionProcessor)
+            IConnectionManager connectionManager)
             : base(loginProcessor, debugLogProcessor, extendedConfig, scopeFactory)
         {
             _entraTokenProvider = entraTokenProvider;
             _agentsProcessor = agentsProcessor;
-            _connectionProcessor = connectionProcessor;
+            _connectionManager = connectionManager;
         }
 
         public async Task ProcessTask(List<AgentModel> agents)
@@ -53,8 +53,7 @@ namespace AiCoreApi.Services.ProcessingServices.AgentsHandlers
                 if (ServiceBusProcessors.ContainsKey(key))
                     continue;
 
-                var connections = await _connectionProcessor.List(agent.WorkspaceId);
-                var connection = connections.FirstOrDefault(conn => conn.Type == ConnectionType.AzureServiceBus && conn.Name == connectionName);
+                var connection = await _connectionManager.GetConnectionWithParams(agent.WorkspaceId, connectionName: connectionName, connectionType: ConnectionType.AzureServiceBus);
                 if (connection == null)
                 {
                     agent.Content["lastResult"].Value = $"Connection not found: {connectionName}";
