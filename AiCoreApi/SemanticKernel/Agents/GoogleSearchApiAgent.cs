@@ -6,6 +6,7 @@ using HtmlAgilityPack;
 using System.Text.Json;
 using AiCoreApi.Common.Extensions;
 using System.Text.Encodings.Web;
+using Microsoft.Playwright;
 
 namespace AiCoreApi.SemanticKernel.Agents
 {
@@ -26,9 +27,10 @@ namespace AiCoreApi.SemanticKernel.Agents
             public const string QueryString = "queryString";
             public const string GoogleConnection = "googleSearchApiConnection";
             public const string MaxContentLength = "maxContentLength";
-            public const string Count = "count"; 
-            public const string Offset = "offset"; 
+            public const string Count = "count";
+            public const string Offset = "offset";
             public const string OutputType = "outputType";
+            public const string WaitTimeout = "waitTimeout";
         }
 
         private const int DefaultMaxContentLength = 16384;
@@ -37,6 +39,7 @@ namespace AiCoreApi.SemanticKernel.Agents
         private readonly ResponseAccessor _responseAccessor;
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly IConnectionProcessor _connectionProcessor;
+        private readonly ExtendedConfig _extendedConfig;
 
         public GoogleSearchApiAgent(
             IBaseAgentHelper baseAgentHelper,
@@ -44,12 +47,14 @@ namespace AiCoreApi.SemanticKernel.Agents
             ResponseAccessor responseAccessor,
             IHttpClientFactory httpClientFactory,
             IConnectionProcessor connectionProcessor,
+            ExtendedConfig extendedConfig,
             ILogger<GoogleSearchApiAgent> logger) : base(baseAgentHelper, logger)
         {
             _requestAccessor = requestAccessor;
             _responseAccessor = responseAccessor;
             _httpClientFactory = httpClientFactory;
             _connectionProcessor = connectionProcessor;
+            _extendedConfig = extendedConfig;
         }
 
         public override async Task<string> DoCall(AgentModel agent, Dictionary<string, string> parameters)
@@ -75,6 +80,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             var count = int.Parse(await GetParameterValueAsync(AgentContentParameters.Count));
             var offset = int.Parse(await GetParameterValueAsync(AgentContentParameters.Offset));
             var outputType = agent.Content.TryGetValue(AgentContentParameters.OutputType, out var ot) ? ot.Value : "snippetTexts";
+            var waitTimeout = Convert.ToInt32(await GetParameterValueAsync(AgentContentParameters.WaitTimeout, "10000"));
             var results = await DoSearchAsync(queryString, googleConnection.Content["apiKey"], googleConnection.Content["googleCxId"], count, offset);
 
             string result;
@@ -92,13 +98,63 @@ namespace AiCoreApi.SemanticKernel.Agents
                     if (text.Length > int.Parse(maxContentLength))
                         text = text.Substring(0, int.Parse(maxContentLength));
 
-                    pages.Add(new Dictionary<string, string> { { "url", page.Url }, { "name", page.Name }, { "text", text } });
+                    pages.Add(new Dictionary<string, string>
+                    {
+                        { "url", page.Url },
+                        { "name", page.Name },
+                        { "text", text }
+                    });
                 }
-                result = JsonSerializer.Serialize(pages, new JsonSerializerOptions { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping });
+
+                result = JsonSerializer.Serialize(pages,
+                    new JsonSerializerOptions { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping });
+            }
+            else if (outputType == "pagesJsonPlaywright")
+            {
+                // NEW MODE — PLAYWRIGHT PAGE LOADING
+
+                PlaywrightInstall.EnsureInstalled();
+                using var playwright = await Playwright.CreateAsync();
+
+                await using var browser = await playwright.Chromium.LaunchAsync(new() { Headless = true });
+
+                await using var context = await browser.NewContextAsync(new BrowserNewContextOptions
+                {
+                    UserAgent = "Mozilla/5.0 (compatible; GoogleSearchApiAgent/Playwright)",
+                    Proxy = string.IsNullOrEmpty(_extendedConfig.Proxy)
+                        ? null
+                        : new Proxy { Server = _extendedConfig.Proxy },
+                    IgnoreHTTPSErrors = true
+                });
+
+                var pageObj = await context.NewPageAsync();
+
+                var pages = new List<Dictionary<string, string>>();
+
+                foreach (var page in results)
+                {
+                    var text = await CrawlWithPlaywrightAsync(page.Url, pageObj, waitTimeout);
+
+                    if (text.Length > int.Parse(maxContentLength))
+                        text = text.Substring(0, int.Parse(maxContentLength));
+
+                    pages.Add(new Dictionary<string, string>
+                    {
+                        { "url", page.Url },
+                        { "name", page.Name },
+                        { "text", text }
+                    });
+                }
+
+                result = JsonSerializer.Serialize(pages,
+                    new JsonSerializerOptions { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping });
             }
             else
             {
-                result = JsonSerializer.Serialize(results.Select(r => r.Snippet).ToList(), new JsonSerializerOptions { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping });
+                // snippetTexts — default
+                result = JsonSerializer.Serialize(
+                    results.Select(r => r.Snippet).ToList(),
+                    new JsonSerializerOptions { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping });
             }
 
             _responseAccessor.AddDebugMessage(_debugMessageSenderName, "Execute Query String Result", result);
@@ -125,13 +181,19 @@ namespace AiCoreApi.SemanticKernel.Agents
             {
                 results.Add(new WebPage
                 {
-                    Name = item.GetProperty("title").GetString() ?? "",
-                    Url = item.GetProperty("link").GetString() ?? "",
-                    Snippet = item.GetProperty("snippet").GetString() ?? ""
+                    Name = SafeGet(item, "title"),
+                    Url = SafeGet(item, "link"),
+                    Snippet = SafeGet(item, "snippet")
                 });
             }
-
             return results;
+        }
+
+        private static string SafeGet(JsonElement el, string propName)
+        {
+            return el.TryGetProperty(propName, out var p)
+                ? p.GetString() ?? ""
+                : "";
         }
 
         private async Task<string> CrawlPageTextAsync(string url)
@@ -166,6 +228,44 @@ namespace AiCoreApi.SemanticKernel.Agents
             }
         }
 
+        private async Task<string> CrawlWithPlaywrightAsync(string url, IPage page, int waitTimeout)
+        {
+            try
+            {
+                await page.GotoAsync(url, new() { Timeout = waitTimeout });
+
+                var allText = new List<string>();
+
+                async Task ProcessFrame(IFrame frame)
+                {
+                    var content = await frame.ContentAsync();
+                    var doc = new HtmlDocument();
+                    doc.LoadHtml(content);
+
+                    doc.DocumentNode.Descendants()
+                        .Where(n => n.Name is "script" or "style")
+                        .ToList()
+                        .ForEach(n => n.Remove());
+
+                    var frameText = HtmlEntity.DeEntitize(doc.DocumentNode.InnerText);
+
+                    allText.AddRange(
+                        frameText.Split('\n')
+                        .Select(x => x.Trim())
+                        .Where(x => !string.IsNullOrWhiteSpace(x)));
+                }
+
+                foreach (var frame in page.Frames)
+                    await ProcessFrame(frame);
+
+                return string.Join("\n", allText);
+            }
+            catch (Exception ex)
+            {
+                _responseAccessor.AddDebugMessage(_debugMessageSenderName, "Playwright Error", $"Failed to read {url}, {ex.Message}");
+                return string.Empty;
+            }
+        }
 
         private async Task<HttpResponseMessage> SendGetRequestAsync(Uri uri, CancellationToken cancellationToken = default)
         {

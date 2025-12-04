@@ -11,7 +11,7 @@ namespace AiCoreApi.SemanticKernel.Agents
             RequestAccessor requestAccessor,
             ResponseAccessor responseAccessor,
             MonitoringConfig monitoringConfig,
-            IIngestionParametersHelper parametersHelper
+            IParametersHelper parametersHelper
             )
         {
             AgentsProcessor = agentsProcessor;
@@ -25,7 +25,7 @@ namespace AiCoreApi.SemanticKernel.Agents
         public RequestAccessor RequestAccessor { get; }
         public ResponseAccessor ResponseAccessor { get; }
         public MonitoringConfig MonitoringConfig { get; }
-        public IIngestionParametersHelper ParametersHelper { get; }
+        public IParametersHelper ParametersHelper { get; }
     }
 
     public interface IBaseAgentHelper
@@ -34,6 +34,6 @@ namespace AiCoreApi.SemanticKernel.Agents
         RequestAccessor RequestAccessor { get; }
         ResponseAccessor ResponseAccessor { get; }
         MonitoringConfig MonitoringConfig { get; }
-        IIngestionParametersHelper ParametersHelper { get; }
+        IParametersHelper ParametersHelper { get; }
     }
 }
