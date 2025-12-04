@@ -114,11 +114,11 @@ namespace AiCoreApi.SemanticKernel.Agents
                 // NEW MODE — PLAYWRIGHT PAGE LOADING
 
                 PlaywrightInstall.EnsureInstalled();
-                var playwright = await Playwright.CreateAsync();
+                using var playwright = await Playwright.CreateAsync();
 
                 await using var browser = await playwright.Chromium.LaunchAsync(new() { Headless = true });
 
-                var context = await browser.NewContextAsync(new BrowserNewContextOptions
+                await using var context = await browser.NewContextAsync(new BrowserNewContextOptions
                 {
                     UserAgent = "Mozilla/5.0 (compatible; GoogleSearchApiAgent/Playwright)",
                     Proxy = string.IsNullOrEmpty(_extendedConfig.Proxy)
