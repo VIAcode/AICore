@@ -14,7 +14,7 @@ namespace AiCoreApi.SemanticKernel.Agents
         private readonly ResponseAccessor _responseAccessor;
         private readonly RequestAccessor _requestAccessor;
         private readonly MonitoringConfig _monitoringConfig;
-        private readonly IIngestionParametersHelper _parametersHelper;
+        private readonly IParametersHelper _parametersHelper;
 
         private readonly ILogger<BaseAgent> _logger;
         private Dictionary<string, string>? _parameters;

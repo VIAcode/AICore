@@ -6,17 +6,17 @@ namespace AiCoreApi.Common
     public class ConnectionManager: IConnectionManager
     {
         private readonly IConnectionProcessor _connectionProcessor;
-        private readonly IParametersHelper _parametersHelper;
+        private readonly IIngestionParametersHelper _ingestionParametersHelper;
 
         public ConnectionManager(
-            IConnectionProcessor connectionProcessor, 
-            IParametersHelper parametersHelper)
+            IConnectionProcessor connectionProcessor,
+            IIngestionParametersHelper ingestionParametersHelper)
         {
             _connectionProcessor = connectionProcessor;
-            _parametersHelper = parametersHelper;
+            _ingestionParametersHelper = ingestionParametersHelper;
         }
 
-        private volatile List<ConnectionModel>? _cache;
+        private List<ConnectionModel>? _cache;
         private readonly object _cacheLock = new();
 
         public async Task<List<ConnectionModel>> GetConnectionModels()
@@ -54,7 +54,7 @@ namespace AiCoreApi.Common
                 WorkspaceId = connection.WorkspaceId,
                 Content = new Dictionary<string, string>(connection.Content),
             };
-            return await _parametersHelper.ApplySecrets(connectionCopy);
+            return await _ingestionParametersHelper.ApplySecrets(connectionCopy);
         }
 
         public async Task<ConnectionModel?> GetConnection(int? workspaceId = null, int? connectionId = null, ConnectionType? connectionType = null, bool isLlmConnection = false, bool isEmbeddingConnection = false, string? connectionName = null)
@@ -67,8 +67,7 @@ namespace AiCoreApi.Common
                      && (!isLlmConnection || c.Type.IsLlmConnection())
                      && (!isEmbeddingConnection || c.Type.IsEmbeddingConnection())
                      && (string.IsNullOrEmpty(connectionName) || c.Name == connectionName)
-                 )
-                 ?? null;
+                 );
             return connection;
         }
 

@@ -6,41 +6,36 @@ using AiCoreApi.Services.IngestionServices;
 
 namespace AiCoreApi.Common
 {
-    public class ParametersHelper : ParametersHelperBase, IParametersHelper
+    public class IngestionParametersHelper : ParametersHelperBase, IIngestionParametersHelper
     {
-        public ParametersHelper(
+        public IngestionParametersHelper(
             RequestAccessor requestAccessor,
             ICacheAccessor cacheAccessor,
             ResponseAccessor responseAccessor,
-            ILogger<ParametersHelper> logger,
+            ILogger<IngestionParametersHelper> logger,
             IEntraTokenProvider entraTokenProvider)
             : base(requestAccessor, cacheAccessor, responseAccessor, logger, entraTokenProvider)
         {
         }
-
-        protected override string ResolveUnknownKey(string key)
-        {
-            return $"{{{{{key}}}}}";
-        }
     }
 
-    public interface IParametersHelper
+    public interface IIngestionParametersHelper
     {
         Task<ConnectionModel> ApplySecrets(ConnectionModel connectionModel);
         Task<string> ApplySecret(string value);
         Task<string> ApplyParametersAsync(string text, string debugSource, Dictionary<string, string>? parameters, Dictionary<string, string>? additionalParameters = null);
     }
 
-    public class IngestionParametersHelper : ParametersHelperBase, IIngestionParametersHelper
+    public class ParametersHelper : ParametersHelperBase, IParametersHelper
     {
         private readonly IIngestionProcessor _ingestionProcessor;
         private readonly IDataIngestionWorkerFactory _workerFactory;
 
-        public IngestionParametersHelper(
+        public ParametersHelper(
             RequestAccessor requestAccessor,
             ICacheAccessor cacheAccessor,
             ResponseAccessor responseAccessor,
-            ILogger<IngestionParametersHelper> logger,
+            ILogger<ParametersHelper> logger,
             IEntraTokenProvider entraTokenProvider,
             IIngestionProcessor ingestionProcessor,
             IDataIngestionWorkerFactory workerFactory)
@@ -89,7 +84,7 @@ namespace AiCoreApi.Common
         }
     }
 
-    public interface IIngestionParametersHelper
+    public interface IParametersHelper
     {
         Task<ConnectionModel> ApplySecrets(ConnectionModel connectionModel);
         Task<string> ApplySecret(string value);
