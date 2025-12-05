@@ -23,7 +23,6 @@ services:
       - FILEINGESTIONREQUESTTIMEOUT=10
       - MAXHISTORYLENGTH=10
       - TOKENEXPIRATIONTIMEMINUTES=60
-      - PROXY=
       - NOINFORMATIONFOUNDTEXT=No relevant information found
       - MAXTOKENSPERUSERPERDAYGPT35=100000
       - MAXTOKENSPERUSERPERDAYGPT40=100000
@@ -52,6 +51,9 @@ services:
       - LOGLEVEL=Debug
       - DISTRIBUTEDCACHEURL=host.docker.internal:6379
       - DISTRIBUTEDCACHEPASSWORD=AiCatalystIsTheBest!
+#      - HTTP_PROXY=http://host.docker.internal:8888
+#      - HTTPS_PROXY=http://host.docker.internal:8888
+#      - NO_PROXY=localhost,127.0.0.1
     ports:
       - "7878:80"
     networks:
