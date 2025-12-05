@@ -12,6 +12,16 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
     npm install -g npm@latest
 
 ENV PLAYWRIGHT_NODEJS_PATH=/usr/bin/node
+
+COPY certificates /usr/local/share/ca-certificates/
+RUN for f in /usr/local/share/ca-certificates/*; do \
+        case "$f" in \
+            *.cer) cp "$f" "${f%.cer}.crt" ;; \
+        esac; \
+    done; \
+    update-ca-certificates || true
+ENV REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
+
 FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
 
 ARG BUILD_CONFIGURATION=Release

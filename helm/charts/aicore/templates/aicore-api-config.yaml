@@ -52,7 +52,6 @@ data:
   USESEARCHTAB: "{{ .Values.aicore.useSearchTab }}"
   USEINTERNALUSERS: "{{ .Values.aicore.useInternalUsers }}"
 
-  PROXY: "{{ .Values.aicore.proxy }}"
   NAMESPACE_ID: "{{ .Values.global.environment.namespace }}"
   SERVICE_ID: "{{ .Values.global.environment.name }}-aicore"
 
@@ -71,3 +70,8 @@ data:
   AUTOCOMPACTLARGEOBJECTHEAP: "true"
   DISTRIBUTEDCACHEURL: "{{ .Values.global.environment.name }}-aicore-redis-ip:{{ .Values.redis.port }}"
   DISTRIBUTEDCACHEPASSWORD: "{{ .Values.redis.password }}"
+  {{- if .Values.aicore.proxy }}
+  HTTP_PROXY: "{{ .Values.aicore.proxy }}"
+  HTTPS_PROXY: "{{ .Values.aicore.proxy }}"
+  NO_PROXY: "localhost,127.0.0.1,::1,.svc,.svc.cluster.local,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
+  {{- end }}
