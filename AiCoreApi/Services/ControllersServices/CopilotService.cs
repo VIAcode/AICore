@@ -95,6 +95,10 @@ namespace AiCoreApi.Services.ControllersServices
                 }
                 await _debugLogProcessor.Add(_requestAccessor.Login, message, messageDialog, _requestAccessor.WorkspaceId ?? 0);
             }
+            if (!_requestAccessor.OutputDebugMessages)
+            {
+                messageDialog.Messages.Last().DebugMessages = null;
+            }
             return messageDialog;
         }
 
