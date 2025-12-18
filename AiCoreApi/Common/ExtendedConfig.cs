@@ -45,7 +45,7 @@ public class ExtendedConfig
     [Category(CategoryAttribute.ConfigCategoryEnum.Common)]
     [Description("Proxy")]
     [Tooltip("Proxy is used to route all requests through a proxy server. Can be used for debug purposes, i.e. to use Fiddler. Sample: http://host.docker.internal:8888")]
-    public string Proxy => GetValue<string>("Proxy");
+    public string Proxy => GetValue<string>("Http_Proxy");
 
     [Category(CategoryAttribute.ConfigCategoryEnum.Common)]
     [Description("No information found text")]
