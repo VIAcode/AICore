@@ -273,6 +273,41 @@ namespace AiCoreApi.SemanticKernel.Agents
                     ocrResult.Pages[i].Height = result.Pages[i].Height ?? 0;
                 }
             }
+            if (result.Documents != null && ocrResult?.Pages != null && ocrResult.Pages.Count > 0)
+            {
+                foreach (var document in result.Documents)
+                {
+                    foreach (var fieldKvp in document.Fields)
+                    {
+                        var fieldName = fieldKvp.Key;
+                        var field = fieldKvp.Value;
+
+                        if (field.BoundingRegions == null || field.BoundingRegions.Count == 0)
+                            continue;
+
+                        var region = field.BoundingRegions[0];
+                        var pageIndex = region.PageNumber - 1;
+                        if (pageIndex < 0 || pageIndex >= result.Pages.Count || pageIndex >= ocrResult.Pages.Count)
+                            continue;
+                        var ocrPage = result.Pages[pageIndex];
+                        var page = ocrResult.Pages[pageIndex];
+
+                        var location = PolygonToPointList(
+                            ocrPage,
+                            region.Polygon,
+                            (int)(ocrPage.Angle ?? 0));
+
+                        page.Fields ??= new List<Field>();
+                        page.Fields.Add(new Field
+                        {
+                            Key = fieldName,          // label name
+                            Value = field.Content,
+                            Location = location,
+                            Confidence = useConfidence ? field.Confidence : null
+                        });
+                    }
+                }
+            }
 
             if (outputFormat == AgentOutputFormat.Markdown)
             {
