@@ -287,6 +287,8 @@ namespace AiCoreApi.SemanticKernel.Agents
 
                         var region = field.BoundingRegions[0];
                         var pageIndex = region.PageNumber - 1;
+                        if (pageIndex < 0 || pageIndex >= result.Pages.Count || pageIndex >= ocrResult.Pages.Count)
+                            continue;
                         var ocrPage = result.Pages[pageIndex];
                         var page = ocrResult.Pages[pageIndex];
 
