@@ -30,6 +30,7 @@ public class Program
                       var config = new Config();
                       services.AddSingleton(config);
                       services.AddTransient<IDataSourceProvider, DataSourceProvider>();
+
                       services.AddTransient<IDbQuery, DbQuery>();
                       services.AddTransient<Db>();
                   })
