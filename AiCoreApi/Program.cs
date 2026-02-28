@@ -1,4 +1,4 @@
-using AiCoreApi.Common;
+﻿using AiCoreApi.Common;
 using AiCoreApi.Common.Data;
 using AiCoreApi.Services.ProcessingServices;
 using AiCoreApi.Services.UpdateServices;
@@ -24,18 +24,13 @@ public class Program
               // they are expect calling settings in database just in time
               // creating configuration
               IsDesignTime()
-              ? Host.CreateDefaultBuilder(args)
+              ? Hostф.CreateDefaultBuilder(args)
                   .ConfigureServices(services =>
                   {
                       var config = new Config();
                       services.AddSingleton(config);
-                      services.AddTransient<IDataSourceProvider, DataSourceProvider>();
-
-
-
-
-
                       services.AddTransient<IDbQuery, DbQuery>();
+                      services.AddTransient<IDataSourceProvider, DataSourceProvider>();
                       services.AddTransient<Db>();
                   })
               : Host.CreateDefaultBuilder(args)
