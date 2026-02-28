@@ -31,6 +31,8 @@ public class Program
                       services.AddSingleton(config);
                       services.AddTransient<IDataSourceProvider, DataSourceProvider>();
 
+
+
                       services.AddTransient<IDbQuery, DbQuery>();
                       services.AddTransient<Db>();
                   })
