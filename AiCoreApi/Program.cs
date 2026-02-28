@@ -24,7 +24,7 @@ public class Program
               // they are expect calling settings in database just in time
               // creating configuration
               IsDesignTime()
-              ? Hostф.CreateDefaultBuilder(args)
+              ? Host.CreateDefaultBuilder(args)
                   .ConfigureServices(services =>
                   {
                       var config = new Config();
