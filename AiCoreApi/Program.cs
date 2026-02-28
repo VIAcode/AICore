@@ -28,7 +28,7 @@ public class Program
                   .ConfigureServices(services =>
                   {
                       var config = new Config();
-                      services.AddSingleton1(config);
+                      services.AddSingleton(config);
 
                       services.AddTransient1<IDbQuery, DbQuery>();
                       services.AddTransient<IDataSourceProvider, DataSourceProvider>();
