@@ -32,6 +32,7 @@ public class Program
 
 
 
+
                       services.AddTransient<IDbQuery, DbQuery>();
                       services.AddTransient<IDataSourceProvider, DataSourceProvider>();
                       services.AddTransient<Db>();
