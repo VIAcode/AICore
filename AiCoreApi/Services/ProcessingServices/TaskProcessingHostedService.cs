@@ -37,28 +37,44 @@ namespace AiCoreApi.Services.ProcessingServices
             {
                 while (await timer.WaitForNextTickAsync(ct))
                 {
-                    if (!_instanceSync.IsMainInstance)
-                        continue;
-
-                    using var scope = _scopeFactory.CreateScope();
-                    var taskProcessor = scope.ServiceProvider.GetRequiredService<ITaskProcessor>();
-
-                    var tasks = await taskProcessor.GetNew();
-
-                    foreach (var task in tasks)
-                    {
-                        if (!TryLockActivity(task.IngestionId))
-                            continue;
-
-                        _ = ProcessOneAsync(task, ct)
-                            .ContinueWith(_ => UnlockActivity(task.IngestionId), TaskScheduler.Default);
-                    }
+                    await RunOnceAsync(ct);
                 }
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "TaskProcessingHostedService crashed.");
+            }
+        }
+
+        private async Task RunOnceAsync(CancellationToken ct)
+        {
+            // A transient failure (e.g. the database restarting during maintenance) must not
+            // terminate the polling loop: keep the try/catch inside the loop iteration so the
+            // service keeps polling and recovers on the next tick instead of dying permanently.
+            try
+            {
+                if (!_instanceSync.IsMainInstance)
+                    return;
+
+                using var scope = _scopeFactory.CreateScope();
+                var taskProcessor = scope.ServiceProvider.GetRequiredService<ITaskProcessor>();
+
+                var tasks = await taskProcessor.GetNew();
+
+                foreach (var task in tasks)
+                {
+                    if (!TryLockActivity(task.IngestionId))
+                        continue;
+
+                    _ = ProcessOneAsync(task, ct)
+                        .ContinueWith(_ => UnlockActivity(task.IngestionId), TaskScheduler.Default);
+                }
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested) { }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "TaskProcessingHostedService iteration error.");
             }
         }
 

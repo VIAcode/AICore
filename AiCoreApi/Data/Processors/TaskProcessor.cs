@@ -156,7 +156,12 @@ namespace AiCoreApi.Data.Processors
         public async Task ResetUnfinishedTasks()
         {
             await using var db = await _dbFactory.CreateDbContextAsync();
-            await db.Tasks.Where(t => (t.State == TaskState.InProgress) && t.IsRetriable)
+            // Any task still marked InProgress at startup was interrupted (the worker that owned it
+            // is gone), so it must be re-queued regardless of IsRetriable. Otherwise a non-retriable
+            // task stays stuck InProgress forever and blocks the scheduler: GetStale().Take(N) keeps
+            // selecting the same stalest data sources, sees their orphaned "active" task and skips
+            // them, so no data source is ever synced again.
+            await db.Tasks.Where(t => t.State == TaskState.InProgress)
                 .ExecuteUpdateAsync(t => t.SetProperty(x => x.State, TaskState.New));
         }
     }
