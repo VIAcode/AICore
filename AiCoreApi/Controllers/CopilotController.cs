@@ -47,8 +47,11 @@ namespace AiCoreApi.Controllers
             [SwaggerParameter("Allow Administrator to execute request without using Plan from Cache.", Required = false)]
             bool useCachedPlan = true,
             [FromQuery(Name = "use_debug")]
-            [SwaggerParameter("Allow Administrator to get debug information while executing Plan.", Required = false)]
+            [SwaggerParameter("Allow Administrator to collect debug information while executing Plan.", Required = false)]
             bool useDebug = false,
+            [FromQuery(Name = "output_debug")]
+            [SwaggerParameter("Include debug information into the response", Required = false)]
+            bool outputDebug = false,
             [FromQuery(Name = "simple_output")]
             [SwaggerParameter("Flag to specify if we need structured output with history or just result.", Required = false)]
             bool simpleOutput = false, 

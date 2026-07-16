@@ -27,6 +27,7 @@ namespace AiCoreApi.Common
             UseMarkdown = GetParameter("use_markdown") != "false";
             UseCachedPlan = GetParameter("use_cached_plan") != "false";
             UseDebug = GetParameter("use_debug") == "true" && (UserContext.HasRole(nameof(RoleEnum.Developer)) || UserContext.HasRole(nameof(RoleEnum.Admin)));
+            OutputDebugMessages = UseDebug && GetParameter("output_debug") == "true";
             DefaultConnectionNames = GetParameter("connection_name")?.Split(',').ToList() ?? new List<string>();
             TagsString = string.IsNullOrEmpty(GetParameter("tags")) ? "0" : GetParameter("tags");
             WorkspaceId = GetParameter("workspace_id") != null ? Convert.ToInt32(GetParameter("workspace_id")) : null;
@@ -71,6 +72,7 @@ namespace AiCoreApi.Common
             UseMarkdown = request.UseMarkdown;
             UseCachedPlan = request.UseCachedPlan;
             UseDebug = request.UseDebug;
+            OutputDebugMessages = request.OutputDebugMessages;
             DefaultConnectionNames = request.DefaultConnectionNames;
             TagsString = request.TagsString;
             Query = request.Query;
@@ -87,6 +89,7 @@ namespace AiCoreApi.Common
         public bool UseMarkdown { get; set; }
         public bool UseCachedPlan { get; set; }
         public bool UseDebug { get; set; }
+        public bool OutputDebugMessages { get; set; }
         public List<string> DefaultConnectionNames { get; set; }
         public string? TagsString { get; set; }
         public string Query { get; set; }
