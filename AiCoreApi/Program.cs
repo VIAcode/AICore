@@ -1,4 +1,4 @@
-using AiCoreApi.Common;
+﻿using AiCoreApi.Common;
 using AiCoreApi.Common.Data;
 using AiCoreApi.Services.ProcessingServices;
 using AiCoreApi.Services.UpdateServices;
@@ -29,6 +29,12 @@ public class Program
                   {
                       var config = new Config();
                       services.AddSingleton(config);
+
+
+
+
+
+
                       services.AddTransient<IDbQuery, DbQuery>();
                       services.AddTransient<IDataSourceProvider, DataSourceProvider>();
                       services.AddTransient<Db>();
